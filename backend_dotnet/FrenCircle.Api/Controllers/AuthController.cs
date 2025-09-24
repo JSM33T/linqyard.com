@@ -116,19 +116,20 @@ public sealed class AuthController : BaseApiController
             await _context.SaveChangesAsync(cancellationToken);
 
             // Set refresh token as httpOnly cookie (secure storage)
-            var cookieOptions = new CookieOptions
+            // In development over HTTP we fall back to SameSite=Lax and Secure=false so the cookie
+            // can be set locally. In production (HTTPS) we use SameSite=None and Secure=true for cross-site requests.
+            var loginCookieOptions = new CookieOptions
             {
-                HttpOnly = true,                    // Not accessible via JavaScript
-                //Secure = !HttpContext.Request.IsHttps ? false : true, // HTTPS in production
-                Secure = true,
-                SameSite = SameSiteMode.None,     // CSRF protection
-                Path = "/auth",                     // Only sent to auth endpoints
-                MaxAge = request.RememberMe 
-                    ? TimeSpan.FromDays(60) 
-                    : TimeSpan.FromDays(14)         // Match refresh token expiry
+                HttpOnly = true,
+                Secure = HttpContext.Request.IsHttps ? true : false,
+                SameSite = HttpContext.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
+                Path = "/auth",
+                MaxAge = request.RememberMe
+                    ? TimeSpan.FromDays(60)
+                    : TimeSpan.FromDays(14),
             };
-            
-            Response.Cookies.Append("refreshToken", refreshTokenValue, cookieOptions);
+
+            Response.Cookies.Append("refreshToken", refreshTokenValue, loginCookieOptions);
 
             // Generate JWT access token
             var accessToken = _jwtService.GenerateToken(user);
@@ -409,16 +410,16 @@ public sealed class AuthController : BaseApiController
             await _context.SaveChangesAsync(cancellationToken);
 
             // Set new refresh token as httpOnly cookie (token rotation)
-            var cookieOptions = new CookieOptions
+            var refreshCookieOptions = new CookieOptions
             {
                 HttpOnly = true,
-                Secure = !HttpContext.Request.IsHttps ? false : true,
-                SameSite = SameSiteMode.Strict,
+                Secure = HttpContext.Request.IsHttps ? true : false,
+                SameSite = HttpContext.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
                 Path = "/auth",
                 MaxAge = TimeSpan.FromDays(14)
             };
-            
-            Response.Cookies.Append("refreshToken", newRefreshTokenValue, cookieOptions);
+
+            Response.Cookies.Append("refreshToken", newRefreshTokenValue, refreshCookieOptions);
 
             // Generate new JWT access token
             var accessToken = _jwtService.GenerateToken(refreshToken.User);
@@ -480,7 +481,7 @@ public sealed class AuthController : BaseApiController
             Response.Cookies.Delete("refreshToken", new CookieOptions
             {
                 Path = "/auth",
-                SameSite = SameSiteMode.Strict
+                SameSite = HttpContext.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax
             });
 
             var response = new LogoutResponse(

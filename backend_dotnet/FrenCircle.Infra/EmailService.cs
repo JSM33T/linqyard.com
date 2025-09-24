@@ -1,6 +1,8 @@
 ﻿using System.Net;
 using System.Net.Mail;
 using System.Text;
+using System.Net.Sockets;
+using System.Threading;
 using FrenCircle.Infra.Configuration;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -22,27 +24,83 @@ namespace FrenCircle.Infra
         {
             try
             {
-                //using var client = new SmtpClient(_smtpSettings.Host, _smtpSettings.Port);
-                //client.EnableSsl = _smtpSettings.EnableSsl;
-                //client.UseDefaultCredentials = false;
-                //client.Credentials = new NetworkCredential(_smtpSettings.Username, _smtpSettings.Password);
+                // quick check: ensure the configured host/port is actually speaking SMTP
+                if (!await IsSmtpServerAsync(_smtpSettings.Host, _smtpSettings.Port))
+                {
+                    var err = $"Mail server at {_smtpSettings.Host}:{_smtpSettings.Port} does not present an SMTP banner. It may be an IMAP/POP server or the wrong port. Please check SmtpSettings (Host/Port).";
+                    _logger.LogError(err);
+                    throw new InvalidOperationException(err);
+                }
 
-                //using var message = new MailMessage();
-                //message.From = new MailAddress(_smtpSettings.FromEmail, _smtpSettings.FromName);
-                //message.To.Add(to);
-                //message.Subject = subject;
-                //message.Body = body;
-                //message.IsBodyHtml = isHtml;
-                //message.BodyEncoding = Encoding.UTF8;
-                //message.SubjectEncoding = Encoding.UTF8;
+                using var client = new SmtpClient(_smtpSettings.Host, _smtpSettings.Port);
+                client.EnableSsl = _smtpSettings.EnableSsl;
+                client.UseDefaultCredentials = false;
+                client.Credentials = new NetworkCredential(_smtpSettings.Username, _smtpSettings.Password);
 
-                //await client.SendMailAsync(message);
+                using var message = new MailMessage();
+                message.From = new MailAddress(_smtpSettings.FromEmail, _smtpSettings.FromName);
+                message.To.Add(to);
+                message.Subject = subject;
+                // Use the provided body and HTML flag
+                message.Body = body ?? string.Empty;
+                message.IsBodyHtml = isHtml;
+                message.BodyEncoding = Encoding.UTF8;
+                message.SubjectEncoding = Encoding.UTF8;
+
+                // Configure client details
+                client.DeliveryMethod = SmtpDeliveryMethod.Network;
+                client.Timeout = _smtpSettings.Timeout > 0 ? _smtpSettings.Timeout : 10000;
+
+                await client.SendMailAsync(message);
                 _logger.LogInformation("Email sent successfully to {To} with subject: {Subject}", to, subject);
             }
             catch (Exception ex)
             {
+                // If the server responded with a protocol error (e.g. IMAP), surface a clearer message
+                var msg = ex.Message ?? ex.ToString();
+                if (msg.Contains("Syntax error") || msg.Contains("command unrecognized") || msg.Contains("IMAP", StringComparison.OrdinalIgnoreCase))
+                {
+                    _logger.LogError(ex, "SMTP operation failed - server may be an IMAP/POP server or wrong port is configured for {Host}:{Port}.", _smtpSettings.Host, _smtpSettings.Port);
+                    throw new InvalidOperationException($"SMTP operation failed. The configured mail server at {_smtpSettings.Host}:{_smtpSettings.Port} may not support SMTP (server response: {msg}). Please verify SmtpSettings.", ex);
+                }
+
                 _logger.LogError(ex, "Failed to send email to {To} with subject: {Subject}", to, subject);
                 throw;
+            }
+        }
+
+        private async Task<bool> IsSmtpServerAsync(string host, int port, int timeoutMs = 3000)
+        {
+            try
+            {
+                using var tcp = new TcpClient();
+                var connectTask = tcp.ConnectAsync(host, port);
+                var cts = new CancellationTokenSource(timeoutMs);
+                using (cts)
+                {
+                    var completed = await Task.WhenAny(connectTask, Task.Delay(timeoutMs, cts.Token));
+                    if (completed != connectTask || !tcp.Connected)
+                    {
+                        _logger.LogWarning("Timeout connecting to mail server {Host}:{Port}", host, port);
+                        return false;
+                    }
+                }
+
+                using var stream = tcp.GetStream();
+                stream.ReadTimeout = timeoutMs;
+                var buffer = new byte[1024];
+                var bytesRead = await stream.ReadAsync(buffer, 0, buffer.Length);
+                if (bytesRead <= 0) return false;
+                var banner = Encoding.ASCII.GetString(buffer, 0, bytesRead).Trim();
+                // SMTP servers respond with a 220 greeting. IMAP typically uses '* OK'
+                if (banner.StartsWith("220")) return true;
+                _logger.LogWarning("Mail server banner did not indicate SMTP: {Banner}", banner);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Error checking mail server banner for {Host}:{Port}", host, port);
+                return false;
             }
         }
 

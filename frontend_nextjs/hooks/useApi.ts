@@ -133,6 +133,100 @@ export function usePost<T = any>(
   };
 }
 
+// Hook for PUT requests
+export function usePut<T = any>(
+  endpoint: string,
+  config?: RequestConfig
+): UsePostReturn<T> {
+  const { logout } = useUser();
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  // Initialize auth callback
+  useEffect(() => {
+    initializeAuthCallback(logout);
+  }, [logout]);
+
+  const mutate = useCallback(async (postData?: any): Promise<ApiResponse<T>> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiService.put<T>(endpoint, postData, config);
+      setData(response.data);
+      return response;
+    } catch (err) {
+      const apiError = err as ApiError;
+      setError(apiError);
+      throw apiError;
+    } finally {
+      setLoading(false);
+    }
+  }, [endpoint, config]);
+
+  const reset = useCallback(() => {
+    setData(null);
+    setError(null);
+    setLoading(false);
+  }, []);
+
+  return {
+    mutate,
+    loading,
+    error,
+    data,
+    reset,
+  };
+}
+
+// Hook for DELETE requests
+export function useDelete<T = any>(
+  endpoint: string,
+  config?: RequestConfig
+): UsePostReturn<T> {
+  const { logout } = useUser();
+  const [data, setData] = useState<T | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<ApiError | null>(null);
+
+  // Initialize auth callback
+  useEffect(() => {
+    initializeAuthCallback(logout);
+  }, [logout]);
+
+  const mutate = useCallback(async (): Promise<ApiResponse<T>> => {
+    setLoading(true);
+    setError(null);
+
+    try {
+      const response = await apiService.delete<T>(endpoint, config);
+      setData(response.data);
+      return response;
+    } catch (err) {
+      const apiError = err as ApiError;
+      setError(apiError);
+      throw apiError;
+    } finally {
+      setLoading(false);
+    }
+  }, [endpoint, config]);
+
+  const reset = useCallback(() => {
+    setData(null);
+    setError(null);
+    setLoading(false);
+  }, []);
+
+  return {
+    mutate,
+    loading,
+    error,
+    data,
+    reset,
+  };
+}
+
 // General API hook for manual calls
 export function useApi() {
   const { logout } = useUser();
@@ -150,9 +244,19 @@ export function useApi() {
     return apiService.post<T>(endpoint, data, config);
   }, []);
 
+  const put = useCallback(<T = any>(endpoint: string, data?: any, config?: RequestConfig) => {
+    return apiService.put<T>(endpoint, data, config);
+  }, []);
+
+  const del = useCallback(<T = any>(endpoint: string, config?: RequestConfig) => {
+    return apiService.delete<T>(endpoint, config);
+  }, []);
+
   return {
     get,
     post,
+    put,
+    delete: del,
     setToken: apiService.setToken.bind(apiService),
     clearToken: apiService.clearToken.bind(apiService),
     hasToken: apiService.hasToken.bind(apiService),

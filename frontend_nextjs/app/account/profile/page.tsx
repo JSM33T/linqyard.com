@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import React, { useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,80 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
 import { ArrowLeft, Camera, User, Mail, Calendar, Shield } from "lucide-react";
 import { useUser, userHelpers } from "@/contexts/UserContext";
+import { useGet, usePut } from '@/hooks/useApi';
+import { ProfileDetailsResponse, UpdateProfileRequest } from '@/hooks/types';
+
+// Inline profile editor component
+function InlineProfileEditor({ user, onSave, onCancel } : { user: any, onSave: (u: UpdateProfileRequest) => Promise<void>, onCancel: () => void }) {
+  const [editing, setEditing] = React.useState(false);
+  const [form, setForm] = React.useState<UpdateProfileRequest>({
+    firstName: user.firstName || '',
+    lastName: user.lastName || '',
+    displayName: user.displayName || '',
+    bio: '',
+    avatarUrl: user.avatarUrl || undefined,
+    locale: user.locale || undefined,
+    timezone: user.timezone || undefined,
+  });
+
+  React.useEffect(() => {
+    setForm((f) => ({
+      ...f,
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      displayName: user.displayName || '',
+      avatarUrl: user.avatarUrl || undefined,
+    }));
+  }, [user]);
+
+  const handleChange = (key: keyof UpdateProfileRequest, value: any) => {
+    setForm((f) => ({ ...f, [key]: value }));
+  };
+
+  const handleSave = async () => {
+    await onSave(form);
+    setEditing(false);
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex flex-wrap gap-3 pt-4">
+        <Button variant="default" onClick={() => setEditing(true)}>Edit Profile</Button>
+        <Link href="/account/settings">
+          <Button variant="ghost">Account Settings</Button>
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4 pt-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">First Name</label>
+          <Input value={form.firstName || ''} onChange={(e: any) => handleChange('firstName', e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Last Name</label>
+          <Input value={form.lastName || ''} onChange={(e: any) => handleChange('lastName', e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Display Name</label>
+          <Input value={form.displayName || ''} onChange={(e: any) => handleChange('displayName', e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Avatar URL</label>
+          <Input value={form.avatarUrl || ''} onChange={(e: any) => handleChange('avatarUrl', e.target.value)} />
+        </div>
+      </div>
+
+      <div className="flex gap-3">
+        <Button variant="default" onClick={handleSave}>Save</Button>
+        <Button variant="outline" onClick={() => { setEditing(false); onCancel(); }}>Cancel</Button>
+      </div>
+    </div>
+  );
+}
 
 const containerVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -28,7 +103,27 @@ const itemVariants = {
 };
 
 export default function ProfilePage() {
-  const { user, isAuthenticated } = useUser();
+  const { user, isAuthenticated, updateUser, setUser } = useUser();
+
+  // Fetch profile details from backend
+  const { data: profileData, loading: profileLoading, error: profileError, refetch } = useGet<any>('/profile');
+
+  // PUT hook for updating profile
+  const { mutate: updateProfile, loading: updating } = usePut<any>('/profile');
+
+  // Sync fetched profile into user context when available
+  useEffect(() => {
+    if (profileData && (profileData as any).data) {
+      const p = (profileData as any).data as ProfileDetailsResponse;
+      updateUser({
+        firstName: p.firstName || '',
+        lastName: p.lastName || '',
+        username: p.username,
+        email: p.email,
+        avatarUrl: p.avatarUrl || undefined,
+      });
+    }
+  }, [profileData, updateUser]);
 
   if (!isAuthenticated || !user) {
     return (
@@ -151,20 +246,75 @@ export default function ProfilePage() {
                   </div>
                 </div>
 
-                {/* Action Buttons */}
-                <div className="flex flex-wrap gap-3 pt-4">
-                  <Button variant="default">
-                    Edit Profile
-                  </Button>
-                  <Button variant="outline">
-                    Change Password
-                  </Button>
-                  <Link href="/account/settings">
-                    <Button variant="ghost">
-                      Account Settings
-                    </Button>
-                  </Link>
-                </div>
+                {/* Action Buttons / Inline Edit Form */}
+                <InlineProfileEditor
+                  user={user}
+                  onCancel={() => { /* no-op handled inside */ }}
+                  onSave={async (updates: UpdateProfileRequest) => {
+                    try {
+                      const res = await updateProfile(updates);
+                      // Debug log so devs can inspect the exact API envelope
+                      console.debug('updateProfile response', res);
+
+                      if (res.status === 200 && res.data) {
+                        // Support multiple backend envelope shapes:
+                        // 1) { data: { /* profile */ } }
+                        // 2) { data: { profile: { /* profile */ } } }
+                        // 3) { profile: { /* profile */ } }
+                        const body = res.data as any;
+                        let updated: ProfileDetailsResponse | undefined;
+
+                        if (body.data) {
+                          if (body.data.profile) {
+                            updated = body.data.profile as ProfileDetailsResponse;
+                          } else {
+                            updated = body.data as ProfileDetailsResponse;
+                          }
+                        } else if (body.profile) {
+                          updated = body.profile as ProfileDetailsResponse;
+                        } else {
+                          // Fallback: maybe the API returned the profile directly
+                          updated = body as ProfileDetailsResponse;
+                        }
+
+                        if (updated) {
+                          // Update context (and localStorage) so UI re-renders
+                          if (user) {
+                            updateUser({
+                              firstName: updated.firstName || '',
+                              lastName: updated.lastName || '',
+                              username: updated.username,
+                              email: updated.email,
+                              avatarUrl: updated.avatarUrl || undefined,
+                            });
+                          } else {
+                            // If for some reason user is null, set a minimal user object
+                            setUser({
+                              id: updated.id,
+                              firstName: updated.firstName || '',
+                              lastName: updated.lastName || '',
+                              username: updated.username,
+                              email: updated.email,
+                              avatarUrl: updated.avatarUrl || undefined,
+                              login: true,
+                            } as any);
+                          }
+
+                          // Wait for the refetch so any other consumers get updated data
+                          try {
+                            await refetch();
+                          } catch (e) {
+                            // Don't block on refetch failures, but log them
+                            console.warn('Refetch after profile update failed', e);
+                          }
+                        }
+                      }
+                    } catch (err) {
+                      console.error('Failed to update profile', err);
+                      alert('Failed to update profile');
+                    }
+                  }}
+                />
               </CardContent>
             </Card>
           </motion.div>

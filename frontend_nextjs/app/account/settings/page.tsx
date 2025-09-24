@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import React from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +23,8 @@ import {
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { toast } from "sonner";
+import { useGet, usePut, useDelete, useApi } from '@/hooks/useApi';
+import { ChangePasswordRequest, DeleteAccountRequest } from '@/hooks/types';
 
 const containerVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -66,8 +69,68 @@ export default function SettingsPage() {
     toast.info("Data export will be available soon!");
   };
 
-  const handleDeleteAccount = () => {
-    toast.error("Account deletion will be available soon!");
+  // Hooks for profile actions
+  const api = useApi();
+  const { mutate: changePasswordMutate } = usePut<any>('/profile/password');
+  const { data: sessionsData, refetch: refetchSessions } = useGet<any>('/profile/sessions', { enabled: false });
+  const { mutate: deleteAccountMutate } = useDelete<any>('/profile');
+
+  const handleViewSessions = async () => {
+    try {
+  const res = await api.get<any>('/profile/sessions');
+      const sessions = res?.data?.data?.sessions || res?.data?.sessions || [];
+      if (sessions.length === 0) {
+        alert('No active sessions found');
+        return;
+      }
+      const list = sessions.map((s: any) => `${s.userAgent || s.authMethod} - ${s.ipAddress} - Last seen: ${s.lastSeenAt}`).join('\n');
+      alert(list);
+    } catch (err) {
+      console.error('Failed to load sessions', err);
+      toast.error('Failed to load sessions');
+    }
+  };
+
+  const handleChangePassword = async () => {
+    const current = window.prompt('Enter your current password');
+    if (!current) return;
+    const nw = window.prompt('Enter your new password (min length enforced server-side)');
+    if (!nw) return;
+    try {
+      const payload: ChangePasswordRequest = { currentPassword: current, newPassword: nw };
+      const res = await changePasswordMutate(payload);
+      if (res.status === 200) {
+        toast.success('Password changed. You may need to log in again on other devices.');
+      }
+    } catch (err) {
+      console.error('Change password failed', err);
+      toast.error('Failed to change password');
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    const confirmation = window.prompt('Type "DELETE MY ACCOUNT" to confirm');
+    if (confirmation !== 'DELETE MY ACCOUNT') {
+      toast.error('Incorrect confirmation text');
+      return;
+    }
+    const password = window.prompt('Enter your password to confirm');
+    if (!password) return;
+    try {
+      const payload: DeleteAccountRequest = { confirmationText: confirmation, password };
+      const res = await deleteAccountMutate(payload);
+      if (res.status === 200) {
+        toast.success('Account deleted');
+        // Clear user state and tokens
+        window.localStorage.removeItem('userToken');
+        window.localStorage.removeItem('frencircle_user');
+        // Redirect to home
+        window.location.href = '/';
+      }
+    } catch (err) {
+      console.error('Delete account failed', err);
+      toast.error('Failed to delete account');
+    }
   };
 
   return (
@@ -98,149 +161,52 @@ export default function SettingsPage() {
             </p>
           </motion.div>
 
-          {/* General Settings */}
-          <motion.div variants={itemVariants}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <SettingsIcon className="h-5 w-5 mr-2" />
-                  General Settings
-                </CardTitle>
-                <CardDescription>
-                  Basic preferences for your account
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                {/* Theme Toggle */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Theme</label>
-                    <p className="text-xs text-muted-foreground">Choose between light and dark mode</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-sm">{theme === 'light' ? 'Light' : 'Dark'}</span>
-                    <Switch 
-                      checked={theme === 'dark'} 
-                      onCheckedChange={toggleTheme}
-                    />
-                  </div>
-                </div>
-
-                {/* Language */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Language</label>
-                    <p className="text-xs text-muted-foreground">Select your preferred language</p>
-                  </div>
-                  <Badge variant="outline">English</Badge>
-                </div>
-
-                {/* Time Zone */}
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Time Zone</label>
-                    <p className="text-xs text-muted-foreground">Your current time zone</p>
-                  </div>
-                  <Badge variant="outline">UTC</Badge>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Notifications */}
-          <motion.div variants={itemVariants}>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center">
-                  <Bell className="h-5 w-5 mr-2" />
-                  Notifications
-                </CardTitle>
-                <CardDescription>
-                  Configure how you receive notifications
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Email Notifications</label>
-                    <p className="text-xs text-muted-foreground">Receive updates via email</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Push Notifications</label>
-                    <p className="text-xs text-muted-foreground">Get notified on your device</p>
-                  </div>
-                  <Switch defaultChecked />
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Marketing Emails</label>
-                    <p className="text-xs text-muted-foreground">Receive promotional content</p>
-                  </div>
-                  <Switch />
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
-
-          {/* Privacy & Security */}
+          {/* Keep only Change Password and Delete Account sections */}
           <motion.div variants={itemVariants}>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center">
                   <Shield className="h-5 w-5 mr-2" />
-                  Privacy & Security
+                  Security
                 </CardTitle>
                 <CardDescription>
-                  Control your privacy and security settings
+                  Manage your password and account deletion
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="text-sm font-medium">Profile Visibility</label>
-                    <p className="text-xs text-muted-foreground">Who can see your profile</p>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Globe className="h-4 w-4" />
-                    <span className="text-sm">Public</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Two-Factor Authentication</label>
-                    <p className="text-xs text-muted-foreground">Add an extra layer of security</p>
-                  </div>
-                  <Button variant="outline" size="sm">
-                    <Smartphone className="h-4 w-4 mr-2" />
-                    Setup
-                  </Button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
-                    <label className="text-sm font-medium">Login Activity</label>
-                    <p className="text-xs text-muted-foreground">View recent login sessions</p>
-                  </div>
-                  <Button variant="ghost" size="sm">
-                    <Eye className="h-4 w-4 mr-2" />
-                    View
-                  </Button>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <div>
                     <label className="text-sm font-medium">Change Password</label>
                     <p className="text-xs text-muted-foreground">Update your account password</p>
                   </div>
-                  <Button variant="outline" size="sm">
-                    <Lock className="h-4 w-4 mr-2" />
-                    Change
+                  <div className="w-full md:w-auto mt-2 md:mt-0">
+                    <ChangePasswordCard onChangePassword={async (current, nw) => {
+                      try {
+                        const payload: ChangePasswordRequest = { currentPassword: current, newPassword: nw };
+                        const res = await changePasswordMutate(payload);
+                        if (res.status === 200) {
+                          toast.success('Password changed. You may need to log in again on other devices.');
+                        }
+                      } catch (err) {
+                        console.error('Change password failed', err);
+                        toast.error('Failed to change password');
+                      }
+                    }} />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="text-sm font-medium text-red-600">Delete Account</label>
+                    <p className="text-xs text-muted-foreground">Permanently delete your account</p>
+                  </div>
+                  <Button 
+                    variant="destructive" 
+                    size="sm" 
+                    onClick={handleDeleteAccount}
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
                   </Button>
                 </div>
               </CardContent>
@@ -299,6 +265,45 @@ export default function SettingsPage() {
           </motion.div>
         </motion.div>
       </div>
+    </div>
+  );
+}
+
+// ChangePasswordCard component
+function ChangePasswordCard({ onChangePassword }: { onChangePassword: (current: string, nw: string) => Promise<void> }) {
+  const [current, setCurrent] = React.useState('');
+  const [nw, setNew] = React.useState('');
+  const [confirm, setConfirm] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+
+  const submit = async () => {
+    if (!current || !nw || !confirm) {
+      toast.error('Please fill all fields');
+      return;
+    }
+    if (nw !== confirm) {
+      toast.error('New passwords do not match');
+      return;
+    }
+    if (nw.length < 8) {
+      toast.error('Password must be at least 8 characters');
+      return;
+    }
+    try {
+      setLoading(true);
+      await onChangePassword(current, nw);
+      setCurrent(''); setNew(''); setConfirm('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center space-x-2">
+      <Input type="password" placeholder="Current" value={current} onChange={(e: any) => setCurrent(e.target.value)} />
+      <Input type="password" placeholder="New password" value={nw} onChange={(e: any) => setNew(e.target.value)} />
+      <Input type="password" placeholder="Confirm" value={confirm} onChange={(e: any) => setConfirm(e.target.value)} />
+      <Button size="sm" onClick={submit} disabled={loading}>{loading ? 'Saving...' : 'Change'}</Button>
     </div>
   );
 }
