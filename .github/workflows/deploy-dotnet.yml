@@ -1,0 +1,87 @@
+name: Deploy Dotnet Service
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend_dotnet/**'
+
+jobs:
+  deploy-dotnet:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Trust remote host
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy dotnet service (locked)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+        run: |
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "bash -lc '
+            set -euo pipefail
+
+            LOCKFILE=\"${REMOTE_DIR}/.deploy.lock\"
+            # Create lock file fd 9
+            exec 9>\"\$LOCKFILE\"
+            echo \"[dotnet] Waiting for exclusive lock: \$LOCKFILE\"
+            if ! flock -w 600 9; then
+              echo \"[dotnet] ERROR: Could not acquire deploy lock within 10 minutes.\" >&2
+              exit 1
+            fi
+            echo \"[dotnet] Lock acquired at \$(date -Is)\"
+
+            # Ensure lock is released on exit (avoid single quotes inside this single-quoted script)
+            trap \"echo [dotnet] Releasing lock; flock -u 9\" EXIT
+
+            cd \"${REMOTE_DIR}\"
+            git fetch --all --prune
+            git checkout -f main || git switch -f main
+            git reset --hard
+            git clean -fd -e logs/
+            git pull --ff-only
+
+            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans dotnet
+            docker compose -p linqyard ps
+          '" || echo '[dotnet] Build or deploy failed'
+
+      - name: Show recent service logs (shared lock)
+        if: always()
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+        run: |
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "bash -lc '
+            set -euo pipefail
+
+            LOCKFILE=\"${REMOTE_DIR}/.deploy.lock\"
+            exec 9>\"\$LOCKFILE\"
+            # Shared lock to avoid colliding with an active deploy; wait up to 2 minutes
+            if flock -s -w 120 9; then
+              cd \"${REMOTE_DIR}\"
+              docker compose -p linqyard logs dotnet --since=5m || true
+            else
+              echo \"[dotnet] Skipping logs: could not acquire shared lock within 2 minutes\" >&2
+            fi
+          '"

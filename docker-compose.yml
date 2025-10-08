@@ -1,0 +1,34 @@
+services:
+  dotnet:
+    build:
+      context: ./backend_dotnet
+      dockerfile: ./Linqyard.Api/Dockerfile
+    ports:
+      - "5000:8080"
+    env_file:
+      - .env
+    volumes:
+      - /home/jassi/deployments/Linqyard/logs/dotnet:/app/logs/dotnet
+      - /home/jassi/deployments/Linqyard/cache:/app/cache
+      
+  fastapi:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+    ports:
+      - "8001:8001"
+    env_file:
+      - .env
+  nextjs:
+    build:
+      context: ./frontend_nextjs
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    restart: unless-stopped
+    # Uncomment and add environment variables as needed
+    # environment:
+    #   - NEXT_PUBLIC_API_URL=http://localhost:z
+    #   - DATABASE_URL=your_database_url

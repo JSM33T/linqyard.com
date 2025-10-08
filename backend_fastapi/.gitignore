@@ -1,0 +1,66 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pdb
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+
+# Byte-compiled / optimized / DLL files
+*.so
+*.dll
+*.dylib
+
+# ---- Virtual Environments ----
+.venv/
+venv/
+env/
+ENV/
+.Python
+
+# ---- Build / Distribution ----
+build/
+dist/
+wheels/
+*.egg
+pip-wheel-metadata/
+*.log
+
+# ---- Test / Coverage ----
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+*.cover
+
+# ---- FastAPI / Uvicorn ----
+# Logs & runtime files
+*.db
+*.sqlite3
+*.sqlite
+*.pid
+*.sock
+*.log
+
+# ---- IDE / Editor ----
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ---- OS generated ----
+.DS_Store
+Thumbs.db
+
+# ---- Environment / Secrets ----
+.env
+.env.*
+*.secret
+*.key
+logs/

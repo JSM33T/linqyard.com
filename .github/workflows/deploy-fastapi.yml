@@ -1,0 +1,86 @@
+name: Deploy FastAPI Service
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'backend_fastapi/**'
+
+jobs:
+  deploy-fastapi:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Trust remote host
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Deploy fastapi service (locked)
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+        run: |
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "bash -lc '
+            set -euo pipefail
+
+            LOCKFILE=\"${REMOTE_DIR}/.deploy.lock\"
+            # Create/open lock file on fd 9
+            exec 9>\"\$LOCKFILE\"
+            echo \"[fastapi] Waiting for exclusive lock: \$LOCKFILE\"
+            if ! flock -w 600 9; then
+              echo \"[fastapi] ERROR: Could not acquire deploy lock within 10 minutes.\" >&2
+              exit 1
+            fi
+            echo \"[fastapi] Lock acquired at \$(date -Is)\"
+            # Avoid single quotes inside this single-quoted script
+            trap \"echo [fastapi] Releasing lock; flock -u 9\" EXIT
+
+            cd \"${REMOTE_DIR}\"
+            git fetch --all --prune
+            git checkout -f main || git switch -f main
+            git reset --hard
+            git clean -fd -e logs/
+            git pull --ff-only
+
+            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans fastapi
+            docker compose -p linqyard ps
+          '" || echo '[fastapi] Build or deploy failed'
+
+      - name: Show recent service logs (shared lock)
+        if: always()
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+        run: |
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "bash -lc '
+            set -euo pipefail
+
+            LOCKFILE=\"${REMOTE_DIR}/.deploy.lock\"
+            exec 9>\"\$LOCKFILE\"
+            # Shared lock; wait up to 2 minutes to avoid clashing with an active deploy
+            if flock -s -w 120 9; then
+              cd \"${REMOTE_DIR}\"
+              docker compose -p linqyard logs fastapi --since=5m || true
+            else
+              echo \"[fastapi] Skipping logs: could not acquire shared lock within 2 minutes\" >&2
+            fi
+          '"

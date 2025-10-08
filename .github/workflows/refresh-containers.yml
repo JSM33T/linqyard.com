@@ -1,0 +1,45 @@
+name: Refresh containers (manual)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Start ssh-agent
+        uses: webfactory/ssh-agent@v0.5.4
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Trust remote host
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${SSH_PORT:-22}" "$SSH_HOST" >> ~/.ssh/known_hosts
+
+      - name: Refresh containers
+        env:
+          SSH_HOST:  ${{ secrets.SSH_HOST }}
+          SSH_PORT:  ${{ secrets.SSH_PORT }}
+          SSH_USER:  ${{ secrets.SSH_USER }}
+          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+        run: |
+          set -euo pipefail
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "cd '${REMOTE_DIR}' && \
+            docker compose -p linqyard up -d --force-recreate --remove-orphans && \
+            docker compose -p linqyard ps"
+
+      - name: Show recent logs
+        if: always()
+        env:
+          SSH_HOST:  ${{ secrets.SSH_HOST }}
+          SSH_PORT:  ${{ secrets.SSH_PORT }}
+          SSH_USER:  ${{ secrets.SSH_USER }}
+          REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+        run: |
+          ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" \
+            "cd '${REMOTE_DIR}' && docker compose -p linqyard logs --since=5m || true"

@@ -1,0 +1,94 @@
+version: "3.9"
+
+services:
+  # =========================
+  # FastAPI (Python backend)
+  # =========================
+  fastapi:
+    # Bind-mount local source so code changes hot-reload inside the container (dev only)
+    volumes:
+      - ./backend_fastapi:/app:rw
+    # Working directory inside the container where uvicorn will run
+    working_dir: /app
+    # Start the dev server with live reload and listen on all interfaces
+    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+    # Expose the container port (add "ports:" below if you want to reach it from host)
+    # ports:
+    #   - "8001:8001"
+    # Optional: ensure it comes up after dotnet if FastAPI consumes it
+    # depends_on:
+    #   - dotnet
+    # Optional: healthcheck to make docker aware of readiness
+    # healthcheck:
+    #   test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]   # adjust endpoint
+    #   interval: 10s
+    #   timeout: 3s
+    #   retries: 5
+
+  # =========================
+  # .NET 9 API (C# backend)
+  # =========================
+  dotnet:
+    # Dev image with SDK so `dotnet watch` works (hot reload)
+    image: mcr.microsoft.com/dotnet/sdk:9.0
+    # Mount the solution/workspace for incremental builds + hot reload
+    volumes:
+      - ./backend_dotnet:/src:rw
+      # Persist logs from inside container to a local folder (handy for debugging)
+      - ./logs/dotnet:/app/logs/dotnet:rw
+    # Where to run dotnet commands inside the container
+    working_dir: /src/Linqyard.Api
+    # Run the API with hot reload and bind to all interfaces on 8080 in-container
+    command: dotnet watch run --urls "http://0.0.0.0:8080"
+    environment:
+      # ASP.NET environment for dev
+      - ASPNETCORE_ENVIRONMENT=Development
+      # Ensure Kestrel inside the container listens on 8080
+      - ASPNETCORE_URLS=http://0.0.0.0:8080
+    ports:
+      # Map host port 5000 -> container port 8080 (host will call http://localhost:5000)
+      - "5000:8080"
+    # Optional: healthcheck for readiness/liveness
+    # healthcheck:
+    #   test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]   # add a /health endpoint
+    #   interval: 10s
+    #   timeout: 3s
+    #   retries: 5
+
+  # =========================
+  # Next.js (Frontend)
+  # =========================
+  nextjs:
+    # Lightweight Node image; perfect for dev `npm run dev`
+    image: node:18-alpine
+    working_dir: /app
+    volumes:
+      # Mount your Next.js source so edits reflect instantly
+      - ./frontend_nextjs:/app:rw
+      # Anonymous volume to keep node_modules inside the container (avoids host OS conflicts)
+      - /app/node_modules
+    # Install deps (quietly) and start the Next dev server, binding to all interfaces
+    command: >
+      sh -c "npm install --silent && npm run dev -- --hostname 0.0.0.0 --port 3000"
+    environment:
+      - NODE_ENV=development
+      # Frontend calls backend over the Docker host bridge.
+      # On macOS/Windows, host.docker.internal resolves to the host machine (where dotnet is mapped to 5000).
+      - NEXT_PUBLIC_API_URL=http://host.docker.internal:5000
+    ports:
+      # Map host port 3000 -> container port 3000 (visit http://localhost:3000)
+      - "3000:3000"
+    # Keep the dev server running unless explicitly stopped (better DX)
+    restart: unless-stopped
+    # Optional: wait for dotnet to be up before starting dev server (only if you want strict order)
+    # depends_on:
+    #   dotnet:
+    #     condition: service_started
+
+# =========================
+# (Optional) Shared network
+# =========================
+# By default, Compose creates a network; uncomment to name it explicitly
+# networks:
+#   default:
+#     name: linqyard_dev_net
