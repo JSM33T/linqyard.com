@@ -170,76 +170,99 @@ public sealed class AuthController : BaseApiController
                 return BadRequestProblem("User registration is currently disabled");
             }
 
-            // Check if user already exists
-            var existingUser = await _context.Users.AsNoTracking()
-                .AnyAsync(u => u.Email == request.Email, cancellationToken);
-
-            if (existingUser)
-            {
-                return ConflictProblem("A user with this email already exists");
-            }
-
-            // Validate username requirements
+            // ── Basic username validation ─────────────────────────────────────
             if (string.IsNullOrWhiteSpace(request.Username))
-            {
                 return BadRequestProblem("Username is required");
-            }
 
             if (request.Username.Length < 3)
-            {
                 return BadRequestProblem("Username must be at least 3 characters long");
-            }
 
             if (request.Username.Length > 30)
-            {
                 return BadRequestProblem("Username cannot be longer than 30 characters");
-            }
 
-            // Check if username contains only valid characters (alphanumeric, underscore, hyphen)
             if (!System.Text.RegularExpressions.Regex.IsMatch(request.Username, @"^[a-zA-Z0-9_-]+$"))
-            {
                 return BadRequestProblem("Username can only contain letters, numbers, underscores, and hyphens");
-            }
 
-            // Check if username is taken (case-insensitive)
-            var existingUsername = await _context.Users.AsNoTracking()
-                .AnyAsync(u => u.Username.ToLower() == request.Username.ToLower(), cancellationToken);
-
-            if (existingUsername)
-            {
-                return ConflictProblem("This username is already taken");
-            }
-
-            // Validate password requirements
+            // Password policy
             var minPasswordLength = await _context.AppConfigs.AsNoTracking()
                 .Where(ac => ac.Key == "PasswordMinLength")
                 .Select(ac => int.Parse(ac.Value))
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (request.Password.Length < minPasswordLength)
-            {
+            if (request.Password?.Length < minPasswordLength)
                 return BadRequestProblem($"Password must be at least {minPasswordLength} characters long");
+
+            // Normalize for case-insensitive checks
+            var normalizedEmail = request.Email.Trim();
+            var normalizedUsername = request.Username.Trim();
+            var normalizedUsernameLower = normalizedUsername.ToLower();
+
+            // ── Look up potential conflicting accounts (TRACKED; we may delete) ──
+            var emailOwner = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
+
+            var usernameOwner = await _context.Users
+                .FirstOrDefaultAsync(u => u.Username.ToLower() == normalizedUsernameLower, cancellationToken);
+
+            // ── Hard conflicts (verified accounts) ────────────────────────────
+            if (emailOwner is not null && emailOwner.EmailVerified == true)
+            {
+                return ConflictProblem("A user with this email already exists");
             }
 
-            // Create user (with profile fields consolidated)
+            if (usernameOwner is not null && usernameOwner.EmailVerified == true)
+            {
+                return ConflictProblem("This username is already taken");
+            }
+
+            // ── Soft conflicts (unverified accounts → reclaim by removing) ────
+            // If there’s an unverified account holding the same email, remove it.
+            if (emailOwner is not null && emailOwner.EmailVerified == false)
+            {
+                _logger.LogInformation("Removing unverified user holding email {Email} to allow re-registration", normalizedEmail);
+                _context.Users.Remove(emailOwner); // assumes cascade for related rows
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            // If there’s an unverified account holding the same username, remove it.
+            // Note: Re-query in case emailOwner removal also freed the username.
+            usernameOwner = await _context.Users
+                .FirstOrDefaultAsync(u => u.Username.ToLower() == normalizedUsernameLower, cancellationToken);
+
+            if (usernameOwner is not null && usernameOwner.EmailVerified == false)
+            {
+                _logger.LogInformation("Removing unverified user holding username {Username} to allow re-registration", normalizedUsername);
+                _context.Users.Remove(usernameOwner); // assumes cascade for related rows
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            // ── Final safety check (should not hit if above handled properly) ──
+            var usernameStillTaken = await _context.Users.AsNoTracking()
+                .AnyAsync(u => u.Username.ToLower() == normalizedUsernameLower, cancellationToken);
+            if (usernameStillTaken)
+            {
+                return ConflictProblem("This username is already taken");
+            }
+
+            // ── Create user ────────────────────────────────────────────────────
             var userId = Guid.NewGuid();
             var user = new User
             {
                 Id = userId,
-                Email = request.Email,
+                Email = normalizedEmail,
                 PasswordHash = HashPassword(request.Password),
                 EmailVerified = false,
                 FirstName = request.FirstName,
                 LastName = request.LastName,
-                Username = request.Username,
+                Username = normalizedUsername,
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
 
             _context.Users.Add(user);
 
-            // Assign default user role
-            var userRole = await _context.Roles.AsNoTracking()
+            // Assign default role (assumes cascade on UserRoles; no AsNoTracking here)
+            var userRole = await _context.Roles
                 .FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
 
             if (userRole != null)
@@ -256,34 +279,32 @@ public sealed class AuthController : BaseApiController
             var otpCode = new OtpCode
             {
                 Id = Guid.NewGuid(),
-                Email = request.Email,
-                CodeHash = verificationToken, // Store plain token for development
+                Email = normalizedEmail,
+                CodeHash = verificationToken, // plain for dev, replace with hash in prod
                 Purpose = "Signup",
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
             };
 
-            _logger.LogInformation("Verification token generated for {Email}: {Token}", request.Email, verificationToken);
+            _logger.LogInformation("Verification token generated for {Email}: {Token}", normalizedEmail, verificationToken);
             _context.OtpCodes.Add(otpCode);
 
             await _context.SaveChangesAsync(cancellationToken);
 
-            // Send verification email
+            // Send verification email (best-effort)
             try
             {
-                await _emailService.SendVerificationEmailAsync(request.Email, request.FirstName ?? "User", verificationToken);
-                _logger.LogInformation("Verification email sent to {Email}", request.Email);
+                await _emailService.SendVerificationEmailAsync(normalizedEmail, request.FirstName ?? "User", verificationToken);
+                _logger.LogInformation("Verification email sent to {Email}", normalizedEmail);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send verification email to {Email}", request.Email);
-                // Continue without failing the registration - user can resend verification
+                _logger.LogError(ex, "Failed to send verification email to {Email}", normalizedEmail);
+                // Non-fatal: user can resend verification
             }
 
             var userInfo = BuildUserInfo(user, userRole != null ? new[] { userRole.Name } : Array.Empty<string>());
 
             _logger.LogInformation("User {UserId} registered successfully", user.Id);
-
-            // TODO: Send verification email with token
 
             return Created($"/auth/users/{user.Id}", new ApiResponse<UserInfo>(userInfo));
         }
@@ -296,6 +317,7 @@ public sealed class AuthController : BaseApiController
                 detail: "An error occurred while processing your request");
         }
     }
+
 
     /// <summary>
     /// Refresh access token using refresh token from request body
@@ -500,7 +522,7 @@ public sealed class AuthController : BaseApiController
                 SameSite = HttpContext.Request.IsHttps ? SameSiteMode.None : SameSiteMode.Lax,
                 Path = "/" // Match the path used when setting the cookie
             };
-            
+
             // Set domain for development cross-port access
             var isDevelopment = _configuration.GetValue<bool>("IsDevelopment", false) ||
                                !_configuration.GetValue<bool>("IsProduction", false);
@@ -508,7 +530,7 @@ public sealed class AuthController : BaseApiController
             {
                 deleteCookieOptions.Domain = "localhost";
             }
-            
+
             Response.Cookies.Delete("refreshToken", deleteCookieOptions);
 
             var response = new LogoutResponse(
