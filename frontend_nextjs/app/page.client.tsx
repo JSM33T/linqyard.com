@@ -312,7 +312,7 @@ export default function HomeClient() {
 
       {/* Footer */}
       <footer className="container mx-auto px-4 pb-10 text-center text-muted-foreground">
-        <p>© {new Date().getFullYear()} linqyard. This page is a demo for illustrative purposes only.</p>
+        <p>© {new Date().getFullYear()} Linqyard</p>
       </footer>
     </div>
   );

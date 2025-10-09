@@ -11,7 +11,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
+
 import {
   Accordion,
   AccordionContent,
@@ -23,11 +23,7 @@ import {
   Users,
   Sparkles,
   Globe,
-  Lock,
-  Code2,
-  Server,
   Target,
-  Mail,
   TrendingUp,
   CheckCircle,
   ExternalLink,
@@ -49,9 +45,9 @@ const itemVariants = {
 const principles = [
   {
     icon: <Shield className="h-6 w-6" />,
-    title: "Privacy‑aware (demo)",
+    title: "Privacy‑first",
     desc:
-      "Designed with sensible defaults. This demo is for evaluation—avoid uploading production‑sensitive data.",
+      "Built with security in mind. Your data stays yours with transparent handling and minimal collection.",
   },
   {
     icon: <Target className="h-6 w-6" />,
@@ -67,24 +63,6 @@ const principles = [
     icon: <Globe className="h-6 w-6" />,
     title: "Works where you share",
     desc: "Responsive layouts for modern devices and browsers.",
-  },
-];
-
-const tech = [
-  {
-    icon: <Code2 className="h-5 w-5" />,
-    label: "Frontend",
-    value: "Next.js • shadcn/ui • Framer Motion • Lucide",
-  },
-  {
-    icon: <Lock className="h-5 w-5" />,
-    label: "Auth (platform)",
-    value: "JWT‑based sessions, optional Google Sign‑In",
-  },
-  {
-    icon: <Server className="h-5 w-5" />,
-    label: "Backend (platform)",
-    value: ".NET API with conventional logging and CORS policies",
   },
 ];
 
@@ -141,8 +119,8 @@ export default function AboutClient() {
             className="text-lg md:text-xl text-muted-foreground"
             variants={itemVariants}
           >
-            A focused way to organize all your social links and CTAs on a single page.
-            Share one link. Update in minutes. Keep things clear and privacy‑aware.
+            The professional way to organize all your social links and CTAs on one page.
+            Share one link everywhere. Update instantly. Track what matters.
           </motion.p>
 
           <motion.div
@@ -150,14 +128,14 @@ export default function AboutClient() {
             variants={itemVariants}
           >
             <Button asChild size="lg">
-              <Link href="/docs" className="inline-flex items-center">
-                Read docs <ExternalLink className="ml-2 h-4 w-4" />
+              <Link href="/account" className="inline-flex items-center">
+                Get Started Free <ExternalLink className="ml-2 h-4 w-4" />
               </Link>
             </Button>
             <Button asChild variant="outline" size="lg">
-              <a href="mailto:mail@linqyard.com" className="inline-flex items-center">
-                Email support <Mail className="ml-2 h-4 w-4" />
-              </a>
+              <Link href="/docs" className="inline-flex items-center">
+                View Documentation <ExternalLink className="ml-2 h-4 w-4" />
+              </Link>
             </Button>
           </motion.div>
 
@@ -165,9 +143,9 @@ export default function AboutClient() {
             className="flex items-center justify-center gap-2 text-sm text-muted-foreground"
             variants={itemVariants}
           >
-            <CheckCircle className="h-4 w-4" /> Neutral copy
-            <CheckCircle className="h-4 w-4 ml-4" /> No bold claims
-            <CheckCircle className="h-4 w-4 ml-4" /> Demo‑friendly
+            <CheckCircle className="h-4 w-4" /> Free tier included
+            <CheckCircle className="h-4 w-4 ml-4" /> Mobile optimized
+            <CheckCircle className="h-4 w-4 ml-4" /> Analytics included
           </motion.div>
         </motion.div>
       </motion.section>
@@ -181,9 +159,9 @@ export default function AboutClient() {
         viewport={{ once: true }}
       >
         <motion.div className="text-center mb-12" variants={itemVariants}>
-          <h2 className="text-3xl md:text-5xl font-bold">Principles</h2>
+          <h2 className="text-3xl md:text-5xl font-bold">Why Choose Linqyard</h2>
           <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
-            A few guardrails that shape product decisions.
+            Built on principles that put your success and privacy first.
           </p>
         </motion.div>
 
@@ -210,7 +188,7 @@ export default function AboutClient() {
         </div>
       </motion.section>
 
-      {/* How it works / Tech snapshot */}
+      {/* How it works */}
       <motion.section
         className="container mx-auto px-4 py-14"
         initial={{ opacity: 0 }}
@@ -218,66 +196,40 @@ export default function AboutClient() {
         transition={{ duration: 0.6 }}
         viewport={{ once: true }}
       >
-        <div className="grid lg:grid-cols-2 gap-8 items-stretch">
+        <div className="max-w-4xl mx-auto">
           <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Sparkles className="h-5 w-5 text-primary" /> How it works
+            <CardHeader className="text-center">
+              <CardTitle className="flex items-center justify-center gap-2 text-2xl">
+                <Sparkles className="h-6 w-6 text-primary" /> How it works
               </CardTitle>
-              <CardDescription>
-                A lightweight flow designed to stay out of your way.
+              <CardDescription className="text-lg">
+                A simple process designed to get you started quickly.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-start gap-3">
-                <span className="mt-1">1.</span>
-                <div>
-                  <p className="font-medium">Create your page</p>
-                  <p className="text-sm text-muted-foreground">Add links and CTAs you want to share.</p>
+            <CardContent className="space-y-6">
+              <div className="grid md:grid-cols-3 gap-6">
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-primary font-bold text-lg">1</span>
+                  </div>
+                  <h3 className="font-semibold mb-2">Create your page</h3>
+                  <p className="text-sm text-muted-foreground">Add links and CTAs you want to share with your audience.</p>
                 </div>
-              </div>
-              <Separator />
-              <div className="flex items-start gap-3">
-                <span className="mt-1">2.</span>
-                <div>
-                  <p className="font-medium">Share one URL</p>
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-primary font-bold text-lg">2</span>
+                  </div>
+                  <h3 className="font-semibold mb-2">Share one URL</h3>
                   <p className="text-sm text-muted-foreground">Post it on social profiles, bios, and campaigns.</p>
                 </div>
-              </div>
-              <Separator />
-              <div className="flex items-start gap-3">
-                <span className="mt-1">3.</span>
-                <div>
-                  <p className="font-medium">Tweak in minutes</p>
-                  <p className="text-sm text-muted-foreground">Reorder, toggle, or edit without heavy setup.</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Server className="h-5 w-5 text-primary" /> Tech snapshot
-              </CardTitle>
-              <CardDescription>
-                An overview of the stack used in this demo and the broader platform.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {tech.map((t, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <div className="mt-0.5 text-muted-foreground">{t.icon}</div>
-                  <div>
-                    <p className="font-medium">{t.label}</p>
-                    <p className="text-sm text-muted-foreground">{t.value}</p>
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <span className="text-primary font-bold text-lg">3</span>
                   </div>
+                  <h3 className="font-semibold mb-2">Track & optimize</h3>
+                  <p className="text-sm text-muted-foreground">Monitor clicks, reorder links, and optimize your strategy.</p>
                 </div>
-              ))}
-              <p className="text-xs text-muted-foreground/80 mt-2">
-                Notes: This page reflects a demo configuration. Features and
-                integrations may change.
-              </p>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -292,9 +244,9 @@ export default function AboutClient() {
         viewport={{ once: true }}
       >
         <div className="text-center mb-10">
-          <h2 className="text-3xl md:text-5xl font-bold">Roadmap (indicative)</h2>
+          <h2 className="text-3xl md:text-5xl font-bold">What&apos;s Coming Next</h2>
           <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
-            A simple view of what exists now and what might come next.
+            Exciting features in development to make your link management even better.
           </p>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
@@ -322,9 +274,6 @@ export default function AboutClient() {
             </Card>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground text-center mt-6">
-          Timelines and scope may shift. This section is informational, not a promise.
-        </p>
       </motion.section>
 
       {/* FAQ */}
@@ -344,30 +293,37 @@ export default function AboutClient() {
 
         <Accordion type="single" collapsible className="max-w-3xl mx-auto">
           <AccordionItem value="item-1">
-            <AccordionTrigger>Is this the production app?</AccordionTrigger>
+            <AccordionTrigger>How do I get started?</AccordionTrigger>
             <AccordionContent>
-              This is a demo experience for evaluation. Functionality and copy are
-              intentionally conservative and may change.
+              Sign up for a free account, add your links, customize your page design, 
+              and share your linqyard URL wherever you need it.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="item-2">
-            <AccordionTrigger>Do I need a credit card to try it?</AccordionTrigger>
+            <AccordionTrigger>Is there a free plan?</AccordionTrigger>
             <AccordionContent>
-              No credit card is required for the demo. If a paid plan is offered later,
-              details would appear in the docs first.
+              Yes! Our free tier includes everything you need to get started: unlimited links, 
+              basic analytics, theme customization, and mobile optimization. No trial period or time limits.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="item-3">
-            <AccordionTrigger>How is data handled here?</AccordionTrigger>
+            <AccordionTrigger>How secure is my data?</AccordionTrigger>
             <AccordionContent>
-              Data handling in this demo follows sensible defaults. Avoid uploading
-              production‑sensitive information. For specifics, see the docs.
+              We use industry-standard security practices including encrypted data storage, 
+              secure authentication, and regular security audits. Your privacy is our priority.
             </AccordionContent>
           </AccordionItem>
           <AccordionItem value="item-4">
-            <AccordionTrigger>Where can I ask questions?</AccordionTrigger>
+            <AccordionTrigger>Can I customize how my page looks?</AccordionTrigger>
             <AccordionContent>
-              Email <a className="underline" href="mailto:support@linqyard.com">support@linqyard.com</a> or check the docs page for short guides.
+              Absolutely! Choose from multiple themes, customize colors, add your branding, 
+              and arrange your links exactly how you want them.
+            </AccordionContent>
+          </AccordionItem>
+          <AccordionItem value="item-5">
+            <AccordionTrigger>Where can I get help?</AccordionTrigger>
+            <AccordionContent>
+              Email <a className="underline" href="mailto:support@linqyard.com">support@linqyard.com</a> for direct support, or check our docs for guides and tutorials.
             </AccordionContent>
           </AccordionItem>
         </Accordion>
@@ -376,7 +332,7 @@ export default function AboutClient() {
       {/* Footer */}
       <footer className="container mx-auto px-4 pb-10 text-center text-muted-foreground">
         <p>
-          © {new Date().getFullYear()} linqyard. This page is a demo for illustrative purposes only.
+          © {new Date().getFullYear()} linqyard.
         </p>
       </footer>
     </div>
