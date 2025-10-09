@@ -64,6 +64,9 @@ builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
 
+// Background Services
+builder.Services.AddHostedService<UnverifiedAccountCleanupService>();
+
 // Add custom app services (example)
 // builder.Services.AddSingleton<ILoggingService, LoggingService>();
 

@@ -171,12 +171,26 @@ public sealed class AuthController : BaseApiController
             }
 
             // Check if user already exists
-            var existingUser = await _context.Users.AsNoTracking()
-                .AnyAsync(u => u.Email == request.Email, cancellationToken);
+            var existingUser = await _context.Users
+                .FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
-            if (existingUser)
+            if (existingUser != null)
             {
-                return ConflictProblem("A user with this email already exists");
+                // If the existing user is unverified and past grace period, delete it
+                var gracePeriodDays = _configuration.GetValue<int>("Auth:UnverifiedAccountGracePeriodDays", 30);
+                var cutoffDate = DateTimeOffset.UtcNow.AddDays(-gracePeriodDays);
+                
+                if (!existingUser.EmailVerified && existingUser.CreatedAt < cutoffDate)
+                {
+                    _logger.LogInformation("Removing stale unverified account for email {Email} (created {CreatedAt})", 
+                        request.Email, existingUser.CreatedAt);
+                    _context.Users.Remove(existingUser);
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+                else
+                {
+                    return ConflictProblem("A user with this email already exists");
+                }
             }
 
             // Validate username requirements
@@ -202,12 +216,26 @@ public sealed class AuthController : BaseApiController
             }
 
             // Check if username is taken (case-insensitive)
-            var existingUsername = await _context.Users.AsNoTracking()
-                .AnyAsync(u => u.Username.ToLower() == request.Username.ToLower(), cancellationToken);
+            var existingUsername = await _context.Users
+                .FirstOrDefaultAsync(u => u.Username.ToLower() == request.Username.ToLower(), cancellationToken);
 
-            if (existingUsername)
+            if (existingUsername != null)
             {
-                return ConflictProblem("This username is already taken");
+                // If the existing user is unverified and past grace period, delete it
+                var gracePeriodDays = _configuration.GetValue<int>("Auth:UnverifiedAccountGracePeriodDays", 30);
+                var cutoffDate = DateTimeOffset.UtcNow.AddDays(-gracePeriodDays);
+                
+                if (!existingUsername.EmailVerified && existingUsername.CreatedAt < cutoffDate)
+                {
+                    _logger.LogInformation("Removing stale unverified account for username {Username} (created {CreatedAt})", 
+                        request.Username, existingUsername.CreatedAt);
+                    _context.Users.Remove(existingUsername);
+                    await _context.SaveChangesAsync(cancellationToken);
+                }
+                else
+                {
+                    return ConflictProblem("This username is already taken");
+                }
             }
 
             // Validate password requirements
