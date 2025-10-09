@@ -93,7 +93,13 @@ app.UseMiddleware<CorrelationIdMiddleware>();
 // Enable CORS
 app.UseCustomCors();
 
-app.UseHttpsRedirection();
+// Only enforce HTTPS redirection in non-development environments. In local dev
+// it's common to run the API over HTTP which would otherwise cause a 307
+// redirect when the frontend calls the API. Keep HTTPS enforced in prod.
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
