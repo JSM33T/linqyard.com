@@ -92,7 +92,7 @@ export default function PlansClient() {
                   <Card className={`h-full ${t.id === "plus" ? "shadow-2xl border-2 border-primary" : ""}`}>
                     <CardHeader className="text-center">
                       <div className="flex items-center justify-center gap-2">
-                        <Badge variant={t.variant}>{t.name}</Badge>
+                        <Badge variant={t.variant as "default" | "destructive" | "outline" | "secondary" | null | undefined}>{t.name}</Badge>
                       </div>
 
                       {/* Highlight badge for the Plus plan */}
