@@ -274,11 +274,12 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
   const sortedGroups = useMemo(() => {
     const groups = groupedData?.data?.groups ?? [];
     return [...groups]
-      .sort((a, b) => a.sequence - b.sequence)
       .map((g) => ({
         ...g,
         links: [...g.links].sort((a, b) => a.sequence - b.sequence),
-      }));
+      }))
+      .filter((g) => (g.links ?? []).length > 0)
+      .sort((a, b) => a.sequence - b.sequence);
   }, [groupedData]);
 
   const ungroupedLinks = useMemo(() => {
@@ -336,30 +337,39 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
             </motion.div>
           ) : (
             <>
-              <Accordion
-                type="multiple"
-                defaultValue={[...(groupedData.data.groups ?? []).map((g) => g.id), "__ungrouped__"]}
-                className="space-y-3"
-              >
-                {/* Ungrouped first */}
-                <GroupSection
-                  id={null}
-                  name="Ungrouped"
-                  description="Links without a group"
-                  items={ungroupedLinks}
-                />
+              {/* Ungrouped links: render without a title/description (show links directly) */}
+              {ungroupedLinks.length > 0 && (
+                <motion.div variants={cardVariants} initial="hidden" animate="visible">
+                  <div className="space-y-2">
+                    <AnimatePresence initial={false}>
+                      {ungroupedLinks.map((link) => (
+                        <motion.div key={link.id} variants={cardVariants} initial="hidden" animate="visible" exit="hidden">
+                          <LinkRow item={link} />
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
+                  </div>
+                </motion.div>
+              )}
 
-                {/* Groups */}
-                {sortedGroups.map((g) => (
-                  <GroupSection
-                    key={g.id}
-                    id={g.id}
-                    name={g.name}
-                    description={g.description}
-                    items={g.links}
-                  />
-                ))}
-              </Accordion>
+              {/* Render groups (only if there are any) */}
+              {sortedGroups.length > 0 && (
+                <Accordion
+                  type="multiple"
+                  defaultValue={[...sortedGroups.map((g) => g.id)]}
+                  className="space-y-3"
+                >
+                  {sortedGroups.map((g) => (
+                    <GroupSection
+                      key={g.id}
+                      id={g.id}
+                      name={g.name}
+                      description={g.description}
+                      items={g.links}
+                    />
+                  ))}
+                </Accordion>
+              )}
             </>
           )}
         </motion.div>
