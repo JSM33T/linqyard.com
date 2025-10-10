@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Globe, ExternalLink } from "lucide-react";
@@ -66,11 +66,13 @@ function GroupSection({ id, name, description, items }: { id: string | null; nam
   );
 }
 
-export default function LinksPreview({ groups, ungrouped, header }: { groups: { id: string; name: string; description?: string | null; links: LinkItem[] }[]; ungrouped: LinkItem[]; header?: React.ReactNode }) {
+export default function LinksPreview({ groups, ungrouped, header, user }: { groups: { id: string; name: string; description?: string | null; links: LinkItem[] }[]; ungrouped: LinkItem[]; header?: React.ReactNode; user?: { id: string; username: string; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null; coverUrl?: string | null } }) {
   // groups array comes pre-ordered from the parent (account page manages order).
   // Keep the incoming order and only ensure links inside groups are sorted by their sequence.
   const sortedGroups = useMemo(() => {
-    return groups.map((g) => ({ ...g, links: [...g.links].sort((a, b) => a.sequence - b.sequence) }));
+    return groups
+      .map((g) => ({ ...g, links: [...g.links].sort((a, b) => a.sequence - b.sequence) }))
+      .filter((g) => (g.links ?? []).length > 0);
   }, [groups]);
 
   const sortedUngrouped = useMemo(() => {
@@ -97,13 +99,58 @@ export default function LinksPreview({ groups, ungrouped, header }: { groups: { 
           {/* Scrollable content area */}
           <div className="p-3 overflow-y-auto flex-1 bg-background links-preview-scroll">
             {/* Optional header injected from parent - renders inside the mock above the links */}
-            {header ? <div className="mb-3">{header}</div> : null}
-            <Accordion type="multiple" defaultValue={[...sortedGroups.map((g) => g.id), "__ungrouped__"]} className="space-y-3">
-              <GroupSection id={null} name="Ungrouped" description="Links without a group" items={sortedUngrouped} />
-              {sortedGroups.map((g) => (
-                <GroupSection key={g.id} id={g.id} name={g.name} description={g.description} items={g.links} />
-              ))}
-            </Accordion>
+            {header ? (
+              <div className="mb-3">{header}</div>
+            ) : user ? (
+              // Render simple header (cover + avatar + name/username) similar to LinksPageClient
+              <div className="mb-3">
+                <div className="bg-card rounded-lg border overflow-hidden">
+                  <div className="relative w-full">
+                    <div className="overflow-hidden aspect-[820/312] bg-gradient-to-r from-primary/8 via-transparent to-primary/8">
+                      {user.coverUrl ? (
+                        // eslint-disable-next-line jsx-a11y/img-redundant-alt
+                        <img src={user.coverUrl} alt="Cover image" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="h-full w-full bg-gradient-to-r from-primary/10 via-background to-primary/10" />
+                      )}
+                    </div>
+
+                    <div className="absolute inset-x-0 bottom-0 flex justify-center translate-y-1/2 z-20">
+                      <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full ring-4 ring-card bg-white overflow-hidden shadow-lg relative">
+                        <img src={user.avatarUrl ?? "/images/avatar-placeholder.png"} alt={user.username} className="w-full h-full object-cover" />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-10 sm:mt-12 px-4 pb-4 flex flex-col items-center text-center">
+                    <h2 className="text-lg sm:text-xl font-semibold truncate">{[user.firstName, user.lastName].filter(Boolean).join(' ') || user.username}</h2>
+                    <p className="mt-1 text-sm text-muted-foreground">@{user.username}</p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* Ungrouped links - render directly without titled AccordionItem */}
+            {sortedUngrouped.length > 0 && (
+              <div className="space-y-2 mb-3">
+                <AnimatePresence initial={false}>
+                  {sortedUngrouped.map((link) => (
+                    <motion.div key={link.id} variants={cardVariants} initial="hidden" animate="visible" exit="hidden">
+                      <LinkRow item={link} />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
+              </div>
+            )}
+
+            {/* Render groups only when there are groups */}
+            {sortedGroups.length > 0 && (
+              <Accordion type="multiple" defaultValue={[...sortedGroups.map((g) => g.id)]} className="space-y-3">
+                {sortedGroups.map((g) => (
+                  <GroupSection key={g.id} id={g.id} name={g.name} description={g.description} items={g.links} />
+                ))}
+              </Accordion>
+            )}
           </div>
 
           {/* Bottom home indicator */}
