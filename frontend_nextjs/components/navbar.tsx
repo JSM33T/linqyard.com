@@ -280,10 +280,10 @@ export default function Navbar() {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Link href="/account/login">
+              <Link href="/account/signup">
                 <Button variant="default" size="sm" className="rounded-full">
                   <User className="h-3 w-3 mr-1" />
-                  Login
+                  Join
                 </Button>
               </Link>
             )}
