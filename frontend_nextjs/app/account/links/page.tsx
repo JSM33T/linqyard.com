@@ -33,8 +33,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-import { ArrowLeft, Globe, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus } from "lucide-react";
+import { ArrowLeft, Globe, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 
 import { useUser } from "@/contexts/UserContext";
@@ -58,6 +59,7 @@ function SortableLinkRow({ item, onEdit }: { item: LinkItem; onEdit: (l: LinkIte
     transform: CSS.Transform.toString(transform),
     transition,
     zIndex: isDragging ? 50 : ("auto" as const),
+    opacity: isDragging ? 0.5 : 1,
     boxShadow: isDragging ? "0 8px 24px rgba(0,0,0,0.20)" : undefined,
   } as React.CSSProperties;
 
@@ -65,11 +67,16 @@ function SortableLinkRow({ item, onEdit }: { item: LinkItem; onEdit: (l: LinkIte
     <div
       ref={setNodeRef}
       style={style}
-      className={"group/link flex items-center gap-3 rounded-lg border bg-background/60 hover:bg-accent/50 transition-all p-3 cursor-grab active:cursor-grabbing"}
-      {...attributes}
-      {...listeners}
+      className={"group/link flex items-center gap-3 rounded-lg border bg-background/60 hover:bg-accent/50 transition-all p-3"}
     >
-      <GripVertical className="h-4 w-4 text-muted-foreground opacity-60 group-hover/link:opacity-100 transition-opacity" />
+      <button
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-accent/50 transition-colors touch-none"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <GripVertical className="h-4 w-4 text-muted-foreground opacity-50 group-hover/link:opacity-100 transition-opacity" />
+      </button>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <a
@@ -112,7 +119,7 @@ function SortableGroupHeader({ id, name, description, onCreateLink, onDeleteGrou
   onEditGroup?: (groupId: string) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ 
-    id: `group-${id}` 
+    id: `group-${id}`,
   });
   
   const style = {
@@ -125,18 +132,22 @@ function SortableGroupHeader({ id, name, description, onCreateLink, onDeleteGrou
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-start justify-between w-full gap-3 ${isDragging ? 'opacity-50' : ''}`}
-      {...attributes}
+      className={`flex items-start justify-between w-full gap-3 ${isDragging ? 'opacity-40' : ''}`}
     >
       <div className="flex-1 text-left">
         <div className="flex items-center gap-2">
+          <button
+            {...attributes}
+            {...listeners}
+            className="cursor-grab active:cursor-grabbing p-1 -ml-1 rounded hover:bg-accent/50 transition-colors touch-none"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <GripVertical className="h-4 w-4 text-muted-foreground opacity-70 hover:opacity-100 transition-opacity" />
+          </button>
           <div className="h-2 w-2 rounded-full bg-gradient-to-r from-primary to-blue-500" />
-              <span className="font-semibold no-underline hover:no-underline">{name}</span>
-          <div {...listeners} className="cursor-grab active:cursor-grabbing ml-1">
-            <GripVertical className="h-4 w-4 text-muted-foreground opacity-60 hover:opacity-100 transition-opacity" />
-          </div>
+          <span className="font-semibold no-underline hover:no-underline decoration-none hover:decoration-none" style={{ textDecoration: 'none' }}>{name}</span>
         </div>
-        {description ? <p className="text-xs text-muted-foreground mt-1">{description}</p> : null}
+        {description ? <p className="text-xs text-muted-foreground mt-1 ml-9">{description}</p> : null}
       </div>
       <div className="flex items-center gap-1">
         <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onCreateLink(id); }}>
@@ -184,7 +195,7 @@ function GroupSection({
 
   return (
     <AccordionItem value={containerId} className="rounded-xl border bg-card">
-      <AccordionTrigger className="px-4">
+  <AccordionTrigger className="px-4 no-underline hover:no-underline">
         {id ? (
           <SortableGroupHeader 
             id={id}
@@ -199,7 +210,7 @@ function GroupSection({
             <div className="flex-1 text-left">
               <div className="flex items-center gap-2">
                 <div className="h-2 w-2 rounded-full bg-muted-foreground" />
-                <span className="font-semibold no-underline hover:no-underline">{name}</span>
+                <span className="font-semibold no-underline hover:no-underline decoration-none hover:decoration-none" style={{ textDecoration: 'none' }}>{name}</span>
               </div>
               {description ? <p className="text-xs text-muted-foreground mt-1">{description}</p> : null}
             </div>
@@ -279,6 +290,9 @@ export default function LinksPage() {
   // mobile preview modal
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
+  // accordion state for collapse/expand all
+  const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
+
   // Local optimistic structure
   const [localGroups, setLocalGroups] = useState<
     { id: string; name: string; description?: string | null; links: LinkItem[] }[]
@@ -299,17 +313,19 @@ export default function LinksPage() {
   // hydrate local state from API
   useEffect(() => {
     if (!groupedData?.data) return;
-    setLocalGroups(
-      [...groupedData.data.groups]
-        .sort((a, b) => a.sequence - b.sequence) // Sort groups by sequence
-        .map((g) => ({
-          id: g.id,
-          name: g.name,
-          description: g.description,
-          links: [...g.links].sort((a, b) => a.sequence - b.sequence),
-        }))
-    );
+    const groups = [...groupedData.data.groups]
+      .sort((a, b) => a.sequence - b.sequence) // Sort groups by sequence
+      .map((g) => ({
+        id: g.id,
+        name: g.name,
+        description: g.description,
+        links: [...g.links].sort((a, b) => a.sequence - b.sequence),
+      }));
+    setLocalGroups(groups);
     setLocalUngrouped([...groupedData.data.ungrouped.links].sort((a, b) => a.sequence - b.sequence));
+    
+    // Initialize accordion with all items open by default
+    setOpenAccordionItems([...groups.map((g) => g.id), "__ungrouped__"]);
   }, [groupedData]);
 
   const findItem = (id: string): { from: "group" | "ungrouped"; groupId: string | null; index: number } | null => {
@@ -542,14 +558,37 @@ export default function LinksPage() {
                   <p className="text-muted-foreground text-sm mt-1 mb-3 sm:mb-0">Drag to reorder. Drop into any group.</p>
                 </div>
                 <div className="sm:ml-auto flex items-center gap-3">
-                  <Button size="sm" variant="outline" onClick={() => setIsCreatingGroup(true)}>
-                    <FolderPlus className="h-4 w-4 mr-2" />
-                    New Group
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => {
+                      const allIds = [...localGroups.map((g) => g.id), "__ungrouped__"];
+                      setOpenAccordionItems(openAccordionItems.length === allIds.length ? [] : allIds);
+                    }}
+                  >
+                    <ChevronsUpDown className="h-4 w-4 mr-2" />
+                    {openAccordionItems.length === 0 ? "Expand All" : "Collapse All"}
                   </Button>
-                  <Button size="sm" onClick={() => startCreate(null)}>
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Link
-                  </Button>
+                  
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button size="sm">
+                        <Plus className="h-4 w-4 mr-2" />
+                        New
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => startCreate(null)}>
+                        <Plus className="h-4 w-4 mr-2" />
+                        New Link
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setIsCreatingGroup(true)}>
+                        <FolderPlus className="h-4 w-4 mr-2" />
+                        New Group
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  
                   {/* Preview button visible only on small screens (grouped with actions) */}
                     <Button size="sm" variant="outline" className="sm:hidden" onClick={() => setIsPreviewModalOpen(true)}>
                     <span className="inline-flex items-center">
@@ -598,7 +637,12 @@ export default function LinksPage() {
                       measuring={{ droppable: { strategy: MeasuringStrategy.Always } }}
                     >
                       <SortableContext items={localGroups.map((g) => `group-${g.id}`)} strategy={verticalListSortingStrategy}>
-                        <Accordion type="multiple" defaultValue={[...groupedData.data.groups.map((g) => g.id), "__ungrouped__"]} className="space-y-3">
+                        <Accordion 
+                          type="multiple" 
+                          value={openAccordionItems}
+                          onValueChange={setOpenAccordionItems}
+                          className="space-y-3"
+                        >
                           <GroupSection
                             id={null}
                             name="Ungrouped"
@@ -627,8 +671,19 @@ export default function LinksPage() {
 
                       <DragOverlay dropAnimation={defaultDropAnimation}>
                         {dragOverlayItem ? (
-                          <div className="w-full">
-                            <SortableLinkRow item={dragOverlayItem} onEdit={() => {}} />
+                          <div className="w-full opacity-90 shadow-2xl ring-2 ring-primary/30">
+                            <div className="flex items-center gap-3 rounded-lg border-2 border-primary/50 bg-card p-3">
+                              <GripVertical className="h-4 w-4 text-primary" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium text-sm truncate">{dragOverlayItem.name}</span>
+                                  <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0" />
+                                </div>
+                                {dragOverlayItem.description && (
+                                  <p className="text-xs text-muted-foreground mt-1 truncate">{dragOverlayItem.description}</p>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         ) : null}
                       </DragOverlay>
