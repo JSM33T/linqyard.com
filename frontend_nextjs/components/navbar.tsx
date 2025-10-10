@@ -197,7 +197,7 @@ export default function Navbar() {
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  {/* <DropdownMenuItem>
                     <button
                       className="flex w-full items-center text-left"
                       onClick={() => setVisible(!visible)}
@@ -230,7 +230,7 @@ export default function Navbar() {
                       </svg>
                       {visible ? "Hide navbar" : "Show navbar"}
                     </button>
-                  </DropdownMenuItem>
+                  </DropdownMenuItem> */}
                   <DropdownMenuItem asChild>
                     <Link href="/account/links" className="cursor-pointer">
                       <UserCircle className="mr-2 h-4 w-4" />
@@ -451,32 +451,6 @@ export default function Navbar() {
                         </>
                       )}
                     </Button>
-
-                    {/* Navbar visibility toggle (mobile) */}
-                    {/* <Button
-                      variant="ghost"
-                      onClick={() => setVisible(!visible)}
-                      className="w-full justify-start"
-                      aria-label="Toggle navbar visibility"
-                    >
-                      {visible ? (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                            <path d="M8 12h8" />
-                          </svg>
-                          Hide Navbar
-                        </>
-                      ) : (
-                        <>
-                          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
-                            <path d="M6 6l12 12" />
-                          </svg>
-                          Show Navbar
-                        </>
-                      )}
-                    </Button> */}
 
                     {/* Logout (mobile) */}
                     {isAuthenticated && (
