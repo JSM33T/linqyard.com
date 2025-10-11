@@ -154,6 +154,24 @@ export default function LinksPreview({ groups, ungrouped, header, user }: { grou
                 ))}
               </Accordion>
             )}
+
+            {/* Branding Footer */}
+            <div className="mt-6 pt-4 border-t">
+              <div className="flex flex-col items-center justify-center gap-2 text-center">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Globe className="h-3 w-3 text-primary" />
+                  </div>
+                  <span className="font-semibold text-sm">Linqyard</span>
+                </div>
+                <p className="text-[10px] text-muted-foreground px-4">
+                  Create your own beautiful link-in-bio page
+                </p>
+                <span className="text-[10px] text-primary">
+                  Create your free Linqyard
+                </span>
+              </div>
+            </div>
           </div>
 
           {/* Bottom home indicator */}

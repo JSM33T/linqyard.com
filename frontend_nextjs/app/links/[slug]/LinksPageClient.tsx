@@ -376,6 +376,24 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
               )}
             </>
           )}
+
+          {/* Branding Footer */}
+          <motion.div variants={cardVariants} className="mt-8 pt-6 border-t">
+            <div className="flex flex-col items-center justify-center gap-3 text-center">
+              <Link href="/" className="flex items-center gap-2 group">
+                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                  <Globe className="h-4 w-4 text-primary" />
+                </div>
+                <span className="font-semibold text-lg group-hover:text-primary transition-colors">Linqyard</span>
+              </Link>
+              <p className="text-xs text-muted-foreground max-w-md">
+                Create your own beautiful link-in-bio page and share your content with the world.
+              </p>
+              <a href="/account/signup" target="_blank" className="text-xs text-primary hover:underline">
+                Create your free Linqyard
+              </a>
+            </div>
+          </motion.div>
         </motion.div>
       </div>
     </div>
