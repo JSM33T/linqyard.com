@@ -315,9 +315,7 @@ public class LinqyardDbContext : DbContext
         modelBuilder.Entity<Role>().HasData(
             new Role { Id = 1, Name = "admin", Description = "Administrator with full system access" },
             new Role { Id = 2, Name = "mod", Description = "Moderator with moderation privileges" },
-            new Role { Id = 3, Name = "user_pro", Description = "Pro user with premium features" },
-            new Role { Id = 4, Name = "user_plus", Description = "Plus user with enhanced features" },
-            new Role { Id = 5, Name = "user", Description = "Standard user" }
+            new Role { Id = 3, Name = "user", Description = "Standard user" }
         );
     }
 
