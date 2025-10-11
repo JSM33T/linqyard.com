@@ -298,7 +298,18 @@ export default function Navbar() {
           </div>
 
           {/* Mobile menu button */}
-          <div className="md:hidden">
+          <div className="md:hidden flex items-center space-x-2">
+            {/* Theme toggle (Mobile) */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              aria-label="Toggle theme"
+              className="rounded-full"
+            >
+              {theme === "light" ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            </Button>
+            
             <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
               <SheetTrigger asChild>
                 <Button
@@ -446,28 +457,6 @@ export default function Navbar() {
                         </div>
                       </>
                     )}
-
-                    <Separator />
-
-                    {/* Theme (mobile) */}
-                    <Button
-                      variant="ghost"
-                      onClick={toggleTheme}
-                      className="w-full justify-start"
-                      aria-label="Toggle theme"
-                    >
-                      {theme === "light" ? (
-                        <>
-                          <Moon className="h-4 w-4 mr-2" />
-                          Dark Mode
-                        </>
-                      ) : (
-                        <>
-                          <Sun className="h-4 w-4 mr-2" />
-                          Light Mode
-                        </>
-                      )}
-                    </Button>
 
                     {/* Logout (mobile) */}
                     {isAuthenticated && (
