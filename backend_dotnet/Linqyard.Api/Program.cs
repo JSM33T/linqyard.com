@@ -54,10 +54,10 @@ builder.Services.Configure<Linqyard.Infra.Configuration.SmtpSettings>(
     builder.Configuration.GetSection("Email:Smtp"));
 builder.Services.AddScoped<Linqyard.Infra.IEmailService, Linqyard.Infra.EmailService>();
 
-// Cloudinary Service Configuration
-builder.Services.Configure<Linqyard.Infra.Configuration.CloudinarySettings>(
-    builder.Configuration.GetSection("Cloudinary"));
-builder.Services.AddScoped<Linqyard.Infra.ICloudinaryService, Linqyard.Infra.CloudinaryService>();
+// Azure Blob Storage Service Configuration
+builder.Services.Configure<Linqyard.Infra.Configuration.AzureBlobStorageSettings>(
+    builder.Configuration.GetSection("AzureBlobStorage"));
+builder.Services.AddScoped<Linqyard.Infra.IAzureBlobStorageService, Linqyard.Infra.AzureBlobStorageService>();
 
 // Repository Services
 builder.Services.AddScoped<IUserRepository, UserRepository>();

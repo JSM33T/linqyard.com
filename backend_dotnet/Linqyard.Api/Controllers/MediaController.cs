@@ -16,16 +16,16 @@ namespace Linqyard.Api.Controllers;
 [Authorize]
 public sealed class MediaController : BaseApiController
 {
-    private readonly ICloudinaryService _cloudinaryService;
+    private readonly IAzureBlobStorageService _blobStorageService;
     private readonly IProfileRepository _profileRepository;
     private readonly ILogger<MediaController> _logger;
 
     public MediaController(
-        ICloudinaryService cloudinaryService,
+        IAzureBlobStorageService blobStorageService,
         IProfileRepository profileRepository,
         ILogger<MediaController> logger)
     {
-        _cloudinaryService = cloudinaryService;
+        _blobStorageService = blobStorageService;
         _profileRepository = profileRepository;
         _logger = logger;
     }
@@ -46,7 +46,7 @@ public sealed class MediaController : BaseApiController
         try
         {
             var uploadResult = await UploadFileAsync(file, cancellationToken);
-            var response = new MediaUploadResponse(uploadResult.PublicId, uploadResult.Url);
+            var response = new MediaUploadResponse(uploadResult.BlobName, uploadResult.Url);
             return OkEnvelope(response);
         }
         catch (Exception ex)
@@ -91,7 +91,7 @@ public sealed class MediaController : BaseApiController
                 return NotFoundProblem("User not found", "Unable to update the avatar for the current user.");
             }
 
-            return OkEnvelope(updateResponse, new { uploadResult.PublicId });
+            return OkEnvelope(updateResponse, new { uploadResult.BlobName });
         }
         catch (Exception ex)
         {
@@ -134,7 +134,7 @@ public sealed class MediaController : BaseApiController
                 return NotFoundProblem("User not found", "Unable to update the cover image for the current user.");
             }
 
-            return OkEnvelope(updateResponse, new { uploadResult.PublicId });
+            return OkEnvelope(updateResponse, new { uploadResult.BlobName });
         }
         catch (Exception ex)
         {
@@ -149,39 +149,39 @@ public sealed class MediaController : BaseApiController
 
 
     /// <summary>
-    /// Uploads a file to Cloudinary and caches it locally.
+    /// Uploads a file to Azure Blob Storage and caches it locally.
     /// </summary>
-    private Task<CloudinaryUploadResult> UploadFileAsync(IFormFile file, CancellationToken cancellationToken)
+    private Task<BlobUploadResult> UploadFileAsync(IFormFile file, CancellationToken cancellationToken)
         => UploadFileAsync(file, null, cancellationToken);
 
-    private async Task<CloudinaryUploadResult> UploadFileAsync(IFormFile file, string? publicId, CancellationToken cancellationToken)
+    private async Task<BlobUploadResult> UploadFileAsync(IFormFile file, string? blobName, CancellationToken cancellationToken)
     {
         await using var stream = file.OpenReadStream();
-        return await _cloudinaryService.UploadImageAsync(
+        return await _blobStorageService.UploadImageAsync(
             stream,
             file.FileName,
             string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
-            publicId,
+            blobName,
             cancellationToken);
     }
 
     /// <summary>
-    /// Retrieves an image by its Cloudinary public ID. Uses the local cache when possible.
+    /// Retrieves an image by its blob name. Uses the local cache when possible.
     /// </summary>
-    [HttpGet("{publicId}")]
+    [HttpGet("{blobName}")]
     [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> GetImage(string publicId, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> GetImage(string blobName, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(publicId))
+        if (string.IsNullOrWhiteSpace(blobName))
         {
-            return BadRequestProblem("Invalid image identifier", "The public ID provided is empty.");
+            return BadRequestProblem("Invalid image identifier", "The blob name provided is empty.");
         }
 
-        var cachedImage = await _cloudinaryService.GetImageAsync(publicId, cancellationToken);
+        var cachedImage = await _blobStorageService.GetImageAsync(blobName, cancellationToken);
         if (cachedImage is null)
         {
-            return NotFoundProblem("Image not found", $"No image found for public ID '{publicId}'.");
+            return NotFoundProblem("Image not found", $"No image found for blob name '{blobName}'.");
         }
 
         try
@@ -198,12 +198,12 @@ public sealed class MediaController : BaseApiController
         }
         catch (FileNotFoundException)
         {
-            _logger.LogWarning("Cached file missing for public ID {PublicId} despite cache entry", publicId);
-            return NotFoundProblem("Image not found", $"No cached file available for public ID '{publicId}'.");
+            _logger.LogWarning("Cached file missing for blob name {BlobName} despite cache entry", blobName);
+            return NotFoundProblem("Image not found", $"No cached file available for blob name '{blobName}'.");
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read cached image for public ID {PublicId}", publicId);
+            _logger.LogError(ex, "Failed to read cached image for blob name {BlobName}", blobName);
             return Problem(
                 StatusCodes.Status500InternalServerError,
                 "Failed to read image",
