@@ -58,6 +58,7 @@ public sealed class AuthController : BaseApiController
             var user = await _context.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
+                .Include(u => u.Tier)
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername ||
                                          u.Username == request.EmailOrUsername, cancellationToken);
 
@@ -255,6 +256,7 @@ public sealed class AuthController : BaseApiController
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 Username = normalizedUsername,
+                TierId = 1, // Assign free tier by default
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
@@ -357,6 +359,8 @@ public sealed class AuthController : BaseApiController
                 .Include(rt => rt.User)
                     .ThenInclude(u => u.UserRoles)
                         .ThenInclude(ur => ur.Role)
+                .Include(rt => rt.User)
+                    .ThenInclude(u => u.Tier)
                 .Include(rt => rt.Session)
                 .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
 
@@ -726,6 +730,7 @@ public sealed class AuthController : BaseApiController
             .AsNoTracking()
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
+            .Include(u => u.Tier)
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
         if (user == null)
@@ -1257,6 +1262,8 @@ public sealed class AuthController : BaseApiController
             .Include(el => el.User)
                 .ThenInclude(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
+            .Include(el => el.User)
+                .ThenInclude(u => u.Tier)
             .FirstOrDefaultAsync(el => el.Provider == "google" && el.ProviderUserId == googleUser.Id, cancellationToken);
 
         if (existingExternalLogin != null)
@@ -1277,6 +1284,7 @@ public sealed class AuthController : BaseApiController
         var existingUser = await _context.Users
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
+            .Include(u => u.Tier)
             .FirstOrDefaultAsync(u => u.Email == googleUser.Email, cancellationToken);
 
         if (existingUser != null)
@@ -1338,6 +1346,7 @@ public sealed class AuthController : BaseApiController
             Username = await GenerateUniqueUsername(fullName != string.Empty ? fullName : googleUser.Email.Split('@')[0], cancellationToken),
             DisplayName = string.IsNullOrEmpty(parsedFirstName) ? fullName : parsedFirstName,
             AvatarUrl = googleUser.Picture,
+            TierId = 1, // Assign free tier by default
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
@@ -1468,7 +1477,9 @@ public sealed class AuthController : BaseApiController
             CoverUrl: user.CoverUrl,
             CreatedAt: user.CreatedAt,
             Roles: roles,
-            AuthMethod: authMethod
+            AuthMethod: authMethod,
+            TierId: user.TierId,
+            TierName: user.Tier?.Name
         );
     }
 

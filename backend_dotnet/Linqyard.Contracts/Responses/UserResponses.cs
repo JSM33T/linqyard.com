@@ -7,5 +7,7 @@ public sealed record UserPublicResponse(
     string? LastName,
     string? AvatarUrl,
     string? CoverUrl,
-    string? Bio
+    string? Bio,
+    int? TierId,
+    string? TierName
 );

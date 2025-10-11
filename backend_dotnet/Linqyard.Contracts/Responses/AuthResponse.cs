@@ -18,7 +18,9 @@ public sealed record UserInfo(
     string? CoverUrl,
     DateTimeOffset CreatedAt,
     IReadOnlyList<string> Roles,
-    string? AuthMethod
+    string? AuthMethod,
+    int? TierId,
+    string? TierName
 );
 
 public sealed record RefreshTokenResponse(

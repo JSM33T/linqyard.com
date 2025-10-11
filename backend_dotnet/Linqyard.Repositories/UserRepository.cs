@@ -57,10 +57,12 @@ public class UserRepository : IUserRepository
         await connection.OpenAsync(cancellationToken);
 
         const string query = @"
-            SELECT ""Id"", ""Username"", ""FirstName"", ""LastName"", ""AvatarUrl"", ""CoverUrl"", ""Bio""
-            FROM public.""Users""
-            WHERE LOWER(""Username"") = LOWER(@username)
-              AND ""DeletedAt"" IS NULL
+            SELECT u.""Id"", u.""Username"", u.""FirstName"", u.""LastName"", u.""AvatarUrl"", u.""CoverUrl"", u.""Bio"", 
+                   u.""TierId"", t.""Name"" AS ""TierName""
+            FROM public.""Users"" u
+            LEFT JOIN public.""Tiers"" t ON u.""TierId"" = t.""Id""
+            WHERE LOWER(u.""Username"") = LOWER(@username)
+              AND u.""DeletedAt"" IS NULL
             LIMIT 1;";
 
         await using var command = new NpgsqlCommand(query, connection);
@@ -73,13 +75,15 @@ public class UserRepository : IUserRepository
         }
 
         return new UserPublicResponse(
-            reader.GetGuid(0),
-            reader.GetString(1),
-            reader.IsDBNull(2) ? null : reader.GetString(2),
-            reader.IsDBNull(3) ? null : reader.GetString(3),
-            reader.IsDBNull(4) ? null : reader.GetString(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5),
-            reader.IsDBNull(6) ? null : reader.GetString(6)
+            reader.GetGuid(0),                                           // Id
+            reader.GetString(1),                                         // Username
+            reader.IsDBNull(2) ? null : reader.GetString(2),            // FirstName
+            reader.IsDBNull(3) ? null : reader.GetString(3),            // LastName
+            reader.IsDBNull(4) ? null : reader.GetString(4),            // AvatarUrl
+            reader.IsDBNull(5) ? null : reader.GetString(5),            // CoverUrl
+            reader.IsDBNull(6) ? null : reader.GetString(6),            // Bio
+            reader.IsDBNull(7) ? null : reader.GetInt32(7),             // TierId
+            reader.IsDBNull(8) ? null : reader.GetString(8)             // TierName
         );
     }
 

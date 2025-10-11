@@ -42,6 +42,9 @@ public class User
 
     public bool IsActive { get; set; } = true;
 
+    // Tier relationship
+    public int? TierId { get; set; }
+
     [Column(TypeName = "timestamptz")]
     public DateTimeOffset CreatedAt { get; set; }
 
@@ -50,7 +53,11 @@ public class User
 
     [Column(TypeName = "timestamptz")]
     public DateTimeOffset? DeletedAt { get; set; }
+
+    // Navigation properties
     public ICollection<UserRole> UserRoles { get; set; } = new List<UserRole>();
+    [ForeignKey(nameof(TierId))]
+    public Tier? Tier { get; set; }
     public ICollection<ExternalLogin> ExternalLogins { get; set; } = new List<ExternalLogin>();
     public ICollection<Session> Sessions { get; set; } = new List<Session>();
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();

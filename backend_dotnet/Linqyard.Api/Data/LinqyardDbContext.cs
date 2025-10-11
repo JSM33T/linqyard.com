@@ -14,6 +14,7 @@ public class LinqyardDbContext : DbContext
     public DbSet<User> Users { get; set; }
     public DbSet<Role> Roles { get; set; }
     public DbSet<UserRole> UserRoles { get; set; }
+    public DbSet<Tier> Tiers { get; set; }
     public DbSet<ExternalLogin> ExternalLogins { get; set; }
     public DbSet<OtpCode> OtpCodes { get; set; }
     public DbSet<Session> Sessions { get; set; }
@@ -38,6 +39,7 @@ public class LinqyardDbContext : DbContext
         ConfigureUserEntity(modelBuilder);
         ConfigureRoleEntity(modelBuilder);
         ConfigureUserRoleEntity(modelBuilder);
+        ConfigureTierEntity(modelBuilder);
         ConfigureExternalLoginEntity(modelBuilder);
         ConfigureOtpCodeEntity(modelBuilder);
         ConfigureSessionEntity(modelBuilder);
@@ -52,6 +54,7 @@ public class LinqyardDbContext : DbContext
         ConfigureAppConfigEntity(modelBuilder);
 
         SeedRoles(modelBuilder);
+        SeedTiers(modelBuilder);
         SeedAppConfigs(modelBuilder);
     }
 
@@ -130,6 +133,20 @@ public class LinqyardDbContext : DbContext
 
         // Composite primary key
         entity.HasKey(e => new { e.UserId, e.RoleId });
+    }
+
+    private void ConfigureTierEntity(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<Tier>();
+
+        // Primary key
+        entity.HasKey(e => e.Id);
+
+        // Relationships
+        entity.HasMany(t => t.Users)
+              .WithOne(u => u.Tier)
+              .HasForeignKey(u => u.TierId)
+              .OnDelete(DeleteBehavior.SetNull);
     }
 
     private void ConfigureExternalLoginEntity(ModelBuilder modelBuilder)
@@ -316,6 +333,15 @@ public class LinqyardDbContext : DbContext
             new Role { Id = 1, Name = "admin", Description = "Administrator with full system access" },
             new Role { Id = 2, Name = "mod", Description = "Moderator with moderation privileges" },
             new Role { Id = 3, Name = "user", Description = "Standard user" }
+        );
+    }
+
+    private void SeedTiers(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<Tier>().HasData(
+            new Tier { Id = 1, Name = "free", Description = "Free tier with basic features" },
+            new Tier { Id = 2, Name = "plus", Description = "Plus tier with enhanced features" },
+            new Tier { Id = 3, Name = "pro", Description = "Pro tier with premium features" }
         );
     }
 
