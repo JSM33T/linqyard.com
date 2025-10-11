@@ -2,6 +2,7 @@ using Linqyard.Api.Data;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Entities;
+using Linqyard.Entities.Enums;
 using System.Collections.Generic;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
@@ -206,6 +207,23 @@ public class LinksController : BaseApiController
 
             if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Url))
                 return BadRequestProblem("Name and Url are required");
+
+            // Check tier-based limits for free tier users
+            var user = await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Tier)
+                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+            if (user?.TierId == (int)TierType.Free)
+            {
+                var existingLinksCount = await _context.Links
+                    .CountAsync(l => l.UserId == userId, cancellationToken);
+
+                if (existingLinksCount >= 12)
+                {
+                    return BadRequestProblem("Free tier users can create a maximum of 12 links. Please upgrade to create more links.");
+                }
+            }
 
             // Optional: validate URL format
             if (!Uri.IsWellFormedUriString(request.Url, UriKind.Absolute))

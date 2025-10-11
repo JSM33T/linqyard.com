@@ -6,6 +6,7 @@ using Linqyard.Contracts;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Entities;
+using Linqyard.Entities.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Security.Cryptography;
@@ -256,7 +257,7 @@ public sealed class AuthController : BaseApiController
                 FirstName = request.FirstName,
                 LastName = request.LastName,
                 Username = normalizedUsername,
-                TierId = 1, // Assign free tier by default
+                TierId = (int)TierType.Free, // Assign free tier by default
                 CreatedAt = DateTimeOffset.UtcNow,
                 UpdatedAt = DateTimeOffset.UtcNow
             };
@@ -1346,7 +1347,7 @@ public sealed class AuthController : BaseApiController
             Username = await GenerateUniqueUsername(fullName != string.Empty ? fullName : googleUser.Email.Split('@')[0], cancellationToken),
             DisplayName = string.IsNullOrEmpty(parsedFirstName) ? fullName : parsedFirstName,
             AvatarUrl = googleUser.Picture,
-            TierId = 1, // Assign free tier by default
+            TierId = (int)TierType.Free, // Assign free tier by default
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow

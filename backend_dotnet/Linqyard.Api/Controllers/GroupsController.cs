@@ -3,6 +3,7 @@ using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Contracts;
 using Linqyard.Entities;
+using Linqyard.Entities.Enums;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -110,6 +111,26 @@ public sealed class GroupsController : BaseApiController
             if (string.IsNullOrWhiteSpace(request.Name))
                 return BadRequestProblem("Name is required");
 
+            if (!Guid.TryParse(UserId, out var userId))
+                return UnauthorizedProblem("Invalid user context");
+
+            // Check tier-based limits for free tier users
+            var user = await _context.Users
+                .AsNoTracking()
+                .Include(u => u.Tier)
+                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+            if (user?.TierId == (int)TierType.Free)
+            {
+                var existingGroupsCount = await _context.LinkGroups
+                    .CountAsync(g => g.UserId == userId, cancellationToken);
+
+                if (existingGroupsCount >= 2)
+                {
+                    return BadRequestProblem("Free tier users can create a maximum of 2 groups. Please upgrade to create more groups.");
+                }
+            }
+
             var now = DateTimeOffset.UtcNow;
             var group = new LinkGroup
             {
@@ -118,7 +139,7 @@ public sealed class GroupsController : BaseApiController
                 Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
                 Sequence = request.Sequence ?? 0,
                 IsActive = request.IsActive ?? true,
-                UserId = Guid.TryParse(UserId, out var uid) ? uid : (Guid?)null,
+                UserId = userId,
                 CreatedAt = now,
                 UpdatedAt = now
             };
