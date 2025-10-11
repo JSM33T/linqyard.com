@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import Image from "next/image";
 
 import {
   Menu,
@@ -136,9 +137,16 @@ export default function Navbar() {
           <div className="flex-shrink-0">
             <Link
               href="/"
-              className="text-base sm:text-lg font-semibold text-foreground hover:opacity-85 transition-opacity"
+              className="flex items-center gap-2 text-base sm:text-lg font-semibold text-foreground hover:opacity-85 transition-opacity"
             >
-              Linqyard
+              <Image
+                src="/logo.svg"
+                alt="Linqyard Logo"
+                width={20}
+                height={20}
+                className="text-foreground"
+              />
+              {/* <span>Linqyard</span> */}
             </Link>
           </div>
 
@@ -306,7 +314,16 @@ export default function Navbar() {
               <SheetContent side="right" className="w-[88vw] max-w-sm p-0" id="mobile-menu">
                 <div className="p-5 border-b">
                   <SheetHeader>
-                    <SheetTitle className="text-lg">Linqyard</SheetTitle>
+                    <SheetTitle className="flex items-center gap-2 text-lg">
+                      <Image
+                        src="/logo.svg"
+                        alt="Linqyard Logo"
+                        width={20}
+                        height={20}
+                        className="text-foreground"
+                      />
+                      <span>Linqyard</span>
+                    </SheetTitle>
                     <SheetDescription>Navigate through the app</SheetDescription>
                   </SheetHeader>
                 </div>

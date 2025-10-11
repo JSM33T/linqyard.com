@@ -309,11 +309,6 @@ export default function HomeClient() {
           </CardContent>
         </Card>
       </motion.section>
-
-      {/* Footer */}
-      <footer className="container mx-auto px-4 pb-10 text-center text-muted-foreground">
-        <p>© {new Date().getFullYear()} Linqyard</p>
-      </footer>
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/navbar";
+import Footer from "@/components/footer";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NavbarVisibilityProvider } from "@/contexts/NavbarVisibilityContext";
@@ -31,14 +32,15 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+        className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
       >
         <ThemeProvider defaultTheme="light">
           <UserProvider>
             <NavbarVisibilityProvider>
               <SessionChecker />
               <Navbar />
-              <main>{children}</main>
+              <main className="flex-1">{children}</main>
+              <Footer />
               <Toaster />
             </NavbarVisibilityProvider>
           </UserProvider>

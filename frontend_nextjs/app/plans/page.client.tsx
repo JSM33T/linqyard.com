@@ -160,10 +160,6 @@ export default function PlansClient() {
           </div>
         </div>
       </motion.section>
-
-      <footer className="container mx-auto px-4 pb-10 text-center text-muted-foreground">
-        <p>© {new Date().getFullYear()} linqyard.</p>
-      </footer>
     </div>
   );
 }
