@@ -11,6 +11,7 @@ export interface User {
   email: string;
   avatarUrl?: string;
   coverUrl?: string;
+  bio?: string;
   login: boolean;
   expiry?: Date;
   // Additional optional fields for future use

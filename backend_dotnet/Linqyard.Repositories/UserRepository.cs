@@ -57,7 +57,7 @@ public class UserRepository : IUserRepository
         await connection.OpenAsync(cancellationToken);
 
         const string query = @"
-            SELECT ""Id"", ""Username"", ""FirstName"", ""LastName"", ""AvatarUrl"", ""CoverUrl""
+            SELECT ""Id"", ""Username"", ""FirstName"", ""LastName"", ""AvatarUrl"", ""CoverUrl"", ""Bio""
             FROM public.""Users""
             WHERE LOWER(""Username"") = LOWER(@username)
               AND ""DeletedAt"" IS NULL
@@ -78,7 +78,8 @@ public class UserRepository : IUserRepository
             reader.IsDBNull(2) ? null : reader.GetString(2),
             reader.IsDBNull(3) ? null : reader.GetString(3),
             reader.IsDBNull(4) ? null : reader.GetString(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5)
+            reader.IsDBNull(5) ? null : reader.GetString(5),
+            reader.IsDBNull(6) ? null : reader.GetString(6)
         );
     }
 

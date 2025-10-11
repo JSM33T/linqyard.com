@@ -167,9 +167,10 @@ function UserHeader({
     lastName?: string | null;
     avatarUrl?: string | null;
     coverUrl?: string | null;
+    bio?: string | null;
   } | null;
 }) {
-  type UserPublic = { id: string; username: string; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null; coverUrl?: string | null };
+  type UserPublic = { id: string; username: string; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null; coverUrl?: string | null; bio?: string | null };
   type GetUserPublicResponse = { data: UserPublic; meta: any | null };
 
   const [coverImageError, setCoverImageError] = useState(false);
@@ -189,7 +190,7 @@ function UserHeader({
   }
   if (!user) return null;
 
-  const { firstName, lastName, avatarUrl, coverUrl } = user;
+  const { firstName, lastName, avatarUrl, coverUrl, bio } = user;
   const displayName = [firstName, lastName].filter(Boolean).join(" ") || user.username;
 
   return (
@@ -227,6 +228,9 @@ function UserHeader({
       <div className="mt-10 sm:mt-12 px-4 pb-4 flex flex-col items-center text-center">
         <h2 className="text-lg sm:text-xl font-semibold truncate">{displayName}</h2>
         <p className="mt-1 text-sm text-muted-foreground">@{user.username}</p>
+        {bio ? (
+          <p className="mt-2 text-sm text-muted-foreground max-w-prose">{bio}</p>
+        ) : null}
       </div>
     </div>
   );
@@ -302,7 +306,7 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
             </div>
             <div>
               <h1 className="text-3xl font-bold">Links</h1>
-              <p className="text-muted-foreground text-sm">View your links by group.</p>
+              <p className="text-muted-foreground text-sm">View links by group.</p>
             </div>
             <div className="ml-auto flex items-center gap-2">
               {/* Theme toggle (visible on public preview even when navbar hidden) */}

@@ -6,5 +6,6 @@ public sealed record UserPublicResponse(
     string? FirstName,
     string? LastName,
     string? AvatarUrl,
-    string? CoverUrl
+    string? CoverUrl,
+    string? Bio
 );

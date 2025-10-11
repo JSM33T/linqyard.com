@@ -66,7 +66,7 @@ function GroupSection({ id, name, description, items }: { id: string | null; nam
   );
 }
 
-export default function LinksPreview({ groups, ungrouped, header, user }: { groups: { id: string; name: string; description?: string | null; links: LinkItem[] }[]; ungrouped: LinkItem[]; header?: React.ReactNode; user?: { id: string; username: string; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null; coverUrl?: string | null } }) {
+export default function LinksPreview({ groups, ungrouped, header, user }: { groups: { id: string; name: string; description?: string | null; links: LinkItem[] }[]; ungrouped: LinkItem[]; header?: React.ReactNode; user?: { id?: string; username: string; firstName?: string | null; lastName?: string | null; avatarUrl?: string | null; coverUrl?: string | null; bio?: string | null } }) {
   // groups array comes pre-ordered from the parent (account page manages order).
   // Keep the incoming order and only ensure links inside groups are sorted by their sequence.
   const sortedGroups = useMemo(() => {
@@ -102,7 +102,7 @@ export default function LinksPreview({ groups, ungrouped, header, user }: { grou
             {header ? (
               <div className="mb-3">{header}</div>
             ) : user ? (
-              // Render simple header (cover + avatar + name/username) similar to LinksPageClient
+              // Render simple header (cover + avatar + name/username + bio) similar to LinksPageClient
               <div className="mb-3">
                 <div className="bg-card rounded-lg border overflow-hidden">
                   <div className="relative w-full">
@@ -125,6 +125,9 @@ export default function LinksPreview({ groups, ungrouped, header, user }: { grou
                   <div className="mt-10 sm:mt-12 px-4 pb-4 flex flex-col items-center text-center">
                     <h2 className="text-lg sm:text-xl font-semibold truncate">{[user.firstName, user.lastName].filter(Boolean).join(' ') || user.username}</h2>
                     <p className="mt-1 text-sm text-muted-foreground">@{user.username}</p>
+                    {user.bio ? (
+                      <p className="mt-2 text-sm text-muted-foreground max-w-prose">{user.bio}</p>
+                    ) : null}
                   </div>
                 </div>
               </div>
