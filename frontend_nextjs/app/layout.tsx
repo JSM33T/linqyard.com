@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
+import BackToTop from "@/components/BackToTop";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NavbarVisibilityProvider } from "@/contexts/NavbarVisibilityContext";
@@ -41,6 +42,7 @@ export default function RootLayout({
               <Navbar />
               <main className="flex-1">{children}</main>
               <Footer />
+              <BackToTop />
               <Toaster />
             </NavbarVisibilityProvider>
           </UserProvider>
