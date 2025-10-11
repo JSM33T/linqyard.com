@@ -14,6 +14,9 @@ export interface User {
   bio?: string;
   login: boolean;
   expiry?: Date;
+  // Tier information
+  tierId?: number;
+  tierName?: string;
   // Additional optional fields for future use
   role?: string;
   preferences?: Record<string, any>;
@@ -142,6 +145,8 @@ export function UserProvider({ children }: UserProviderProps) {
                 coverUrl: userData.coverUrl,
                 login: true,
                 expiry: undefined, // Will be set from token expiry
+                tierId: userData.tierId,
+                tierName: userData.tierName,
                 role: userData.roles?.[0] || 'user',
                 preferences: userData.preferences
               };
@@ -359,6 +364,38 @@ export const userHelpers = {
       userStorage.save(userWithLogin);
       console.log(' User data automatically restored to localStorage');
     }
+  },
+
+  // Get tier information
+  getTierId: (user: User | null): number | undefined => {
+    return user?.tierId;
+  },
+
+  getTierName: (user: User | null): string => {
+    if (!user?.tierName) return 'free';
+    return user.tierName;
+  },
+
+  // Check if user is on a specific tier
+  isFreeTier: (user: User | null): boolean => {
+    // Default to free tier if tier info is not available
+    if (!user) return true;
+    if (user.tierId === undefined && user.tierName === undefined) return true;
+    return user.tierId === 1 || user.tierName === 'free';
+  },
+
+  isPlusTier: (user: User | null): boolean => {
+    return user?.tierId === 2 || user?.tierName === 'plus';
+  },
+
+  isProTier: (user: User | null): boolean => {
+    return user?.tierId === 3 || user?.tierName === 'pro';
+  },
+
+  // Get tier display name (capitalized)
+  getTierDisplayName: (user: User | null): string => {
+    const tierName = userHelpers.getTierName(user);
+    return tierName.charAt(0).toUpperCase() + tierName.slice(1);
   }
 };
 

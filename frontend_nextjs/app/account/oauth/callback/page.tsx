@@ -75,6 +75,8 @@ export default function OAuthCallbackPage() {
                 avatarUrl: string | null;
                 createdAt: string;
                 roles: string[];
+                tierId?: number | null;
+                tierName?: string | null;
               };
               meta: any | null;
             }>("/auth/me");
@@ -82,7 +84,7 @@ export default function OAuthCallbackPage() {
             if (userResponse.data?.data) {
               const userData = userResponse.data.data;
               
-              // Update user context with user data
+              // Update user context with user data including tier information
               setUser({
                 id: userData.id,
                 firstName: userData.firstName,
@@ -92,6 +94,8 @@ export default function OAuthCallbackPage() {
                 avatarUrl: userData.avatarUrl || undefined,
                 login: true,
                 expiry: expiresAt,
+                tierId: userData.tierId ?? undefined,
+                tierName: userData.tierName ?? undefined,
                 role: userData.roles[0] || 'user'
               });
             }
@@ -149,7 +153,7 @@ export default function OAuthCallbackPage() {
             // Set access token in localStorage (refresh token is now in HTTP-only cookie)
             setToken(data.accessToken);
             
-            // Update user context with user data
+            // Update user context with user data including tier information
             setUser({
               id: data.user.id,
               firstName: data.user.firstName,
@@ -159,6 +163,8 @@ export default function OAuthCallbackPage() {
               avatarUrl: data.user.avatarUrl || undefined,
               login: true,
               expiry: new Date(data.expiresAt),
+              tierId: data.user.tierId ?? undefined,
+              tierName: data.user.tierName ?? undefined,
               role: data.user.roles[0] || 'user'
             });
 

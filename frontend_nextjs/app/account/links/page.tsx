@@ -34,6 +34,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 import { ArrowLeft, Globe, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
@@ -41,6 +49,7 @@ import { toast } from "sonner";
 import { useUser } from "@/contexts/UserContext";
 import { useApi, useGet } from "@/hooks/useApi";
 import { GetGroupedLinksResponse, LinkItem, CreateOrEditLinkRequest, UpdateGroupRequest, GroupResequenceItemRequest } from "@/hooks/types";
+import { userHelpers } from "@/contexts/UserContext";
 
 /* ---------- FX presets ---------- */
 const containerVariants = {
@@ -53,7 +62,7 @@ const cardVariants = {
 };
 
 /* ---------- Sortable row (single Link chip) ---------- */
-function SortableLinkRow({ item, onEdit }: { item: LinkItem; onEdit: (l: LinkItem) => void }) {
+function SortableLinkRow({ item, onEdit, onDelete }: { item: LinkItem; onEdit: (l: LinkItem) => void; onDelete: (l: LinkItem) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -94,29 +103,43 @@ function SortableLinkRow({ item, onEdit }: { item: LinkItem; onEdit: (l: LinkIte
           <p className="text-xs text-muted-foreground mt-1 truncate">{item.description}</p>
         )}
       </div>
-      <Button
-        size="icon"
-        variant="ghost"
-        className="h-7 w-7 opacity-0 group-hover/link:opacity-100 transition-opacity"
-        onClick={(e) => {
-          e.stopPropagation();
-          onEdit(item);
-        }}
-      >
-        <Edit3 className="h-4 w-4" />
-      </Button>
+      <div className="flex items-center gap-1">
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 opacity-0 group-hover/link:opacity-100 transition-opacity"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit(item);
+          }}
+        >
+          <Edit3 className="h-4 w-4" />
+        </Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          className="h-7 w-7 opacity-0 group-hover/link:opacity-100 transition-opacity text-destructive hover:text-destructive"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(item);
+          }}
+        >
+          <Trash2 className="h-4 w-4" />
+        </Button>
+      </div>
     </div>
   );
 }
 
 /* ---------- Sortable Group Header ---------- */
-function SortableGroupHeader({ id, name, description, onCreateLink, onDeleteGroup, onEditGroup }: {
+function SortableGroupHeader({ id, name, description, onCreateLink, onDeleteGroup, onEditGroup, canCreateLink }: {
   id: string;
   name: string;
   description?: string | null;
   onCreateLink: (groupId: string) => void;
   onDeleteGroup?: (groupId: string) => void;
   onEditGroup?: (groupId: string) => void;
+  canCreateLink?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ 
     id: `group-${id}`,
@@ -150,7 +173,13 @@ function SortableGroupHeader({ id, name, description, onCreateLink, onDeleteGrou
         {description ? <p className="text-xs text-muted-foreground mt-1 ml-9">{description}</p> : null}
       </div>
       <div className="flex items-center gap-1">
-        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onCreateLink(id); }}>
+        <Button 
+          size="sm" 
+          variant="ghost" 
+          onClick={(e) => { e.stopPropagation(); if (canCreateLink !== false) onCreateLink(id); }} 
+          disabled={canCreateLink === false}
+          className={canCreateLink === false ? "opacity-50 cursor-not-allowed" : ""}
+        >
           <Plus className="h-4 w-4" />
         </Button>
         {onEditGroup ? (
@@ -178,7 +207,9 @@ function GroupSection({
   onDeleteGroup,
   onEditGroup,
   onEdit,
+  onDelete,
   onEmptyDropHint,
+  canCreateLink,
 }: {
   id: string | null; // null for ungrouped
   name: string;
@@ -188,7 +219,9 @@ function GroupSection({
   onDeleteGroup?: (groupId: string) => void;
   onEditGroup?: (groupId: string) => void;
   onEdit: (l: LinkItem) => void;
+  onDelete: (l: LinkItem) => void;
   onEmptyDropHint?: string;
+  canCreateLink?: boolean;
 }) {
   const containerId = id ?? "__ungrouped__";
   const { setNodeRef, isOver } = useDroppable({ id: containerId });
@@ -204,6 +237,7 @@ function GroupSection({
             onCreateLink={onCreateLink}
             onDeleteGroup={onDeleteGroup}
             onEditGroup={onEditGroup}
+            canCreateLink={canCreateLink}
           />
         ) : (
           <div className="flex items-start justify-between w-full gap-3">
@@ -215,7 +249,13 @@ function GroupSection({
               {description ? <p className="text-xs text-muted-foreground mt-1">{description}</p> : null}
             </div>
             <div className="flex items-center gap-1">
-              <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); onCreateLink(id); }}>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                onClick={(e) => { e.stopPropagation(); if (canCreateLink !== false) onCreateLink(id); }}
+                disabled={canCreateLink === false}
+                className={canCreateLink === false ? "opacity-50 cursor-not-allowed" : ""}
+              >
                 <Plus className="h-4 w-4" />
               </Button>
             </div>
@@ -231,7 +271,7 @@ function GroupSection({
             <AnimatePresence initial={false}>
               {items.map((link) => (
                 <motion.div key={link.id} variants={cardVariants} initial="hidden" animate="visible" exit="hidden">
-                  <SortableLinkRow item={link} onEdit={onEdit} />
+                  <SortableLinkRow item={link} onEdit={onEdit} onDelete={onDelete} />
                 </motion.div>
               ))}
             </AnimatePresence>
@@ -297,6 +337,10 @@ export default function LinksPage() {
   // mobile preview modal
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
+  // delete confirmation modal
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<{ type: 'link' | 'group'; id: string; name: string } | null>(null);
+
   // accordion state for collapse/expand all
   const [openAccordionItems, setOpenAccordionItems] = useState<string[]>([]);
 
@@ -334,6 +378,18 @@ export default function LinksPage() {
     // Initialize accordion with all items open by default
     setOpenAccordionItems([...groups.map((g) => g.id), "__ungrouped__"]);
   }, [groupedData]);
+
+  // Calculate tier limits
+  const totalLinks = useMemo(() => {
+    const groupedLinks = localGroups.reduce((sum, group) => sum + group.links.length, 0);
+    return groupedLinks + localUngrouped.length;
+  }, [localGroups, localUngrouped]);
+
+  const totalGroups = useMemo(() => localGroups.length, [localGroups]);
+
+  const isFreeTier = userHelpers.isFreeTier(user);
+  const canCreateLink = !isFreeTier || totalLinks < 12;
+  const canCreateGroup = !isFreeTier || totalGroups < 2;
 
   const findItem = (id: string): { from: "group" | "ungrouped"; groupId: string | null; index: number } | null => {
     const unIdx = localUngrouped.findIndex((l) => l.id === id);
@@ -585,13 +641,39 @@ export default function LinksPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => startCreate(null)}>
+                      <DropdownMenuItem 
+                        onClick={() => canCreateLink && startCreate(null)}
+                        disabled={!canCreateLink}
+                        className={!canCreateLink ? "opacity-50 cursor-not-allowed" : ""}
+                      >
                         <Plus className="h-4 w-4 mr-2" />
                         New Link
+                        {!canCreateLink && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            (Limit: 12)
+                          </span>
+                        )}
                       </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => setIsCreatingGroup(true)}>
+                      <DropdownMenuItem 
+                        onClick={() => {
+                          if (!canCreateGroup) {
+                            toast.error("Free tier limit reached: Maximum 2 groups allowed", {
+                              description: "Upgrade to Plus or Pro for unlimited groups"
+                            });
+                            return;
+                          }
+                          setIsCreatingGroup(true);
+                        }}
+                        disabled={!canCreateGroup}
+                        className={!canCreateGroup ? "opacity-50 cursor-not-allowed" : ""}
+                      >
                         <FolderPlus className="h-4 w-4 mr-2" />
                         New Group
+                        {!canCreateGroup && (
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            (Limit: 2)
+                          </span>
+                        )}
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
@@ -623,7 +705,19 @@ export default function LinksPage() {
                     <h3 className="text-lg font-semibold mb-2">No links yet</h3>
                     <p className="text-muted-foreground mb-6">Start by creating your first link or group</p>
                     <div className="flex items-center justify-center gap-3">
-                      <Button onClick={() => setIsCreatingGroup(true)} variant="outline">
+                      <Button 
+                        onClick={() => {
+                          if (!canCreateGroup) {
+                            toast.error("Free tier limit reached: Maximum 2 groups allowed", {
+                              description: "Upgrade to Plus or Pro for unlimited groups"
+                            });
+                            return;
+                          }
+                          setIsCreatingGroup(true);
+                        }} 
+                        variant="outline"
+                        disabled={!canCreateGroup}
+                      >
                         <FolderPlus className="h-4 w-4 mr-2" />
                         Create Group
                       </Button>
@@ -657,7 +751,9 @@ export default function LinksPage() {
                             items={localUngrouped}
                             onCreateLink={startCreate}
                             onEdit={startEdit}
+                            onDelete={handleDeleteLink}
                             onEmptyDropHint="Drop links here"
+                            canCreateLink={canCreateLink}
                           />
 
                           {localGroups.map((g) => (
@@ -671,6 +767,8 @@ export default function LinksPage() {
                               onDeleteGroup={deleteGroup}
                               onEditGroup={startEditGroup}
                               onEdit={startEdit}
+                              onDelete={handleDeleteLink}
+                              canCreateLink={canCreateLink}
                             />
                           ))}
                         </Accordion>
@@ -888,6 +986,40 @@ export default function LinksPage() {
             </div>
           </div>
         </motion.div>
+
+        {/* Delete Confirmation Dialog */}
+        <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {itemToDelete?.type === 'group' ? 'Delete Group?' : 'Delete Link?'}
+              </DialogTitle>
+              <DialogDescription>
+                {itemToDelete?.type === 'group' ? (
+                  <>
+                    Are you sure you want to delete <strong>{itemToDelete.name}</strong>?
+                    <br />
+                    Links in this group will be moved to Ungrouped.
+                  </>
+                ) : (
+                  <>
+                    Are you sure you want to delete <strong>{itemToDelete?.name}</strong>?
+                    <br />
+                    This action cannot be undone.
+                  </>
+                )}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDeleteConfirmOpen(false)}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={confirmDelete}>
+                Delete
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );
@@ -907,7 +1039,19 @@ export default function LinksPage() {
     setIsCreating(false);
   }
 
+  function handleDeleteLink(link: LinkItem) {
+    deleteLink(link.id);
+  }
+
   function startCreate(groupId: string | null = null) {
+    // Check if user can create more links (free tier limit)
+    if (!canCreateLink) {
+      toast.error("Free tier limit reached: Maximum 12 links allowed", {
+        description: "Upgrade to Plus or Pro for unlimited links"
+      });
+      return;
+    }
+    
     setIsCreating(true);
     setEditingLinkId(null);
     setForm({ name: "", url: "", description: "", groupId, sequence: 0, isActive: true });
@@ -950,14 +1094,35 @@ export default function LinksPage() {
   }
 
   async function deleteGroup(groupId: string) {
-    if (!confirm("Delete group? Links in the group will be moved to Ungrouped.")) return;
+    const group = localGroups.find(g => g.id === groupId);
+    setItemToDelete({ type: 'group', id: groupId, name: group?.name || 'this group' });
+    setDeleteConfirmOpen(true);
+  }
+
+  async function deleteLink(linkId: string) {
+    const link = [...localUngrouped, ...localGroups.flatMap(g => g.links)].find(l => l.id === linkId);
+    setItemToDelete({ type: 'link', id: linkId, name: link?.name || 'this link' });
+    setDeleteConfirmOpen(true);
+  }
+
+  async function confirmDelete() {
+    if (!itemToDelete) return;
+
     try {
-      await post(`/group/${groupId}/delete`, {});
-      toast.success("Group deleted");
+      if (itemToDelete.type === 'group') {
+        await post(`/group/${itemToDelete.id}/delete`, {});
+        toast.success("Group deleted");
+      } else {
+        await post(`/link/${itemToDelete.id}/delete`, {});
+        toast.success("Link deleted");
+      }
       await refetchLinks();
     } catch (err: any) {
-      console.error("Delete group failed", err);
-      toast.error(err?.data?.title || err?.message || "Failed to delete group");
+      console.error(`Delete ${itemToDelete.type} failed`, err);
+      toast.error(err?.data?.title || err?.message || `Failed to delete ${itemToDelete.type}`);
+    } finally {
+      setDeleteConfirmOpen(false);
+      setItemToDelete(null);
     }
   }
 

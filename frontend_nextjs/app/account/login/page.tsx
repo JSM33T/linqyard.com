@@ -78,7 +78,7 @@ export default function LoginPage() {
         // Set both access and refresh tokens in localStorage
         setTokens(data.accessToken, data.refreshToken);
         
-        // Update user context with user data
+        // Update user context with user data including tier information
         setUser({
           id: data.user.id,
           firstName: data.user.firstName,
@@ -88,6 +88,8 @@ export default function LoginPage() {
           avatarUrl: data.user.avatarUrl || undefined,
           login: true,
           expiry: new Date(data.expiresAt),
+          tierId: data.user.tierId ?? undefined,
+          tierName: data.user.tierName ?? undefined,
           role: data.user.roles[0] || 'user' // Take first role or default to 'user'
         });
         

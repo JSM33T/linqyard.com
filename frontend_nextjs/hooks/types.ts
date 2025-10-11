@@ -66,6 +66,8 @@ export interface LoginResponse {
       coverUrl: string | null;
       createdAt: string;
       roles: string[];
+      tierId?: number | null;
+      tierName?: string | null;
     };
   };
   meta: any | null;
@@ -99,6 +101,8 @@ export interface SignupResponse {
     coverUrl: string | null;
     createdAt: string;
     roles: string[];
+    tierId?: number | null;
+    tierName?: string | null;
   };
   meta: any | null;
 }
@@ -201,6 +205,8 @@ export interface GoogleCallbackResponse {
       coverUrl: string | null;
       createdAt: string;
       roles: string[];
+      tierId?: number | null;
+      tierName?: string | null;
     };
 }
 
