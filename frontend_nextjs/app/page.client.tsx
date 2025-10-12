@@ -165,6 +165,23 @@ export default function HomeClient() {
             "linear-gradient(to bottom right, hsl(var(--primary)/0.05), transparent 70%)",
         }}
       />
+      {/* soft watermark top-left using /logo.svg (decorative) */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-0 left-0
+                   w-[50vw] max-w-[640px] h-[45vh]
+                   opacity-[0.12] dark:opacity-[0.14]"
+        style={{
+          zIndex: 9,
+          backgroundImage: "url('/logo.svg')",
+          backgroundRepeat: "no-repeat",
+          backgroundSize: "contain",
+          backgroundPosition: "top left",
+          maskImage: "radial-gradient(80% 80% at 0% 0%, black 65%, transparent 100%)",
+          WebkitMaskImage: "radial-gradient(80% 80% at 0% 0%, black 65%, transparent 100%)",
+          mixBlendMode: "soft-light",
+        }}
+      />
       {/* decorative grid / gradient */}
       <div
         aria-hidden

@@ -13,10 +13,11 @@ export default function NotFound() {
       {/* soft watermark top-left using your /logo.svg */}
       <div
         aria-hidden
-        className="pointer-events-none absolute -z-10 top-0 left-0
+        className="pointer-events-none absolute top-0 left-0
                    w-[50vw] max-w-[640px] h-[45vh]
-                   opacity-[0.06] dark:opacity-[0.07]"
+                   opacity-[0.12] dark:opacity-[0.14]"
         style={{
+          zIndex: -9,
           backgroundImage: "url('/logo.svg')",
           backgroundRepeat: "no-repeat",
           backgroundSize: "contain",
