@@ -13,12 +13,6 @@ import {
 } from "@/components/ui/card";
 
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
-import {
   Shield,
   Users,
   Sparkles,
@@ -274,59 +268,6 @@ export default function AboutClient() {
             </Card>
           ))}
         </div>
-      </motion.section>
-
-      {/* FAQ */}
-      <motion.section
-        className="container mx-auto px-4 py-14"
-        initial={{ opacity: 0 }}
-        whileInView={{ opacity: 1 }}
-        transition={{ duration: 0.6 }}
-        viewport={{ once: true }}
-      >
-        <div className="text-center mb-8">
-          <h2 className="text-3xl md:text-5xl font-bold">FAQ</h2>
-          <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
-            Quick answers in a neutral tone.
-          </p>
-        </div>
-
-        <Accordion type="single" collapsible className="max-w-3xl mx-auto">
-          <AccordionItem value="item-1">
-            <AccordionTrigger>How do I get started?</AccordionTrigger>
-            <AccordionContent>
-              Sign up for a free account, add your links, customize your page design, 
-              and share your linqyard URL wherever you need it.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="item-2">
-            <AccordionTrigger>Is there a free plan?</AccordionTrigger>
-            <AccordionContent>
-              Yes! Our free tier includes everything you need to get started: unlimited links, 
-              basic analytics, theme customization, and mobile optimization. No trial period or time limits.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="item-3">
-            <AccordionTrigger>How secure is my data?</AccordionTrigger>
-            <AccordionContent>
-              We use industry-standard security practices including encrypted data storage, 
-              secure authentication, and regular security audits. Your privacy is our priority.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="item-4">
-            <AccordionTrigger>Can I customize how my page looks?</AccordionTrigger>
-            <AccordionContent>
-              Absolutely! Choose from multiple themes, customize colors, add your branding, 
-              and arrange your links exactly how you want them.
-            </AccordionContent>
-          </AccordionItem>
-          <AccordionItem value="item-5">
-            <AccordionTrigger>Where can I get help?</AccordionTrigger>
-            <AccordionContent>
-              Email <a className="underline" href="mailto:support@linqyard.com">support@linqyard.com</a> for direct support, or check our docs for guides and tutorials.
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
       </motion.section>
     </div>
   );
