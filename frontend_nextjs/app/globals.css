@@ -70,14 +70,14 @@
 
 :root {
   --radius: 0.375rem;
-  --background: oklch(1.0000 0 0);
+  --background: oklch(0.9851 0 0);
   --foreground: oklch(0.3211 0 0);
-  --card: oklch(1.0000 0 0);
+  --card: oklch(0.9851 0 0);
   --card-foreground: oklch(0.3211 0 0);
-  --popover: oklch(1.0000 0 0);
+  --popover: oklch(0.9851 0 0);
   --popover-foreground: oklch(0.3211 0 0);
   --primary: oklch(0.5862 0.0909 288.6105);
-  --primary-foreground: oklch(1.0000 0 0);
+  --primary-foreground: oklch(0.9851 0 0);
   --secondary: oklch(0.9313 0.0013 286.3740);
   --secondary-foreground: oklch(0.4311 0.0115 292.4762);
   --muted: oklch(0.9439 0.0040 286.3228);
@@ -96,12 +96,12 @@
   --sidebar: oklch(0.9439 0.0040 286.3228);
   --sidebar-foreground: oklch(0.3211 0 0);
   --sidebar-primary: oklch(0.5862 0.0909 288.6105);
-  --sidebar-primary-foreground: oklch(1.0000 0 0);
+  --sidebar-primary-foreground: oklch(0.9851 0 0);
   --sidebar-accent: oklch(0.9002 0.0192 279.5054);
   --sidebar-accent-foreground: oklch(0.3951 0.0506 294.6823);
   --sidebar-border: oklch(0.8931 0.0042 301.4175);
   --sidebar-ring: oklch(0.5862 0.0909 288.6105);
-  --destructive-foreground: oklch(1.0000 0 0);
+  --destructive-foreground: oklch(0.9851 0 0);
   --font-sans: Inter, sans-serif;
   --font-serif: Source Serif 4, serif;
   --font-mono: JetBrains Mono, monospace;
@@ -131,7 +131,7 @@
   --card-foreground: oklch(0.9219 0 0);
   --popover: oklch(0.2686 0 0);
   --popover-foreground: oklch(0.9219 0 0);
-  --primary: oklch(0.5862 0.0909 288.6105);
+  --primary: oklch(0.4801 0.0858 288.6797);
   --primary-foreground: oklch(1.0000 0 0);
   --secondary: oklch(0.2686 0 0);
   --secondary-foreground: oklch(0.9219 0 0);
