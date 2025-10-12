@@ -12,12 +12,26 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { BookOpen, Link2, Shield, ExternalLink } from "lucide-react";
+import {
+  BookOpen,
+  Link2,
+  Shield,
+  ExternalLink,
+  UserCheck,
+  Globe,
+  BarChart3,
+  Palette,
+  QrCode,
+} from "lucide-react";
 
 const sections = [
-  { id: "getting-started", title: "Getting Started", icon: <BookOpen className="h-4 w-4" /> },
-  { id: "managing-links", title: "Managing Links & CTAs", icon: <Link2 className="h-4 w-4" /> },
-  { id: "insights-privacy", title: "Insights & Privacy", icon: <Shield className="h-4 w-4" /> },
+  { id: "onboarding", title: "Onboarding", icon: <UserCheck className="h-4 w-4" /> },
+  { id: "account-security", title: "Account & Security", icon: <Shield className="h-4 w-4" /> },
+  { id: "build-your-page", title: "Build Your Page", icon: <Link2 className="h-4 w-4" /> },
+  { id: "customization", title: "Customization by Plan", icon: <Palette className="h-4 w-4" /> },
+  { id: "analytics", title: "Analytics by Plan", icon: <BarChart3 className="h-4 w-4" /> },
+  { id: "share-subdomains", title: "Sharing & Subdomains", icon: <Globe className="h-4 w-4" /> },
+  { id: "tips-support", title: "Tips & Support", icon: <BookOpen className="h-4 w-4" /> },
 ];
 
 // Motion variants
@@ -53,8 +67,8 @@ function SidebarNav() {
     <div className="h-full flex flex-col">
       <div className="px-3 py-3">
         <Badge variant="secondary" className="px-2">Docs</Badge>
-        <h2 className="mt-2 text-lg font-semibold">linqyard</h2>
-        <p className="text-sm text-muted-foreground">Demo documentation</p>
+        <h2 className="mt-2 text-lg font-semibold">LinqYard</h2>
+        <p className="text-sm text-muted-foreground">Product documentation</p>
       </div>
       <Separator />
       <div className="flex-1 overflow-auto">
@@ -74,7 +88,7 @@ function SidebarNav() {
       </div>
       <Separator />
       <div className="p-3 text-xs text-muted-foreground">
-        Need help? <a href="mailto:support@linqyard.com" className="underline">Email support</a>
+        Need help? <a href="mailto:mail@jsm33t.com" className="underline">Email support</a>
       </div>
     </div>
   );
@@ -92,12 +106,12 @@ export default function DocsPageClient() {
       >
         <div className="container mx-auto flex items-center justify-between px-4 py-3">
           <div className="flex items-center gap-2">
-            <Link href="/" className="font-semibold">linqyard</Link>
+            <Link href="/" className="font-semibold">LinqYard</Link>
             <span className="mx-2 text-muted-foreground">/</span>
             <span className="text-muted-foreground">Docs</span>
           </div>
           <div className="hidden lg:block">
-            <Badge variant="secondary">Demo • Neutral copy</Badge>
+            <Badge variant="secondary">Onboarding • Product Guide</Badge>
           </div>
         </div>
       </motion.header>
@@ -116,92 +130,189 @@ export default function DocsPageClient() {
             <SidebarNav />
           </div>
 
-            {/* Intro */}
-            <motion.div className="mb-6" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
-              <h1 className="text-3xl md:text-5xl font-bold tracking-tight">Documentation</h1>
-              <p className="mt-2 text-muted-foreground max-w-2xl">
-                Short, practical guidance to get started with the linqyard demo.
-                The docs intentionally use neutral tone—no bold claims.
-              </p>
-            </motion.div>
+          {/* Intro */}
+          <motion.div className="mb-6" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+            <h1 className="text-3xl md:text-5xl font-bold tracking-tight">LinqYard Documentation</h1>
+            <p className="mt-2 text-muted-foreground max-w-2xl">
+              A concise, practical guide to help you onboard quickly: create an account, claim your subdomain,
+              add links & groups, and start tracking performance.
+            </p>
+          </motion.div>
 
           <div className="space-y-10">
-            {/* Getting Started */}
-            <motion.section id="getting-started" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+            {/* Onboarding */}
+            <motion.section id="onboarding" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
               <Card className="shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <BookOpen className="h-5 w-5 text-primary" /> Getting Started
+                    <UserCheck className="h-5 w-5 text-primary" /> Onboarding
                   </CardTitle>
-                  <CardDescription>Set up a page and share your single link.</CardDescription>
+                  <CardDescription>Account creation, verification, and first-time setup.</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  <ol className="list-decimal pl-5 space-y-2 text-sm">
-                    <li>Open the demo and create your profile page.</li>
-                    <li>Add a few links and CTAs (e.g., portfolio, contact, latest project).</li>
-                    <li>Copy your page URL and share it across socials.</li>
+                <CardContent className="space-y-4 text-sm">
+                  <ol className="list-decimal pl-5 space-y-2">
+                    <li>
+                      <span className="font-medium">Sign up</span> with email & password. Verify your email to secure your account. Google login is supported; GitHub login is coming soon.
+                    </li>
+                    <li>
+                      <span className="font-medium">Choose your handle</span> (becomes your subdomain). You’ll get a unique URL like
+                      <code className="ml-1 rounded bg-muted px-1">username.linqyard.com</code>.
+                    </li>
+                    <li>
+                      <span className="font-medium">Complete profile</span>: add display name, avatar, and a short bio so visitors know it’s you.
+                    </li>
+                    <li>
+                      <span className="font-medium">Add your first links</span>: create up to 12 links and 2 groups on the Free plan (unlimited on Plus). Drag to reorder; toggle visibility anytime.
+                    </li>
+                    <li>
+                      <span className="font-medium">Share</span> your LinqYard URL on social profiles, email signatures, and bios. QR codes are coming soon.
+                    </li>
                   </ol>
                   <Separator />
                   <div>
-                    <p className="mb-2 text-sm font-medium">Example URL structure</p>
+                    <p className="mb-2 text-sm font-medium">Example URLs</p>
                     <pre className="rounded-md border bg-muted/30 p-3 text-xs overflow-x-auto">
-                      <code>https://linqyard.com/u/&lt;your-handle&gt;</code>
+                      <code>https://username.linqyard.com\nhttps://linqyard.com/u/&lt;your-handle&gt;</code>
                     </pre>
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    Note: This is a demo. Features and copy may change.
-                  </div>
                 </CardContent>
               </Card>
             </motion.section>
 
-            {/* Managing Links & CTAs */}
-            <motion.section id="managing-links" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+            {/* Account & Security */}
+            <motion.section id="account-security" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
               <Card className="shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Link2 className="h-5 w-5 text-primary" /> Managing Links & CTAs
+                    <Shield className="h-5 w-5 text-primary" /> Account & Security
                   </CardTitle>
-                  <CardDescription>Keep things tidy and easy to update.</CardDescription>
+                  <CardDescription>Best practices to keep your LinqYard secure.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <ul className="list-disc pl-5 space-y-1">
-                    <li>Reorder items to prioritize what matters.</li>
-                    <li>Toggle visibility for seasonal campaigns.</li>
-                    <li>Use concise titles; add a short description if needed.</li>
+                    <li>Email verification is required to publish your page.</li>
+                    <li>Use a strong password; password reset is available in Settings.</li>
+                    <li>Two-Factor Authentication (2FA) is coming soon for additional protection.</li>
+                    <li>Social logins: Google available; GitHub coming soon.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            {/* Build Your Page */}
+            <motion.section id="build-your-page" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Link2 className="h-5 w-5 text-primary" /> Build Your Page
+                  </CardTitle>
+                  <CardDescription>Create, group, and organize links for a clean layout.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Create links and optional groups (e.g., Social, Work, Projects).</li>
+                    <li>Drag-and-drop to reorder links and groups.</li>
+                    <li>Toggle visibility without deleting to run seasonal promos.</li>
+                    <li>Use concise titles; add short descriptions when needed.</li>
                   </ul>
                   <Separator />
-                  <div>
-                    <p className="mb-2 font-medium">Tip</p>
-                    <p className="text-muted-foreground">
-                      Group related links (e.g., “Projects”) to reduce clutter.
-                    </p>
+                  <div className="flex items-center gap-2 text-sm">
+                    <Link className="inline-flex items-center underline" href="/about">
+                      Why LinqYard <ExternalLink className="ml-1 h-3.5 w-3.5" />
+                    </Link>
                   </div>
                 </CardContent>
               </Card>
             </motion.section>
 
-            {/* Insights & Privacy */}
-            <motion.section id="insights-privacy" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+            {/* Customization by Plan */}
+            <motion.section id="customization" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
               <Card className="shadow-sm">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-primary" /> Insights & Privacy
+                    <Palette className="h-5 w-5 text-primary" /> Customization by Plan
                   </CardTitle>
-                  <CardDescription>
-                    Understand clicks with a privacy-aware mindset.
-                  </CardDescription>
+                  <CardDescription>Design options vary by plan.</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 text-sm">
                   <ul className="list-disc pl-5 space-y-1">
-                    <li>Basic click counts can be enabled to see engagement.</li>
-                    <li>For this demo, avoid uploading production-sensitive data.</li>
-                    <li>Check the About page and docs for updates as features evolve.</li>
+                    <li><span className="font-medium">Free</span>: 2 basic themes (coming soon). No custom theming.</li>
+                    <li><span className="font-medium">Plus</span>: Custom backgrounds, gradients, and theme color options.</li>
+                  </ul>
+                  <div className="text-xs text-muted-foreground">Advanced card layouts (e.g., rectangular, square, 1:1 icons) are planned for a future tier.</div>
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            {/* Analytics by Plan */}
+            <motion.section id="analytics" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5 text-primary" /> Analytics by Plan
+                  </CardTitle>
+                  <CardDescription>Understand performance and optimize your page.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li><span className="font-medium">Free</span>: Basic analytics — total clicks, per-link click counts, and top-performing links.</li>
+                    <li><span className="font-medium">Plus</span>: Advanced analytics — device metrics, location insights, and engagement by time of day and day of week.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            {/* Sharing & Subdomains */}
+            <motion.section id="share-subdomains" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Globe className="h-5 w-5 text-primary" /> Sharing & Subdomains
+                  </CardTitle>
+                  <CardDescription>Make your LinqYard easy to find and share.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4 text-sm">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Each profile gets a unique subdomain: <code className="rounded bg-muted px-1">username.linqyard.com</code>.</li>
+                    <li>Copy and share your URL across social bios and posts.</li>
+                    <li>QR codes for profiles are coming soon for quick offline sharing.</li>
+                  </ul>
+                  <Separator />
+                  <div className="flex items-center gap-2 text-sm">
+                    <Button asChild size="sm" variant="secondary">
+                      <Link href="/account/signup">Create account</Link>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
+                      <Link href="/plans">View plans</Link>
+                    </Button>
+                    <span className="inline-flex items-center gap-1 text-muted-foreground text-xs">
+                      <QrCode className="h-3.5 w-3.5" /> QR sharing soon
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            {/* Tips & Support */}
+            <motion.section id="tips-support" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BookOpen className="h-5 w-5 text-primary" /> Tips & Support
+                  </CardTitle>
+                  <CardDescription>Helpful pointers and where to get help.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>Keep titles short and actionable (e.g., “Watch: New Demo”).</li>
+                    <li>Put your most important links at the top; use groups to reduce clutter.</li>
+                    <li>Review analytics weekly to refine your layout.</li>
+                    <li>Avoid sensitive data; treat your public page as a storefront.</li>
                   </ul>
                   <Separator />
                   <div className="flex items-center gap-2">
-                    <Link className="inline-flex items-center text-sm underline" href="/about">
-                      Learn more on About <ExternalLink className="ml-1 h-3.5 w-3.5" />
+                    <Link className="inline-flex items-center text-sm underline" href="mailto:mail@jsm33t.com">
+                      Contact support <ExternalLink className="ml-1 h-3.5 w-3.5" />
                     </Link>
                   </div>
                 </CardContent>
@@ -214,20 +325,22 @@ export default function DocsPageClient() {
                 <CardContent className="p-6 md:p-8">
                   <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
                     <div>
-                      <h3 className="text-xl md:text-2xl font-bold">Ready to try the demo?</h3>
+                      <h3 className="text-xl md:text-2xl font-bold">Ready to create your LinqYard?</h3>
                       <p className="mt-1 text-primary-foreground/80 text-sm">
-                        Create a page, add links, and share one URL.
+                        Sign up, claim your subdomain, add links & groups, and start sharing.
                       </p>
                     </div>
                     <div className="flex gap-3">
-                      <Button size="lg" variant="secondary">Open demo</Button>
+                      <Button asChild size="lg" variant="secondary">
+                        <Link href="/account/signup">Create account</Link>
+                      </Button>
                       <Button asChild size="lg" variant="outline" className="bg-transparent text-primary-foreground border-primary-foreground/40 hover:bg-primary-foreground/10">
-                        <Link href="/about">About</Link>
+                        <Link href="/plans">View plans</Link>
                       </Button>
                     </div>
                   </div>
                   <p className="mt-3 text-xs text-primary-foreground/80">
-                    This is an indicative demo. Features and scope may change.
+                    Features and availability may evolve as we iterate. Follow update notes in the dashboard.
                   </p>
                 </CardContent>
               </Card>
@@ -235,11 +348,6 @@ export default function DocsPageClient() {
           </div>
         </main>
       </div>
-
-      {/* Page footer */}
-      <motion.footer className="container mx-auto px-4 pb-8 text-center text-muted-foreground" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={footerVariants}>
-        <p>© {new Date().getFullYear()} linqyard. Demo documentation for illustrative purposes only.</p>
-      </motion.footer>
     </div>
   );
 }

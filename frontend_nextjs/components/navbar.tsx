@@ -177,8 +177,8 @@ const getIcon = (iconName: string) => {
               <Image
                 src="/logo.svg"
                 alt="Linqyard Logo"
-                width={20}
-                height={20}
+                width={30}
+                height={30}
                 className="text-foreground"
               />
               {/* <span>Linqyard</span> */}
