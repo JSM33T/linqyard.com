@@ -16,7 +16,13 @@ const nextConfig: NextConfig = {
         port: '',
         pathname: '/og/**',
       },
-        {
+      {
+        protocol: 'https',
+        hostname: 'linqyard.blob.core.windows.net',
+        port: '',
+        pathname: '/media/**',
+      },
+      {
         protocol: "https",
         hostname: "*.googleusercontent.com",
         port: "",
