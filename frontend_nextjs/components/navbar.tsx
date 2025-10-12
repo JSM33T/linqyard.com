@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, Activity } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
@@ -21,6 +21,14 @@ import {
   Code,
   Compass,
   HelpCircle,
+  BookOpen,
+  PenTool,
+  LifeBuoy,
+  Wallet,
+  Info,
+  Home,
+  Wrench,
+  Mail,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -72,18 +80,27 @@ export default function Navbar() {
 
   const THRESHOLD = 2; // px movement before reacting
 
-  // Helper function to get icon component
-  const getIcon = (iconName: string) => {
-    const icons: Record<string, any> = {
-      book: Book,
-      code: Code,
-      compass: Compass,
-      "help-circle": HelpCircle,
-    };
-    const IconComponent = icons[iconName] || Book;
-    return <IconComponent className="h-4 w-4" />;
+// Helper function to get icon component
+const getIcon = (iconName: string) => {
+  const icons: Record<string, any> = {
+    book: Book,
+    "book-open": BookOpen,
+    code: Code,
+    compass: Compass,
+    "help-circle": HelpCircle,
+    "pen-tool": PenTool,
+    "life-buoy": LifeBuoy,
+    mail: Mail,
+    activity: Activity,
+    wallet: Wallet,
+    info: Info,
+    home: Home,
+    wrench: Wrench,
   };
 
+  const IconComponent = icons[iconName] || Book;
+  return <IconComponent className="h-4 w-4" />;
+};
   // Close mobile menu on route change
   useEffect(() => {
     setMenuOpen(false);
