@@ -9,6 +9,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NavbarVisibilityProvider } from "@/contexts/NavbarVisibilityContext";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionChecker } from "@/components/SessionChecker";
+import { FingerprintInitializer } from "@/components/FingerprintInitializer";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -46,6 +47,7 @@ export default function RootLayout({
         <ThemeProvider defaultTheme="light">
           <UserProvider>
             <NavbarVisibilityProvider>
+              <FingerprintInitializer />
               <SessionChecker />
               <Navbar />
               <main className="flex-1">{children}</main>

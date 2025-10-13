@@ -66,5 +66,6 @@ public class User
     public ICollection<AuditLog> AuditLogs { get; set; } = new List<AuditLog>();
     public ICollection<Link> Links { get; set; } = new List<Link>();
     public ICollection<LinkGroup> LinkGroups { get; set; } = new List<LinkGroup>();
+    public ICollection<ViewTelemetry> ProfileViews { get; set; } = new List<ViewTelemetry>();
 }
 

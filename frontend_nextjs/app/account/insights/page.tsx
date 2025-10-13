@@ -228,7 +228,23 @@ export default function InsightsPage() {
             </Card>
           </motion.div>
 
-          {/* Engagement Metrics */}
+          {/* Profile View Telemetry */}
+          <motion.div variants={itemVariants}>
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Eye className="h-5 w-5 mr-2" />
+                  Profile View Telemetry
+                </CardTitle>
+                <CardDescription>
+                  Track who viewed your profile and where they came from
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ProfileViewTelemetry />
+              </CardContent>
+            </Card>
+          </motion.div>
 
           {/* Action Items */}
           <motion.div variants={itemVariants}>
@@ -585,6 +601,363 @@ function PieDonut({ data, size = 120, thickness = 24 }: { data: any; size?: numb
             <span className="text-muted-foreground">{seg.key} ({seg.value ?? 0})</span>
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfileViewTelemetry() {
+  const [stats, setStats] = useState<any>(null);
+  const [views, setViews] = useState<any[]>([]);
+  const [sourceBreakdown, setSourceBreakdown] = useState<any[]>([]);
+  const [geoDistribution, setGeoDistribution] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<'overview' | 'views' | 'sources' | 'geo'>('overview');
+  const [dateRange, setDateRange] = useState({
+    start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
+
+  const fetchStats = async () => {
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({
+        startDate: new Date(dateRange.start).toISOString(),
+        endDate: new Date(dateRange.end + 'T23:59:59').toISOString()
+      });
+      
+      const [statsRes, sourcesRes, geoRes] = await Promise.all([
+        apiService.get(`/telemetry/profile-stats?${params}`),
+        apiService.get(`/telemetry/source-breakdown?${params}`),
+        apiService.get(`/telemetry/geographic-distribution?${params}`)
+      ]);
+
+      setStats(statsRes.data?.data ?? statsRes.data);
+      setSourceBreakdown(sourcesRes.data?.data ?? sourcesRes.data ?? []);
+      setGeoDistribution(geoRes.data?.data ?? geoRes.data ?? []);
+    } catch (err) {
+      console.error('Failed to fetch telemetry stats:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchViews = async () => {
+    try {
+      const params = new URLSearchParams({
+        startDate: new Date(dateRange.start).toISOString(),
+        endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+        skip: '0',
+        take: '50'
+      });
+      
+      const res = await apiService.get(`/telemetry/profile-views?${params}`);
+      const data = res.data?.data ?? res.data;
+      setViews(data?.views ?? []);
+    } catch (err) {
+      console.error('Failed to fetch views:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchStats();
+    if (activeTab === 'views') {
+      fetchViews();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateRange]);
+
+  useEffect(() => {
+    if (activeTab === 'views' && views.length === 0) {
+      fetchViews();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-8">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Date Range Selector */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">From</label>
+          <Input 
+            type="date" 
+            value={dateRange.start} 
+            onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+            className="w-40"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <label className="text-sm text-muted-foreground">To</label>
+          <Input 
+            type="date" 
+            value={dateRange.end} 
+            onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+            className="w-40"
+          />
+        </div>
+        <Button size="sm" onClick={fetchStats}>Refresh</Button>
+      </div>
+
+      {/* Stats Overview */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="p-4 rounded-lg border bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
+            <div className="flex items-center justify-between mb-2">
+              <Eye className="h-5 w-5 text-blue-600" />
+              <TrendingUp className="h-4 w-4 text-blue-500" />
+            </div>
+            <div className="text-2xl font-bold text-blue-700 dark:text-blue-300">
+              {stats.totalViews?.toLocaleString() ?? 0}
+            </div>
+            <div className="text-sm text-blue-600 dark:text-blue-400">Total Views</div>
+          </div>
+
+          <div className="p-4 rounded-lg border bg-gradient-to-br from-purple-50 to-purple-100 dark:from-purple-900/20 dark:to-purple-800/20">
+            <div className="flex items-center justify-between mb-2">
+              <Users className="h-5 w-5 text-purple-600" />
+            </div>
+            <div className="text-2xl font-bold text-purple-700 dark:text-purple-300">
+              {stats.uniqueVisitors?.toLocaleString() ?? 0}
+            </div>
+            <div className="text-sm text-purple-600 dark:text-purple-400">Unique Visitors</div>
+          </div>
+
+          <div className="p-4 rounded-lg border bg-gradient-to-br from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
+            <div className="flex items-center justify-between mb-2">
+              <Clock className="h-5 w-5 text-green-600" />
+            </div>
+            <div className="text-2xl font-bold text-green-700 dark:text-green-300">
+              {stats.averageViewDuration ? `${Math.round(stats.averageViewDuration)}s` : 'N/A'}
+            </div>
+            <div className="text-sm text-green-600 dark:text-green-400">Avg Duration</div>
+          </div>
+
+          <div className="p-4 rounded-lg border bg-gradient-to-br from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-800/20">
+            <div className="flex items-center justify-between mb-2">
+              <BarChart3 className="h-5 w-5 text-orange-600" />
+            </div>
+            <div className="text-2xl font-bold text-orange-700 dark:text-orange-300">
+              {stats.dailyViews?.length ?? 0}
+            </div>
+            <div className="text-sm text-orange-600 dark:text-orange-400">Active Days</div>
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="border-b">
+        <div className="flex gap-4">
+          {[
+            { key: 'overview', label: 'Overview' },
+            { key: 'views', label: 'Recent Views' },
+            { key: 'sources', label: 'Sources' },
+            { key: 'geo', label: 'Geography' }
+          ].map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key as any)}
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+                activeTab === tab.key
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab Content */}
+      <div className="mt-4">
+        {activeTab === 'overview' && stats && (
+          <div className="space-y-6">
+            {/* Daily Trend Chart */}
+            {stats.dailyViews && stats.dailyViews.length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium mb-4">Daily Views Trend</h3>
+                <div className="h-64 flex items-end gap-2">
+                  {stats.dailyViews.map((day: any, idx: number) => {
+                    const maxCount = Math.max(...stats.dailyViews.map((d: any) => d.count));
+                    const heightPercent = maxCount > 0 ? (day.count / maxCount) * 100 : 0;
+                    return (
+                      <div key={idx} className="flex-1 flex flex-col items-center gap-1">
+                        <div 
+                          className="w-full bg-primary/80 hover:bg-primary rounded-t transition-all relative group"
+                          style={{ height: `${heightPercent}%`, minHeight: day.count > 0 ? '4px' : '0' }}
+                        >
+                          <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-popover border px-2 py-1 rounded text-xs opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+                            {day.count} views
+                          </div>
+                        </div>
+                        <div className="text-xs text-muted-foreground rotate-45 origin-top-left mt-2">
+                          {new Date(day.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Device Breakdown */}
+            {stats.viewsByDevice && Object.keys(stats.viewsByDevice).length > 0 && (
+              <div>
+                <h3 className="text-lg font-medium mb-4">Device Breakdown</h3>
+                <div className="space-y-2">
+                  {Object.entries(stats.viewsByDevice).map(([device, count]: [string, any]) => {
+                    const percentage = stats.totalViews > 0 ? ((count / stats.totalViews) * 100).toFixed(1) : 0;
+                    return (
+                      <div key={device} className="flex items-center gap-3">
+                        <div className="w-24 text-sm capitalize">{device}</div>
+                        <div className="flex-1 h-8 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary flex items-center justify-end pr-3 text-xs font-medium text-white"
+                            style={{ width: `${percentage}%`, minWidth: count > 0 ? '40px' : '0' }}
+                          >
+                            {count > 0 && `${percentage}%`}
+                          </div>
+                        </div>
+                        <div className="w-16 text-right text-sm font-medium">{count}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'views' && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b text-sm text-muted-foreground text-left">
+                  <th className="pb-3 font-medium">Date & Time</th>
+                  <th className="pb-3 font-medium">Source</th>
+                  <th className="pb-3 font-medium">Location</th>
+                  <th className="pb-3 font-medium">Device</th>
+                  <th className="pb-3 font-medium">Browser</th>
+                  <th className="pb-3 font-medium">Fingerprint</th>
+                </tr>
+              </thead>
+              <tbody>
+                {views.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-sm text-muted-foreground">
+                      No profile views recorded yet
+                    </td>
+                  </tr>
+                ) : (
+                  views.map((view) => (
+                    <tr key={view.id} className="border-b hover:bg-muted/50 transition-colors">
+                      <td className="py-3 text-sm">
+                        {new Date(view.viewedAt).toLocaleString()}
+                      </td>
+                      <td className="py-3">
+                        <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400 capitalize">
+                          {view.source || 'direct'}
+                        </span>
+                      </td>
+                      <td className="py-3 text-sm">
+                        {view.city && view.country ? `${view.city}, ${view.country}` : view.country || 'Unknown'}
+                      </td>
+                      <td className="py-3 text-sm capitalize">{view.deviceType || 'Unknown'}</td>
+                      <td className="py-3 text-sm">{view.browser || 'Unknown'}</td>
+                      <td className="py-3 text-xs font-mono text-muted-foreground">
+                        {view.fingerprint ? view.fingerprint.substring(0, 8) + '...' : 'N/A'}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+            {views.length > 0 && (
+              <div className="mt-4 text-sm text-muted-foreground text-center">
+                Showing {views.length} most recent views
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'sources' && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Traffic Sources</h3>
+            {sourceBreakdown.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No source data available</p>
+            ) : (
+              <div className="space-y-3">
+                {sourceBreakdown.map((source) => (
+                  <div key={source.source} className="flex items-center gap-4">
+                    <div className="w-32 text-sm font-medium capitalize">{source.source}</div>
+                    <div className="flex-1 h-10 bg-muted rounded-lg overflow-hidden relative">
+                      <div 
+                        className="h-full bg-primary flex items-center justify-between px-4"
+                        style={{ width: `${source.percentage}%`, minWidth: '60px' }}
+                      >
+                        <span className="text-sm font-medium text-white">{source.percentage.toFixed(1)}%</span>
+                        <span className="text-sm font-medium text-white">{source.count} views</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'geo' && (
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Geographic Distribution</h3>
+            {geoDistribution.length === 0 ? (
+              <p className="text-sm text-muted-foreground py-4">No geographic data available</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b text-sm text-muted-foreground text-left">
+                      <th className="pb-3 font-medium">Country</th>
+                      <th className="pb-3 font-medium">City</th>
+                      <th className="pb-3 font-medium">Views</th>
+                      <th className="pb-3 font-medium">Percentage</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {geoDistribution.map((geo, idx) => (
+                      <tr key={idx} className="border-b hover:bg-muted/50">
+                        <td className="py-3 text-sm font-medium">{geo.country}</td>
+                        <td className="py-3 text-sm">{geo.city || '—'}</td>
+                        <td className="py-3 text-sm">{geo.count}</td>
+                        <td className="py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="flex-1 max-w-[200px] h-2 bg-muted rounded-full overflow-hidden">
+                              <div 
+                                className="h-full bg-primary"
+                                style={{ width: `${geo.percentage}%` }}
+                              />
+                            </div>
+                            <span className="text-sm text-muted-foreground w-12 text-right">
+                              {geo.percentage.toFixed(1)}%
+                            </span>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -69,4 +69,23 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
             user.TierName
         );
     }
+
+    public async Task<UserBasicResponse?> GetUserByUsernameAsync(string username, CancellationToken cancellationToken = default)
+    {
+        var normalized = (username ?? string.Empty).Trim();
+        if (string.IsNullOrEmpty(normalized))
+            return null;
+
+        _logger.LogDebug("Getting user by username: {Username}", normalized);
+
+        // Case-insensitive username match + not deleted
+        var user = await _db.Users
+            .AsNoTracking()
+            .Where(u => u.DeletedAt == null &&
+                        u.Username.ToLower() == normalized.ToLower())
+            .Select(u => new UserBasicResponse(u.Id, u.Username))
+            .FirstOrDefaultAsync(cancellationToken);
+
+        return user;
+    }
 }

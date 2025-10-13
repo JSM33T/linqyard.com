@@ -11,3 +11,11 @@ public sealed record UserPublicResponse(
     int? TierId,
     string? TierName
 );
+
+/// <summary>
+/// Basic user information - just Id and Username for internal lookups
+/// </summary>
+public sealed record UserBasicResponse(
+    Guid Id,
+    string Username
+);

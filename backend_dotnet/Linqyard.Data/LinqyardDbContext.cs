@@ -29,6 +29,7 @@ public class LinqyardDbContext : DbContext
     public DbSet<LinkGroup> LinkGroups { get; set; }
     public DbSet<Analytics> Analytics { get; set; }
     public DbSet<AppConfig> AppConfigs { get; set; }
+    public DbSet<ViewTelemetry> ViewTelemetries { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,6 +55,7 @@ public class LinqyardDbContext : DbContext
         ConfigureLinkEntity(modelBuilder);
         ConfigureLinkGroupEntity(modelBuilder);
         ConfigureAppConfigEntity(modelBuilder);
+        ConfigureViewTelemetryEntity(modelBuilder);
 
         SeedRoles(modelBuilder);
         SeedTiers(modelBuilder);
@@ -326,6 +328,37 @@ public class LinqyardDbContext : DbContext
         entity.HasOne(l => l.Group)
             .WithMany(g => g.Links)
             .HasForeignKey(l => l.GroupId)
+            .OnDelete(DeleteBehavior.SetNull);
+    }
+
+    private void ConfigureViewTelemetryEntity(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<ViewTelemetry>();
+
+        // Primary key
+        entity.HasKey(e => e.Id);
+
+        // Indexes for efficient querying
+        entity.HasIndex(e => e.ProfileUserId);
+        entity.HasIndex(e => e.ViewerUserId);
+        entity.HasIndex(e => e.ViewedAt);
+        entity.HasIndex(e => new { e.ProfileUserId, e.ViewedAt });
+        entity.HasIndex(e => e.Source);
+        entity.HasIndex(e => e.Fingerprint);
+        entity.HasIndex(e => new { e.ProfileUserId, e.Source });
+
+        // GIN index for JSONB UTM parameters
+        entity.HasIndex(e => e.UtmParameters).HasMethod("gin");
+
+        // Relationships
+        entity.HasOne(vt => vt.ProfileUser)
+            .WithMany()
+            .HasForeignKey(vt => vt.ProfileUserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        entity.HasOne(vt => vt.ViewerUser)
+            .WithMany()
+            .HasForeignKey(vt => vt.ViewerUserId)
             .OnDelete(DeleteBehavior.SetNull);
     }
 

@@ -17,6 +17,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import { useGet } from "@/hooks/useApi";
 import { GetGroupedLinksResponse, LinkItem } from "@/hooks/types";
 import { apiService } from '@/hooks/apiService';
+import { getFingerprint, getSessionId, getUtmParameters, getTrafficSource, initializeFingerprint } from '@/lib/fingerprint';
 
 /* ---------- FX presets ---------- */
 const containerVariants = {
@@ -32,15 +33,12 @@ const cardVariants = {
 function LinkRow({ item }: { item: LinkItem }) {
   const handleClick = (e: React.MouseEvent) => {
     // Fire-and-forget analytics: do not prevent default or open window manually.
-    // Read fingerprint from localStorage (fp) - may be null
-    let fp: string | null = null;
-    try {
-      fp = typeof window !== "undefined" ? localStorage.getItem("fp") : null;
-    } catch (err) {
-      fp = null;
-    }
-
-    const basePayload: Record<string, any> = { linkId: item.id, fp };
+    // Ensure fingerprint is initialized and get it
+    initializeFingerprint();
+    const fp = getFingerprint();
+    
+    // Continue even if no fingerprint (will be null in payload)
+    const basePayload: Record<string, any> = { linkId: item.id, fp: fp || null };
 
     const sendPayload = (payloadObj: Record<string, any>) => {
       const payload = JSON.stringify(payloadObj);
@@ -260,6 +258,95 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
   const { user, isAuthenticated } = useUser();
   const isOwner = isAuthenticated && user?.username && username && user.username.toLowerCase() === username.toLowerCase();
   const { theme, toggleTheme } = useTheme();
+
+  // Initialize fingerprint on component mount
+  useEffect(() => {
+    initializeFingerprint();
+  }, []);
+
+  // Track profile view telemetry
+  useEffect(() => {
+    if (!username || isOwner) {
+      // Don't track owner's own views
+      console.log('Profile tracking skipped:', { username, isOwner });
+      return;
+    }
+
+    const trackProfileView = async () => {
+      try {
+        console.log('Starting profile view tracking for:', username);
+        
+        // Ensure fingerprint is initialized and retrieve it
+        initializeFingerprint();
+        const fp = getFingerprint();
+        
+        console.log('Fingerprint:', fp);
+        
+        // Don't track if fingerprint generation failed
+        if (!fp) {
+          console.warn('Fingerprint not available, skipping tracking');
+          return;
+        }
+
+        const sessionId = getSessionId();
+        const source = getTrafficSource();
+        const utm = getUtmParameters();
+        const referrer = typeof document !== 'undefined' ? document.referrer : null;
+
+        console.log('Tracking data:', { fp, sessionId, source, utm, referrer });
+
+        // Build base payload
+        const payload: any = {
+          fp,
+          sessionId,
+          source,
+          referrer,
+          utm
+        };
+
+        // Try to get geolocation (non-blocking)
+        if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
+          navigator.geolocation.getCurrentPosition(
+            (position) => {
+              payload.location = {
+                coords: {
+                  latitude: position.coords.latitude,
+                  longitude: position.coords.longitude,
+                  accuracy: position.coords.accuracy
+                }
+              };
+              
+              console.log('Sending profile view with location:', payload);
+              // Send with location
+              apiService.post(`/profile/${encodeURIComponent(username)}/view`, payload)
+                .then(() => console.log('Profile view tracked successfully (with location)'))
+                .catch(err => console.warn('Profile view tracking failed:', err));
+            },
+            () => {
+              console.log('Geolocation denied, sending without location:', payload);
+              // Permission denied or error - send without location
+              apiService.post(`/profile/${encodeURIComponent(username)}/view`, payload)
+                .then(() => console.log('Profile view tracked successfully (without location)'))
+                .catch(err => console.warn('Profile view tracking failed:', err));
+            },
+            { maximumAge: 60000, timeout: 3000, enableHighAccuracy: false }
+          );
+        } else {
+          console.log('No geolocation support, sending without location:', payload);
+          // No geolocation support - send without location
+          await apiService.post(`/profile/${encodeURIComponent(username)}/view`, payload);
+          console.log('Profile view tracked successfully (no geolocation)');
+        }
+      } catch (error) {
+        console.error('Profile view tracking error:', error);
+      }
+    };
+
+    // Track view after a short delay to ensure fingerprint is generated
+    console.log('Scheduling profile view tracking...');
+    const timer = setTimeout(trackProfileView, 500);
+    return () => clearTimeout(timer);
+  }, [username, isOwner]);
 
   useEffect(() => {
     const prev = visible;
