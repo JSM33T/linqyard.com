@@ -1382,6 +1382,19 @@ public sealed class AuthController : BaseApiController
         await _context.SaveChangesAsync(cancellationToken);
 
         _logger.LogInformation("Created new user from Google OAuth {UserId}", newUser.Id);
+
+        // Send welcome email for new Google OAuth users
+        try
+        {
+            await _emailService.SendWelcomeEmailAsync(newUser.Email, newUser.FirstName ?? "User");
+            _logger.LogInformation("Welcome email sent to new Google OAuth user {Email}", newUser.Email);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send welcome email to new Google OAuth user {Email}", newUser.Email);
+            // Continue without failing - user creation was successful
+        }
+
         return newUser;
     }
 
