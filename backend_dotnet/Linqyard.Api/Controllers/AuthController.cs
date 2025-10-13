@@ -1,6 +1,6 @@
 ﻿using BCrypt.Net;
 using Linqyard.Api.Configuration;
-using Linqyard.Api.Data;
+using Linqyard.Data;
 using Linqyard.Api.Services;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Requests;
@@ -252,7 +252,7 @@ public sealed class AuthController : BaseApiController
             {
                 Id = userId,
                 Email = normalizedEmail,
-                PasswordHash = HashPassword(request.Password),
+                PasswordHash = HashPassword(request.Password!),
                 EmailVerified = false,
                 FirstName = request.FirstName,
                 LastName = request.LastName,

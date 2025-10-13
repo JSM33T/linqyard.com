@@ -1,710 +1,580 @@
-﻿using System.Net;
-using Linqyard.Contracts.Interfaces;
+﻿using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
+using Linqyard.Data;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using NpgsqlTypes;
+using System.Net;
 
 namespace Linkyard.Repositories;
 
-public class ProfileRepository : IProfileRepository
+public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> logger, IConfiguration configuration) : IProfileRepository
 {
     private const string DefaultConnectionName = "DefaultConnection";
+    private readonly LinqyardDbContext _db = db;
+    private readonly ILogger<ProfileRepository> _logger = logger;
+    private readonly IConfiguration _configuration = configuration;
 
-    private readonly ILogger<ProfileRepository> _logger;
-    private readonly IConfiguration _configuration;
-
-    public ProfileRepository(ILogger<ProfileRepository> logger, IConfiguration configuration)
+    public async Task<ProfileDetailsResponse?> GetProfileDetailsAsync(
+      Guid userId,
+      CancellationToken cancellationToken = default)
     {
-        _logger = logger;
-        _configuration = configuration;
+        var dto = await _db.Users
+            .AsNoTracking()
+            .Where(u => u.Id == userId)
+            .Select(u => new
+            {
+                u.Id,
+                u.Email,
+                u.EmailVerified,
+                u.Username,
+                u.FirstName,
+                u.LastName,
+                u.DisplayName,
+                u.Bio,
+                u.AvatarUrl,
+                u.CoverUrl,
+                u.Timezone,
+                u.Locale,
+                u.VerifiedBadge,
+                u.CreatedAt,
+                u.UpdatedAt,
+                Roles = u.UserRoles
+                    .Select(ur => ur.Role.Name)
+                    .ToArray()
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (dto is null) return null;
+
+        return new ProfileDetailsResponse(
+            dto.Id,
+            dto.Email,
+            dto.EmailVerified,
+            dto.Username,
+            dto.FirstName,
+            dto.LastName,
+            dto.DisplayName,
+            dto.Bio,
+            dto.AvatarUrl,
+            dto.CoverUrl,
+            dto.Timezone,
+            dto.Locale,
+            dto.VerifiedBadge,
+            dto.CreatedAt,
+            dto.UpdatedAt,
+            dto.Roles
+        );
     }
 
-    public async Task<ProfileDetailsResponse?> GetProfileDetailsAsync(Guid userId, CancellationToken cancellationToken = default)
+
+    public async Task<ProfileUpdateResponse?> UpdateProfileAsync(
+    Guid userId,
+    UpdateProfileRequest request,
+    CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
-
-        const string userQuery = @"
-            SELECT ""Id"", ""Email"", ""EmailVerified"", ""Username"", ""FirstName"", ""LastName"",
-                   ""DisplayName"", ""Bio"", ""AvatarUrl"", ""CoverUrl"", ""Timezone"", ""Locale"",
-                   ""VerifiedBadge"", ""CreatedAt"", ""UpdatedAt""
-            FROM public.""Users""
-            WHERE ""Id"" = @userId
-            LIMIT 1;";
-
-        await using var userCommand = new NpgsqlCommand(userQuery, connection);
-        userCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        await using var reader = await userCommand.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
+            // Start a transaction (keeps semantics close to your SELECT ... FOR UPDATE pattern)
+            await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            // Load the user as a tracked entity for updates
+            var user = await _db.Users
+                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        if (user is null)
+        {
+            await tx.RollbackAsync(cancellationToken);
             return null;
         }
 
-        var profile = new ProfileDetailsResponse(
-            reader.GetGuid(0),
-            reader.GetString(1),
-            reader.GetBoolean(2),
-            reader.GetString(3),
-            reader.IsDBNull(4) ? null : reader.GetString(4),
-            reader.IsDBNull(5) ? null : reader.GetString(5),
-            reader.IsDBNull(6) ? null : reader.GetString(6),
-            reader.IsDBNull(7) ? null : reader.GetString(7),
-            reader.IsDBNull(8) ? null : reader.GetString(8),
-            reader.IsDBNull(9) ? null : reader.GetString(9),
-            reader.IsDBNull(10) ? null : reader.GetString(10),
-            reader.IsDBNull(11) ? null : reader.GetString(11),
-            reader.GetBoolean(12),
-            reader.GetFieldValue<DateTimeOffset>(13),
-            reader.GetFieldValue<DateTimeOffset>(14),
-            Array.Empty<string>());
-
-        await reader.CloseAsync();
-
-        const string rolesQuery = @"
-            SELECT r.""Name""
-            FROM public.""UserRoles"" ur
-            INNER JOIN public.""Roles"" r ON r.""Id"" = ur.""RoleId""
-            WHERE ur.""UserId"" = @userId;";
-
-        await using var rolesCommand = new NpgsqlCommand(rolesQuery, connection);
-        rolesCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        var roles = new List<string>();
-        await using var rolesReader = await rolesCommand.ExecuteReaderAsync(cancellationToken);
-        while (await rolesReader.ReadAsync(cancellationToken))
-        {
-            roles.Add(rolesReader.GetString(0));
-        }
-
-        return profile with { Roles = roles };
-    }
-
-    public async Task<ProfileUpdateResponse?> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken cancellationToken = default)
-    {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-        const string selectQuery = @"
-            SELECT ""Id"", ""Email"", ""EmailVerified"", ""Username"", ""FirstName"", ""LastName"",
-                   ""DisplayName"", ""Bio"", ""AvatarUrl"", ""CoverUrl"", ""Timezone"", ""Locale"",
-                   ""VerifiedBadge"", ""CreatedAt"", ""UpdatedAt""
-            FROM public.""Users""
-            WHERE ""Id"" = @userId
-            FOR UPDATE;";
-
-        await using var selectCommand = new NpgsqlCommand(selectQuery, connection, transaction);
-        selectCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        await using var reader = await selectCommand.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
-        {
-            await reader.CloseAsync();
-            await transaction.RollbackAsync(cancellationToken);
-            return null;
-        }
-
+        // Keep stable snapshot of fields needed for the response
         var current = new
         {
-            Id = reader.GetGuid(0),
-            Email = reader.GetString(1),
-            EmailVerified = reader.GetBoolean(2),
-            Username = reader.GetString(3),
-            FirstName = reader.IsDBNull(4) ? null : reader.GetString(4),
-            LastName = reader.IsDBNull(5) ? null : reader.GetString(5),
-            DisplayName = reader.IsDBNull(6) ? null : reader.GetString(6),
-            Bio = reader.IsDBNull(7) ? null : reader.GetString(7),
-            AvatarUrl = reader.IsDBNull(8) ? null : reader.GetString(8),
-            CoverUrl = reader.IsDBNull(9) ? null : reader.GetString(9),
-            Timezone = reader.IsDBNull(10) ? null : reader.GetString(10),
-            Locale = reader.IsDBNull(11) ? null : reader.GetString(11),
-            VerifiedBadge = reader.GetBoolean(12),
-            CreatedAt = reader.GetFieldValue<DateTimeOffset>(13)
+            user.Id,
+            user.Email,
+            user.EmailVerified,
+            user.Username,
+            user.VerifiedBadge,
+            user.CreatedAt
         };
 
-        await reader.CloseAsync();
+        // Helper: trim + convert empty/whitespace to null
+        static string? Sanitize(string? value) =>
+            value is null ? null : (string.IsNullOrWhiteSpace(value) ? null : value.Trim());
 
-        var updatedAt = DateTimeOffset.UtcNow;
+        // Compute “next” values (null in request => keep existing, whitespace => null)
+        var username = request.Username is null ? user.Username : Sanitize(request.Username);
+        var firstName = request.FirstName is null ? user.FirstName : Sanitize(request.FirstName);
+        var lastName = request.LastName is null ? user.LastName : Sanitize(request.LastName);
+        var displayName = request.DisplayName is null ? user.DisplayName : Sanitize(request.DisplayName);
+        var bio = request.Bio is null ? user.Bio : Sanitize(request.Bio);
+        var avatarUrl = request.AvatarUrl is null ? user.AvatarUrl : Sanitize(request.AvatarUrl);
+        var coverUrl = request.CoverUrl is null ? user.CoverUrl : Sanitize(request.CoverUrl);
+        var timezone = request.Timezone is null ? user.Timezone : Sanitize(request.Timezone);
+        var locale = request.Locale is null ? user.Locale : Sanitize(request.Locale);
 
-        string? Sanitize(string? value) => value == null ? null : (string.IsNullOrWhiteSpace(value) ? null : value.Trim());
-
-        var username = request.Username is null ? current.Username : Sanitize(request.Username);
-        var firstName = request.FirstName is null ? current.FirstName : Sanitize(request.FirstName);
-        var lastName = request.LastName is null ? current.LastName : Sanitize(request.LastName);
-        var displayName = request.DisplayName is null ? current.DisplayName : Sanitize(request.DisplayName);
-        var bio = request.Bio is null ? current.Bio : Sanitize(request.Bio);
-        var avatarUrl = request.AvatarUrl is null ? current.AvatarUrl : Sanitize(request.AvatarUrl);
-        var coverUrl = request.CoverUrl is null ? current.CoverUrl : Sanitize(request.CoverUrl);
-        var timezone = request.Timezone is null ? current.Timezone : Sanitize(request.Timezone);
-        var locale = request.Locale is null ? current.Locale : Sanitize(request.Locale);
-
-        // Check username uniqueness if it's being changed
-        if (username != current.Username && !string.IsNullOrEmpty(username))
+        // Case-insensitive uniqueness check only if username is changing and not empty
+        if (!string.Equals(username, user.Username, StringComparison.Ordinal) &&
+            !string.IsNullOrEmpty(username))
         {
-            const string checkUsernameQuery = @"
-                SELECT COUNT(1) FROM public.""Users""
-                WHERE LOWER(""Username"") = LOWER(@username) AND ""Id"" != @userId;";
+            var exists = await _db.Users
+                .AsNoTracking()
+                .AnyAsync(u =>
+                    u.Id != userId &&
+                    EF.Functions.ILike(u.Username, username!), // uses ILIKE for PostgreSQL case-insensitive match
+                cancellationToken);
 
-            await using var checkCommand = new NpgsqlCommand(checkUsernameQuery, connection, transaction);
-            checkCommand.Parameters.Add("username", NpgsqlDbType.Text).Value = username;
-            checkCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-            var existingCountResult = await checkCommand.ExecuteScalarAsync(cancellationToken);
-            var existingCount = existingCountResult as long? ?? 0;
-            if (existingCount > 0)
+            if (exists)
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await tx.RollbackAsync(cancellationToken);
                 throw new InvalidOperationException("Username is already taken");
             }
         }
 
-        const string updateQuery = @"
-            UPDATE public.""Users""
-            SET ""Username"" = @username,
-                ""FirstName"" = @firstName,
-                ""LastName"" = @lastName,
-                ""DisplayName"" = @displayName,
-                ""Bio"" = @bio,
-                ""AvatarUrl"" = @avatarUrl,
-                ""CoverUrl"" = @coverUrl,
-                ""Timezone"" = @timezone,
-                ""Locale"" = @locale,
-                ""UpdatedAt"" = @updatedAt
-            WHERE ""Id"" = @userId;";
+        // Apply updates
+        user.Username = username ?? user.Username; // keep original if null
+        user.FirstName = firstName;
+        user.LastName = lastName;
+        user.DisplayName = displayName;
+        user.Bio = bio;
+        user.AvatarUrl = avatarUrl;
+        user.CoverUrl = coverUrl;
+        user.Timezone = timezone;
+        user.Locale = locale;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await using var updateCommand = new NpgsqlCommand(updateQuery, connection, transaction);
-        updateCommand.Parameters.Add("username", NpgsqlDbType.Text).Value = username;
-        updateCommand.Parameters.Add("firstName", NpgsqlDbType.Text).Value = (object?)firstName ?? DBNull.Value;
-        updateCommand.Parameters.Add("lastName", NpgsqlDbType.Text).Value = (object?)lastName ?? DBNull.Value;
-        updateCommand.Parameters.Add("displayName", NpgsqlDbType.Text).Value = (object?)displayName ?? DBNull.Value;
-        updateCommand.Parameters.Add("bio", NpgsqlDbType.Text).Value = (object?)bio ?? DBNull.Value;
-        updateCommand.Parameters.Add("avatarUrl", NpgsqlDbType.Text).Value = (object?)avatarUrl ?? DBNull.Value;
-        updateCommand.Parameters.Add("coverUrl", NpgsqlDbType.Text).Value = (object?)coverUrl ?? DBNull.Value;
-        updateCommand.Parameters.Add("timezone", NpgsqlDbType.Text).Value = (object?)timezone ?? DBNull.Value;
-        updateCommand.Parameters.Add("locale", NpgsqlDbType.Text).Value = (object?)locale ?? DBNull.Value;
-        updateCommand.Parameters.Add("updatedAt", NpgsqlDbType.TimestampTz).Value = updatedAt;
-        updateCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
+        await _db.SaveChangesAsync(cancellationToken);
 
-        await updateCommand.ExecuteNonQueryAsync(cancellationToken);
+        // Fetch roles for response (no Include needed if you prefer a separate query)
+        var roles = await _db.UserRoles
+            .AsNoTracking()
+            .Where(ur => ur.UserId == userId)
+            .Join(_db.Roles,
+                  ur => ur.RoleId,
+                  r => r.Id,
+                  (ur, r) => r.Name)
+            .ToArrayAsync(cancellationToken);
 
-        const string rolesQuery = @"
-            SELECT r.""Name""
-            FROM public.""UserRoles"" ur
-            INNER JOIN public.""Roles"" r ON r.""Id"" = ur.""RoleId""
-            WHERE ur.""UserId"" = @userId;";
-
-        await using var rolesCommand = new NpgsqlCommand(rolesQuery, connection, transaction);
-        rolesCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        var roles = new List<string>();
-        await using var rolesReader = await rolesCommand.ExecuteReaderAsync(cancellationToken);
-        while (await rolesReader.ReadAsync(cancellationToken))
-        {
-            roles.Add(rolesReader.GetString(0));
-        }
-
-        await rolesReader.CloseAsync();
-
-        await transaction.CommitAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
 
         var profile = new ProfileDetailsResponse(
             current.Id,
             current.Email,
             current.EmailVerified,
-            username ?? current.Username,
-            firstName,
-            lastName,
-            displayName,
-            bio,
-            avatarUrl,
-            coverUrl,
-            timezone,
-            locale,
+            user.Username,
+            user.FirstName,
+            user.LastName,
+            user.DisplayName,
+            user.Bio,
+            user.AvatarUrl,
+            user.CoverUrl,
+            user.Timezone,
+            user.Locale,
             current.VerifiedBadge,
             current.CreatedAt,
-            updatedAt,
-            roles);
+            user.UpdatedAt,
+            roles
+        );
 
         return new ProfileUpdateResponse(
             "Profile updated successfully",
-            updatedAt,
-            profile);
+            user.UpdatedAt,
+            profile
+        );
+        }); // End of ExecuteAsync
     }
 
-    public async Task<PasswordChangeResult> ChangePasswordAsync(Guid userId, string? currentPassword, string newPassword, bool skipCurrentPasswordCheck, CancellationToken cancellationToken = default)
+
+    public async Task<PasswordChangeResult> ChangePasswordAsync(
+      Guid userId,
+      string? currentPassword,
+      string newPassword,
+      bool skipCurrentPasswordCheck,
+      CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-        const string selectUserQuery = @"
-            SELECT ""PasswordHash"", ""UpdatedAt""
-            FROM public.""Users""
-            WHERE ""Id"" = @userId
-            FOR UPDATE;";
-
-        await using var selectUserCommand = new NpgsqlCommand(selectUserQuery, connection, transaction);
-        selectUserCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        await using var reader = await selectUserCommand.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            await reader.CloseAsync();
-            await transaction.RollbackAsync(cancellationToken);
+            // Use a transaction to mirror your SELECT ... FOR UPDATE semantics.
+            await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            // Load the user (tracked) for update
+            var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        if (user is null)
+        {
+            await tx.RollbackAsync(cancellationToken);
             return new PasswordChangeResult(PasswordChangeStatus.UserNotFound, null);
         }
 
-        var currentHash = reader.GetString(0);
-        await reader.CloseAsync();
-
-        var minLength = await GetPasswordMinimumLengthAsync(connection, transaction, cancellationToken);
-        if (newPassword.Length < minLength)
+        // Get policy (replace with your own source if different)
+        var minLength = await GetPasswordMinimumLengthAsync(cancellationToken);
+        if (string.IsNullOrEmpty(newPassword) || newPassword.Length < minLength)
         {
-            await transaction.RollbackAsync(cancellationToken);
+            await tx.RollbackAsync(cancellationToken);
             return new PasswordChangeResult(PasswordChangeStatus.PasswordTooShort, null, minLength);
         }
 
+        // Check current password unless bypassed
         if (!skipCurrentPasswordCheck)
         {
-            if (string.IsNullOrWhiteSpace(currentPassword) || !VerifyPassword(currentPassword, currentHash))
+            if (string.IsNullOrWhiteSpace(currentPassword) || !VerifyPassword(currentPassword, user.PasswordHash))
             {
-                await transaction.RollbackAsync(cancellationToken);
+                await tx.RollbackAsync(cancellationToken);
                 return new PasswordChangeResult(PasswordChangeStatus.InvalidCurrentPassword, null, minLength);
             }
         }
 
-        if (VerifyPassword(newPassword, currentHash))
+        // Prevent same-as-old
+        if (VerifyPassword(newPassword, user.PasswordHash))
         {
-            await transaction.RollbackAsync(cancellationToken);
+            await tx.RollbackAsync(cancellationToken);
             return new PasswordChangeResult(PasswordChangeStatus.PasswordSame, null, minLength);
         }
 
-        var newHash = HashPassword(newPassword);
+        // Update password + timestamps
         var updatedAt = DateTimeOffset.UtcNow;
+        user.PasswordHash = HashPassword(newPassword);
+        user.UpdatedAt = updatedAt;
 
-        const string updatePasswordQuery = @"
-            UPDATE public.""Users""
-            SET ""PasswordHash"" = @passwordHash,
-                ""UpdatedAt"" = @updatedAt
-            WHERE ""Id"" = @userId;";
+        await _db.SaveChangesAsync(cancellationToken);
 
-        await using var updatePasswordCommand = new NpgsqlCommand(updatePasswordQuery, connection, transaction);
-        updatePasswordCommand.Parameters.Add("passwordHash", NpgsqlDbType.Text).Value = newHash;
-        updatePasswordCommand.Parameters.Add("updatedAt", NpgsqlDbType.TimestampTz).Value = updatedAt;
-        updatePasswordCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
+        // Revoke all active refresh tokens for this user (server-side bulk update if on EF Core 7+)
+        await _db.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ExecuteUpdateAsync(updates => updates
+                .SetProperty(rt => rt.RevokedAt, _ => updatedAt),
+                cancellationToken);
 
-        await updatePasswordCommand.ExecuteNonQueryAsync(cancellationToken);
-
-        const string revokeTokensQuery = @"
-            UPDATE public.""RefreshTokens""
-            SET ""RevokedAt"" = @revokedAt
-            WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL;";
-
-        await using var revokeTokensCommand = new NpgsqlCommand(revokeTokensQuery, connection, transaction);
-        revokeTokensCommand.Parameters.Add("revokedAt", NpgsqlDbType.TimestampTz).Value = updatedAt;
-        revokeTokensCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        await revokeTokensCommand.ExecuteNonQueryAsync(cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
 
         var response = new PasswordChangeResponse(
             "Password changed successfully. Please log in again on other devices.",
-            updatedAt);
+            updatedAt
+        );
 
         return new PasswordChangeResult(PasswordChangeStatus.Success, response, minLength);
+        }); // End of ExecuteAsync
     }
 
-    public async Task<SessionContext?> ResolveCurrentSessionAsync(Guid userId, Guid? sessionIdClaim, string? refreshTokenHash, string? ipAddress, string? userAgent, CancellationToken cancellationToken = default)
-    {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
 
+    public async Task<SessionContext?> ResolveCurrentSessionAsync(
+        Guid userId,
+        Guid? sessionIdClaim,
+        string? refreshTokenHash,
+        string? ipAddress,
+        string? userAgent,
+        CancellationToken cancellationToken = default)
+    {
+        // 1) From session claim
         if (sessionIdClaim.HasValue)
         {
-            const string claimQuery = @"
-                SELECT ""Id"", ""AuthMethod""
-                FROM public.""Sessions""
-                WHERE ""Id"" = @sessionId AND ""UserId"" = @userId AND ""RevokedAt"" IS NULL
-                LIMIT 1;";
+            var byClaim = await _db.Sessions
+                .AsNoTracking()
+                .Where(s => s.Id == sessionIdClaim.Value &&
+                            s.UserId == userId &&
+                            s.RevokedAt == null)
+                .Select(s => new SessionContext(s.Id, s.AuthMethod))
+                .FirstOrDefaultAsync(cancellationToken);
 
-            await using var claimCommand = new NpgsqlCommand(claimQuery, connection);
-            claimCommand.Parameters.Add("sessionId", NpgsqlDbType.Uuid).Value = sessionIdClaim.Value;
-            claimCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-            await using var claimReader = await claimCommand.ExecuteReaderAsync(cancellationToken);
-            if (await claimReader.ReadAsync(cancellationToken))
-            {
-                var context = new SessionContext(claimReader.GetGuid(0), claimReader.GetString(1));
-                return context;
-            }
-            await claimReader.CloseAsync();
+            if (byClaim is not null) return byClaim;
         }
 
+        // 2) From refresh token hash (most recent valid)
         if (!string.IsNullOrWhiteSpace(refreshTokenHash))
         {
-            const string tokenQuery = @"
-                SELECT s.""Id"", s.""AuthMethod""
-                FROM public.""RefreshTokens"" rt
-                INNER JOIN public.""Sessions"" s ON s.""Id"" = rt.""SessionId""
-                WHERE rt.""UserId"" = @userId
-                  AND rt.""TokenHash"" = @tokenHash
-                  AND rt.""RevokedAt"" IS NULL
-                  AND s.""RevokedAt"" IS NULL
-                ORDER BY rt.""IssuedAt"" DESC
-                LIMIT 1;";
+            var byToken = await _db.RefreshTokens
+                .AsNoTracking()
+                .Where(rt => rt.UserId == userId &&
+                             rt.TokenHash == refreshTokenHash &&
+                             rt.RevokedAt == null &&
+                             rt.Session.RevokedAt == null)
+                .OrderByDescending(rt => rt.IssuedAt)
+                .Select(rt => new SessionContext(rt.SessionId, rt.Session.AuthMethod))
+                .FirstOrDefaultAsync(cancellationToken);
 
-            await using var tokenCommand = new NpgsqlCommand(tokenQuery, connection);
-            tokenCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-            tokenCommand.Parameters.Add("tokenHash", NpgsqlDbType.Text).Value = refreshTokenHash;
-
-            await using var tokenReader = await tokenCommand.ExecuteReaderAsync(cancellationToken);
-            if (await tokenReader.ReadAsync(cancellationToken))
-            {
-                return new SessionContext(tokenReader.GetGuid(0), tokenReader.GetString(1));
-            }
-            await tokenReader.CloseAsync();
+            if (byToken is not null) return byToken;
         }
 
-        if (!string.IsNullOrWhiteSpace(ipAddress) && IPAddress.TryParse(ipAddress, out var ip) && !string.IsNullOrWhiteSpace(userAgent))
+        // 3) From IP + User-Agent (most recent)
+        if (!string.IsNullOrWhiteSpace(ipAddress) &&
+            IPAddress.TryParse(ipAddress, out var ip) &&
+            !string.IsNullOrWhiteSpace(userAgent))
         {
-            const string ipQuery = @"
-                SELECT ""Id"", ""AuthMethod""
-                FROM public.""Sessions""
-                WHERE ""UserId"" = @userId
-                  AND ""RevokedAt"" IS NULL
-                  AND ""IpAddress"" = @ip
-                  AND ""UserAgent"" = @userAgent
-                ORDER BY ""LastSeenAt"" DESC
-                LIMIT 1;";
+            var byIpUa = await _db.Sessions
+                .AsNoTracking()
+                .Where(s => s.UserId == userId &&
+                            s.RevokedAt == null &&
+                            s.IpAddress == ip &&
+                            s.UserAgent == userAgent)
+                .OrderByDescending(s => s.LastSeenAt)
+                .Select(s => new SessionContext(s.Id, s.AuthMethod))
+                .FirstOrDefaultAsync(cancellationToken);
 
-            await using var ipCommand = new NpgsqlCommand(ipQuery, connection);
-            ipCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-            ipCommand.Parameters.Add("ip", NpgsqlDbType.Inet).Value = ip;
-            ipCommand.Parameters.Add("userAgent", NpgsqlDbType.Text).Value = userAgent;
-
-            await using var ipReader = await ipCommand.ExecuteReaderAsync(cancellationToken);
-            if (await ipReader.ReadAsync(cancellationToken))
-            {
-                return new SessionContext(ipReader.GetGuid(0), ipReader.GetString(1));
-            }
-            await ipReader.CloseAsync();
+            if (byIpUa is not null) return byIpUa;
         }
 
-        const string recentQuery = @"
-            SELECT ""Id"", ""AuthMethod""
-            FROM public.""Sessions""
-            WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL
-            ORDER BY ""LastSeenAt"" DESC
-            LIMIT 1;";
-
-        await using var recentCommand = new NpgsqlCommand(recentQuery, connection);
-        recentCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        await using var recentReader = await recentCommand.ExecuteReaderAsync(cancellationToken);
-        if (await recentReader.ReadAsync(cancellationToken))
-        {
-            return new SessionContext(recentReader.GetGuid(0), recentReader.GetString(1));
-        }
+        // 4) Fallback: most recent active session
+        //var recent = await _db.Sessions
+        //    .AsNoTracking()
+        //    .Where(s => s.UserId == userId && s.RevokedAt == null)
+        //    .OrderByDescending(s => s.LastSeenAt)
+        //    .Select(s => new SessionContext(s.Id, s.AuthMethod))
+        //    .FirstOrDefaultAsync(cancellationToken);
 
         return null;
     }
 
-    public async Task<SessionsResponse> GetSessionsAsync(Guid userId, Guid? currentSessionId, CancellationToken cancellationToken = default)
+
+    public async Task<SessionsResponse> GetSessionsAsync(
+     Guid userId,
+     Guid? currentSessionId,
+     CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
 
         if (currentSessionId.HasValue)
         {
-            const string updateLastSeenQuery = @"
-                UPDATE public.""Sessions""
-                SET ""LastSeenAt"" = @now
-                WHERE ""Id"" = @sessionId;";
-
-            await using var updateLastSeenCommand = new NpgsqlCommand(updateLastSeenQuery, connection, transaction);
-            updateLastSeenCommand.Parameters.Add("now", NpgsqlDbType.TimestampTz).Value = DateTimeOffset.UtcNow;
-            updateLastSeenCommand.Parameters.Add("sessionId", NpgsqlDbType.Uuid).Value = currentSessionId.Value;
-            await updateLastSeenCommand.ExecuteNonQueryAsync(cancellationToken);
+            // Update LastSeenAt for the current session only
+            await _db.Sessions
+                .Where(s => s.Id == currentSessionId.Value && s.UserId == userId)
+                .ExecuteUpdateAsync(
+                    updates => updates.SetProperty(s => s.LastSeenAt, _ => now),
+                    cancellationToken
+                );
         }
 
-        const string sessionsQuery = @"
-            SELECT ""Id"", ""AuthMethod"", ""IpAddress"", ""UserAgent"", ""CreatedAt"", ""LastSeenAt""
-            FROM public.""Sessions""
-            WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL
-            ORDER BY ""LastSeenAt"" DESC;";
+        // Fetch active (non-revoked) sessions for the user
+        var rows = await _db.Sessions
+            .AsNoTracking()
+            .Where(s => s.UserId == userId && s.RevokedAt == null)
+            .OrderByDescending(s => s.LastSeenAt)
+            .Select(s => new
+            {
+                s.Id,
+                s.AuthMethod,
+                s.IpAddress,         // Npgsql maps to System.Net.IPAddress
+                s.UserAgent,
+                s.CreatedAt,
+                s.LastSeenAt
+            })
+            .ToListAsync(cancellationToken);
 
-        await using var sessionsCommand = new NpgsqlCommand(sessionsQuery, connection, transaction);
-        sessionsCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        var sessions = new List<SessionInfo>();
-        await using var reader = await sessionsCommand.ExecuteReaderAsync(cancellationToken);
-        while (await reader.ReadAsync(cancellationToken))
-        {
-            var id = reader.GetGuid(0);
-            var ip = reader.GetFieldValue<IPAddress>(2).ToString();
-            var session = new SessionInfo(
-                id,
-                reader.GetString(1),
-                ip,
-                reader.GetString(3),
-                reader.GetFieldValue<DateTimeOffset>(4),
-                reader.GetFieldValue<DateTimeOffset>(5),
-                currentSessionId.HasValue && currentSessionId.Value == id);
-            sessions.Add(session);
-        }
-
-        // Ensure the reader is closed before committing the transaction so
-        // we don't attempt another command on the same connection while a
-        // reader is still open (which causes NpgsqlOperationInProgressException).
-        await reader.CloseAsync();
-
-        await transaction.CommitAsync(cancellationToken);
+        // Map to your DTOs (ToString() for IPAddress happens client-side)
+        var sessions = rows.Select(r =>
+            new SessionInfo(
+                r.Id,
+                r.AuthMethod,
+                r.IpAddress?.ToString() ?? string.Empty,
+                r.UserAgent,
+                r.CreatedAt,
+                r.LastSeenAt,
+                currentSessionId.HasValue && r.Id == currentSessionId.Value
+            )
+        ).ToList();
 
         return new SessionsResponse(sessions);
     }
 
-    public async Task<SessionLogoutResult> LogoutFromSessionAsync(Guid userId, Guid sessionId, CancellationToken cancellationToken = default)
+    public async Task<SessionLogoutResult> LogoutFromSessionAsync(
+        Guid userId,
+        Guid sessionId,
+        CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-        const string selectSessionQuery = @"
-            SELECT ""RevokedAt""
-            FROM public.""Sessions""
-            WHERE ""Id"" = @sessionId AND ""UserId"" = @userId
-            FOR UPDATE;";
-
-        await using var selectSessionCommand = new NpgsqlCommand(selectSessionQuery, connection, transaction);
-        selectSessionCommand.Parameters.Add("sessionId", NpgsqlDbType.Uuid).Value = sessionId;
-        selectSessionCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        await using var reader = await selectSessionCommand.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            await reader.CloseAsync();
-            await transaction.RollbackAsync(cancellationToken);
+            await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            // Load the session row for this user (tracked -> updateable)
+            var session = await _db.Sessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, cancellationToken);
+
+        if (session is null)
+        {
+            await tx.RollbackAsync(cancellationToken);
             return new SessionLogoutResult(SessionLogoutStatus.NotFound, null);
         }
 
-        if (!reader.IsDBNull(0))
+        if (session.RevokedAt is not null)
         {
-            await reader.CloseAsync();
-            await transaction.RollbackAsync(cancellationToken);
+            await tx.RollbackAsync(cancellationToken);
             return new SessionLogoutResult(SessionLogoutStatus.AlreadyLoggedOut, null);
         }
 
-        await reader.CloseAsync();
-
         var revokedAt = DateTimeOffset.UtcNow;
 
-        const string revokeSessionQuery = @"
-            UPDATE public.""Sessions""
-            SET ""RevokedAt"" = @revokedAt
-            WHERE ""Id"" = @sessionId;";
+        // Revoke the session
+        session.RevokedAt = revokedAt;
+        await _db.SaveChangesAsync(cancellationToken);
 
-        await using var revokeSessionCommand = new NpgsqlCommand(revokeSessionQuery, connection, transaction);
-        revokeSessionCommand.Parameters.Add("revokedAt", NpgsqlDbType.TimestampTz).Value = revokedAt;
-        revokeSessionCommand.Parameters.Add("sessionId", NpgsqlDbType.Uuid).Value = sessionId;
-        await revokeSessionCommand.ExecuteNonQueryAsync(cancellationToken);
+        // Revoke all active refresh tokens tied to this session
+        await _db.RefreshTokens
+            .Where(rt => rt.SessionId == sessionId && rt.RevokedAt == null)
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(rt => rt.RevokedAt, _ => revokedAt),
+                cancellationToken
+            );
 
-        const string revokeTokensQuery = @"
-            UPDATE public.""RefreshTokens""
-            SET ""RevokedAt"" = @revokedAt
-            WHERE ""SessionId"" = @sessionId AND ""RevokedAt"" IS NULL;";
-
-        await using var revokeTokensCommand = new NpgsqlCommand(revokeTokensQuery, connection, transaction);
-        revokeTokensCommand.Parameters.Add("revokedAt", NpgsqlDbType.TimestampTz).Value = revokedAt;
-        revokeTokensCommand.Parameters.Add("sessionId", NpgsqlDbType.Uuid).Value = sessionId;
-        await revokeTokensCommand.ExecuteNonQueryAsync(cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
 
         var response = new SessionDeleteResponse(
             "Session logged out successfully",
-            revokedAt);
+            revokedAt
+        );
 
         return new SessionLogoutResult(SessionLogoutStatus.Success, response);
+        }); // End of ExecuteAsync
     }
 
-    public async Task<SessionDeleteResponse> LogoutFromAllOtherSessionsAsync(Guid userId, Guid? currentSessionId, CancellationToken cancellationToken = default)
+    public async Task<SessionDeleteResponse> LogoutFromAllOtherSessionsAsync(
+       Guid userId,
+       Guid? currentSessionId,
+       CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-        var revokedAt = DateTimeOffset.UtcNow;
-
-        var sessionQuery = currentSessionId.HasValue
-            ? @"
-                UPDATE public.""Sessions""
-                SET ""RevokedAt"" = @revokedAt
-                WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL AND ""Id"" <> @currentSessionId;"
-            : @"
-                UPDATE public.""Sessions""
-                SET ""RevokedAt"" = @revokedAt
-                WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL;";
-
-        await using var revokeSessionsCommand = new NpgsqlCommand(sessionQuery, connection, transaction);
-        revokeSessionsCommand.Parameters.Add("revokedAt", NpgsqlDbType.TimestampTz).Value = revokedAt;
-        revokeSessionsCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-        if (currentSessionId.HasValue)
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            revokeSessionsCommand.Parameters.Add("currentSessionId", NpgsqlDbType.Uuid).Value = currentSessionId.Value;
-        }
+            await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
 
-        var affectedSessions = await revokeSessionsCommand.ExecuteNonQueryAsync(cancellationToken);
+            var revokedAt = DateTimeOffset.UtcNow;
 
-        var tokensQuery = currentSessionId.HasValue
-            ? @"
-                UPDATE public.""RefreshTokens""
-                SET ""RevokedAt"" = @revokedAt
-                WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL AND ""SessionId"" <> @currentSessionId;"
-            : @"
-                UPDATE public.""RefreshTokens""
-                SET ""RevokedAt"" = @revokedAt
-                WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL;";
+        // Revoke other sessions
+        var sessionsQuery = _db.Sessions
+            .Where(s => s.UserId == userId && s.RevokedAt == null);
 
-        await using var revokeTokensCommand = new NpgsqlCommand(tokensQuery, connection, transaction);
-        revokeTokensCommand.Parameters.Add("revokedAt", NpgsqlDbType.TimestampTz).Value = revokedAt;
-        revokeTokensCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
         if (currentSessionId.HasValue)
-        {
-            revokeTokensCommand.Parameters.Add("currentSessionId", NpgsqlDbType.Uuid).Value = currentSessionId.Value;
-        }
+            sessionsQuery = sessionsQuery.Where(s => s.Id != currentSessionId.Value);
 
-        await revokeTokensCommand.ExecuteNonQueryAsync(cancellationToken);
+        var affectedSessions = await sessionsQuery
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(s => s.RevokedAt, _ => revokedAt),
+                cancellationToken
+            );
 
-        await transaction.CommitAsync(cancellationToken);
+        // Revoke refresh tokens tied to those sessions (or all if no currentSessionId provided)
+        var tokensQuery = _db.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null);
 
-        var response = new SessionDeleteResponse(
+        if (currentSessionId.HasValue)
+            tokensQuery = tokensQuery.Where(rt => rt.SessionId != currentSessionId.Value);
+
+        await tokensQuery
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(rt => rt.RevokedAt, _ => revokedAt),
+                cancellationToken
+            );
+
+        await tx.CommitAsync(cancellationToken);
+
+        return new SessionDeleteResponse(
             $"Logged out from {affectedSessions} other session(s) successfully",
-            revokedAt);
-
-        return response;
+            revokedAt
+        );
+        }); // End of ExecuteAsync
     }
 
-    public async Task<AccountDeleteResult> DeleteAccountAsync(Guid userId, string password, CancellationToken cancellationToken = default)
+
+    public async Task<AccountDeleteResult> DeleteAccountAsync(
+    Guid userId,
+    string password,
+    CancellationToken cancellationToken = default)
     {
-        await using var connection = new NpgsqlConnection(GetConnectionString());
-        await connection.OpenAsync(cancellationToken);
-        await using var transaction = await connection.BeginTransactionAsync(cancellationToken);
-
-        const string selectUserQuery = @"
-            SELECT ""Email"", ""PasswordHash""
-            FROM public.""Users""
-            WHERE ""Id"" = @userId
-            FOR UPDATE;";
-
-        await using var selectUserCommand = new NpgsqlCommand(selectUserQuery, connection, transaction);
-        selectUserCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-
-        await using var reader = await selectUserCommand.ExecuteReaderAsync(cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken))
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
         {
-            await reader.CloseAsync();
-            await transaction.RollbackAsync(cancellationToken);
+            await using var tx = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            // Load tracked user row (equivalent to SELECT ... FOR UPDATE semantics when used in a tx)
+            var user = await _db.Users
+            .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+
+        if (user is null)
+        {
+            await tx.RollbackAsync(cancellationToken);
             return new AccountDeleteResult(AccountDeleteStatus.UserNotFound, null);
         }
 
-        var email = reader.GetString(0);
-        var passwordHash = reader.GetString(1);
-        await reader.CloseAsync();
-
-        if (!VerifyPassword(password, passwordHash))
+        // Verify current password
+        if (!VerifyPassword(password, user.PasswordHash))
         {
-            await transaction.RollbackAsync(cancellationToken);
+            await tx.RollbackAsync(cancellationToken);
             return new AccountDeleteResult(AccountDeleteStatus.InvalidPassword, null);
         }
 
         var deletedAt = DateTimeOffset.UtcNow;
+        var originalEmail = user.Email; // needed for OTP revocation by email
         var anonymizedEmail = $"deleted_{userId}@deleted.local";
         var anonymizedUsername = $"deleted_{userId}";
 
-        const string updateUserQuery = @"
-            UPDATE public.""Users""
-            SET ""DeletedAt"" = @deletedAt,
-                ""IsActive"" = FALSE,
-                ""Email"" = @email,
-                ""Username"" = @username,
-                ""FirstName"" = NULL,
-                ""LastName"" = NULL,
-                ""DisplayName"" = NULL,
-                ""Bio"" = NULL,
-                ""AvatarUrl"" = NULL,
-                ""CoverUrl"" = NULL,
-                ""UpdatedAt"" = @deletedAt
-            WHERE ""Id"" = @userId;";
+        // Soft-delete + anonymize user
+        user.DeletedAt = deletedAt;
+        user.IsActive = false;
+        user.Email = anonymizedEmail;
+        user.Username = anonymizedUsername;
+        user.FirstName = null;
+        user.LastName = null;
+        user.DisplayName = null;
+        user.Bio = null;
+        user.AvatarUrl = null;
+        user.CoverUrl = null;
+        user.UpdatedAt = deletedAt;
 
-        await using var updateUserCommand = new NpgsqlCommand(updateUserQuery, connection, transaction);
-        updateUserCommand.Parameters.Add("deletedAt", NpgsqlDbType.TimestampTz).Value = deletedAt;
-        updateUserCommand.Parameters.Add("email", NpgsqlDbType.Text).Value = anonymizedEmail;
-        updateUserCommand.Parameters.Add("username", NpgsqlDbType.Text).Value = anonymizedUsername;
-        updateUserCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-        await updateUserCommand.ExecuteNonQueryAsync(cancellationToken);
+        await _db.SaveChangesAsync(cancellationToken);
 
-        const string revokeSessionsQuery = @"
-            UPDATE public.""Sessions""
-            SET ""RevokedAt"" = @deletedAt
-            WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL;";
+        // Revoke active sessions
+        await _db.Sessions
+            .Where(s => s.UserId == userId && s.RevokedAt == null)
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(s => s.RevokedAt, _ => deletedAt),
+                cancellationToken);
 
-        await using var revokeSessionsCommand = new NpgsqlCommand(revokeSessionsQuery, connection, transaction);
-        revokeSessionsCommand.Parameters.Add("deletedAt", NpgsqlDbType.TimestampTz).Value = deletedAt;
-        revokeSessionsCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-        await revokeSessionsCommand.ExecuteNonQueryAsync(cancellationToken);
+        // Revoke active refresh tokens
+        await _db.RefreshTokens
+            .Where(rt => rt.UserId == userId && rt.RevokedAt == null)
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(rt => rt.RevokedAt, _ => deletedAt),
+                cancellationToken);
 
-        const string revokeTokensQuery = @"
-            UPDATE public.""RefreshTokens""
-            SET ""RevokedAt"" = @deletedAt
-            WHERE ""UserId"" = @userId AND ""RevokedAt"" IS NULL;";
+        // Consume any outstanding OTPs for the original email
+        await _db.OtpCodes
+            .Where(o => o.Email == originalEmail && o.ConsumedAt == null)
+            .ExecuteUpdateAsync(
+                updates => updates.SetProperty(o => o.ConsumedAt, _ => deletedAt),
+                cancellationToken);
 
-        await using var revokeTokensCommand = new NpgsqlCommand(revokeTokensQuery, connection, transaction);
-        revokeTokensCommand.Parameters.Add("deletedAt", NpgsqlDbType.TimestampTz).Value = deletedAt;
-        revokeTokensCommand.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
-        await revokeTokensCommand.ExecuteNonQueryAsync(cancellationToken);
-
-        const string revokeOtpQuery = @"
-            UPDATE public.""OtpCodes""
-            SET ""ConsumedAt"" = @deletedAt
-            WHERE ""Email"" = @originalEmail AND ""ConsumedAt"" IS NULL;";
-
-        await using var revokeOtpCommand = new NpgsqlCommand(revokeOtpQuery, connection, transaction);
-        revokeOtpCommand.Parameters.Add("deletedAt", NpgsqlDbType.TimestampTz).Value = deletedAt;
-        revokeOtpCommand.Parameters.Add("originalEmail", NpgsqlDbType.Text).Value = email;
-        await revokeOtpCommand.ExecuteNonQueryAsync(cancellationToken);
-
-        await transaction.CommitAsync(cancellationToken);
+        await tx.CommitAsync(cancellationToken);
 
         var response = new AccountDeleteResponse(
             "Account deleted successfully",
-            deletedAt);
+            deletedAt
+        );
 
         return new AccountDeleteResult(AccountDeleteStatus.Success, response);
+        }); // End of ExecuteAsync
     }
 
-    private async Task<int> GetPasswordMinimumLengthAsync(NpgsqlConnection connection, NpgsqlTransaction transaction, CancellationToken cancellationToken)
-    {
-        const string minQuery = @"
-            SELECT ""Value""
-            FROM public.""AppConfigs""
-            WHERE ""Key"" = 'PasswordMinLength'
-            LIMIT 1;";
 
-        await using var minCommand = new NpgsqlCommand(minQuery, connection, transaction);
-        var result = await minCommand.ExecuteScalarAsync(cancellationToken);
-        if (result is string value && int.TryParse(value, out var parsed))
-        {
+    private async Task<int> GetPasswordMinimumLengthAsync(CancellationToken cancellationToken)
+    {
+        var value = await _db.AppConfigs
+            .AsNoTracking()
+            .Where(c => c.Key == "PasswordMinLength")
+            .Select(c => c.Value)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (int.TryParse(value, out var parsed))
             return parsed;
-        }
 
         return 0;
     }
+
 
     private static string HashPassword(string password)
     {
@@ -736,11 +606,3 @@ public class ProfileRepository : IProfileRepository
         throw new InvalidOperationException(message);
     }
 }
-
-
-
-
-
-
-
-

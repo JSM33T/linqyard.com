@@ -1,17 +1,11 @@
-﻿using Serilog;
-using Serilog.Exceptions;
-using Linqyard.Api.Middleware; // for CorrelationIdMiddleware
-using Linqyard.Api.Data;
-using Linqyard.Api.Configuration;
+﻿using Linkyard.Repositories;
+using Linqyard.Api.Extensions; // Custom CORS
+using Linqyard.Api.Middleware; // CorrelationIdMiddleware
 using Linqyard.Api.Services;
-using Linqyard.Api.Extensions; // added for custom CORS
-using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.IdentityModel.Tokens;
-using System.Security.Claims;
-using System.Text;
 using Linqyard.Contracts.Interfaces;
-using Linkyard.Repositories;
+using Linqyard.Repositories;
+using Serilog;
+using Serilog.Exceptions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -63,6 +57,7 @@ builder.Services.AddScoped<Linqyard.Infra.IAzureBlobStorageService, Linqyard.Inf
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
+builder.Services.AddScoped<ILinkRepository, LinkRepository>();
 
 // Add custom app services (example)
 // builder.Services.AddSingleton<ILoggingService, LoggingService>();

@@ -1,8 +1,10 @@
-﻿using Microsoft.EntityFrameworkCore;
-using Linqyard.Entities;
-using System.Net;
+﻿using Linqyard.Entities;
+using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
+using System.Data;
+using System.Reflection.Emit;
 
-namespace Linqyard.Api.Data;
+namespace Linqyard.Data;
 
 public class LinqyardDbContext : DbContext
 {
@@ -47,10 +49,10 @@ public class LinqyardDbContext : DbContext
         ConfigureTwoFactorMethodEntity(modelBuilder);
         ConfigureTwoFactorCodeEntity(modelBuilder);
         ConfigureAuditLogEntity(modelBuilder);
-    ConfigureAnalyticsEntity(modelBuilder);
+        ConfigureAnalyticsEntity(modelBuilder);
         ConfigureRateLimitBucketEntity(modelBuilder);
-    ConfigureLinkEntity(modelBuilder);
-    ConfigureLinkGroupEntity(modelBuilder);
+        ConfigureLinkEntity(modelBuilder);
+        ConfigureLinkGroupEntity(modelBuilder);
         ConfigureAppConfigEntity(modelBuilder);
 
         SeedRoles(modelBuilder);
@@ -277,54 +279,54 @@ public class LinqyardDbContext : DbContext
 
     private void ConfigureLinkGroupEntity(ModelBuilder modelBuilder)
     {
-      var entity = modelBuilder.Entity<LinkGroup>();
+        var entity = modelBuilder.Entity<LinkGroup>();
 
-      // Primary key
-      entity.HasKey(e => e.Id);
+        // Primary key
+        entity.HasKey(e => e.Id);
 
-      // Unique or searchable indexes
-      entity.HasIndex(e => e.Name);
+        // Unique or searchable indexes
+        entity.HasIndex(e => e.Name);
 
-    // Index to support ordering of groups per user
-    entity.HasIndex(e => new { e.UserId, e.Sequence });
+        // Index to support ordering of groups per user
+        entity.HasIndex(e => new { e.UserId, e.Sequence });
 
-    // Relationship to owner user
-    entity.HasOne(lg => lg.User)
-        .WithMany(u => u.LinkGroups)
-        .HasForeignKey(lg => lg.UserId)
-        .OnDelete(DeleteBehavior.SetNull);
+        // Relationship to owner user
+        entity.HasOne(lg => lg.User)
+            .WithMany(u => u.LinkGroups)
+            .HasForeignKey(lg => lg.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
 
-      // Relationships
-      entity.HasMany(lg => lg.Links)
-          .WithOne(l => l.Group)
-          .HasForeignKey(l => l.GroupId)
-          .OnDelete(DeleteBehavior.SetNull);
+        // Relationships
+        entity.HasMany(lg => lg.Links)
+            .WithOne(l => l.Group)
+            .HasForeignKey(l => l.GroupId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     private void ConfigureLinkEntity(ModelBuilder modelBuilder)
     {
-      var entity = modelBuilder.Entity<Link>();
+        var entity = modelBuilder.Entity<Link>();
 
-      // Primary key
-      entity.HasKey(e => e.Id);
+        // Primary key
+        entity.HasKey(e => e.Id);
 
-      // Indexes
+        // Indexes
         entity.HasIndex(e => new { e.UserId });
         entity.HasIndex(e => new { e.GroupId });
         // Composite indexes to support ordering by Sequence within user/group
         entity.HasIndex(e => new { e.UserId, e.Sequence });
         entity.HasIndex(e => new { e.GroupId, e.Sequence });
 
-            // Relationships
-      entity.HasOne(l => l.User)
-          .WithMany(u => u.Links)
-          .HasForeignKey(l => l.UserId)
-          .OnDelete(DeleteBehavior.SetNull);
+        // Relationships
+        entity.HasOne(l => l.User)
+            .WithMany(u => u.Links)
+            .HasForeignKey(l => l.UserId)
+            .OnDelete(DeleteBehavior.SetNull);
 
-      entity.HasOne(l => l.Group)
-          .WithMany(g => g.Links)
-          .HasForeignKey(l => l.GroupId)
-          .OnDelete(DeleteBehavior.SetNull);
+        entity.HasOne(l => l.Group)
+            .WithMany(g => g.Links)
+            .HasForeignKey(l => l.GroupId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 
     private void SeedRoles(ModelBuilder modelBuilder)
@@ -349,7 +351,7 @@ public class LinqyardDbContext : DbContext
     {
         // Use static values instead of dynamic ones to avoid model changes
         var baseDate = new DateTimeOffset(2025, 9, 20, 0, 0, 0, TimeSpan.Zero);
-        
+
         modelBuilder.Entity<AppConfig>().HasData(
             new AppConfig { Id = new Guid("11111111-1111-1111-1111-111111111111"), Key = "GoogleLoginEnabled", Value = "true", UpdatedAt = baseDate },
             new AppConfig { Id = new Guid("22222222-2222-2222-2222-222222222222"), Key = "OtpExpiryMinutes", Value = "10", UpdatedAt = baseDate },

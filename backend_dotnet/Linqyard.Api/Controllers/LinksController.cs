@@ -1,4 +1,3 @@
-using Linqyard.Api.Data;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Entities;
@@ -10,6 +9,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Linqyard.Contracts;
 using System.Text.Json;
+using Linqyard.Data;
 
 namespace Linqyard.Api.Controllers;
 

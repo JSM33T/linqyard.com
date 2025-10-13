@@ -1,5 +1,5 @@
 using System;
-using Linqyard.Api.Data;
+using Linqyard.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -65,7 +65,8 @@ namespace Linqyard.Api.Extensions
             {
                 options.UseNpgsql(connectionString, npgsqlOptions =>
                 {
-                    npgsqlOptions.MigrationsAssembly("Linqyard.Api");
+                    // Put migrations where your DbContext assembly is (Linqyard.Data)
+                    npgsqlOptions.MigrationsAssembly("Linqyard.Data");
                     npgsqlOptions.EnableRetryOnFailure(
                         maxRetryCount: 3,
                         maxRetryDelay: TimeSpan.FromSeconds(5),
