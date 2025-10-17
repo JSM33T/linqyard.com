@@ -4,9 +4,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { Separator } from "@/components/ui/separator";
 import { Book, Info, Mail } from "lucide-react";
+import { useFooterVisibility } from "@/contexts/FooterVisibilityContext";
 
 export default function Footer() {
   const currentYear = new Date().getFullYear();
+  const { visible } = useFooterVisibility();
+
+  if (!visible) return null;
 
   return (
     <footer className="mt-auto border-t bg-background">

@@ -7,6 +7,7 @@ import BackToTop from "@/components/BackToTop";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NavbarVisibilityProvider } from "@/contexts/NavbarVisibilityContext";
+import { FooterVisibilityProvider } from "@/contexts/FooterVisibilityContext";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionChecker } from "@/components/SessionChecker";
 import { FingerprintInitializer } from "@/components/FingerprintInitializer";
@@ -47,6 +48,7 @@ export default function RootLayout({
         <ThemeProvider defaultTheme="light">
           <UserProvider>
             <NavbarVisibilityProvider>
+              <FooterVisibilityProvider>
               <FingerprintInitializer />
               <SessionChecker />
               <Navbar />
@@ -54,6 +56,7 @@ export default function RootLayout({
               <Footer />
               <BackToTop />
               <Toaster />
+              </FooterVisibilityProvider>
             </NavbarVisibilityProvider>
           </UserProvider>
         </ThemeProvider>

@@ -12,6 +12,7 @@ import { toast } from "sonner";
 
 // no user guard in public profile view
 import { useNavbarVisibility } from "@/contexts/NavbarVisibilityContext";
+import { useFooterVisibility } from "@/contexts/FooterVisibilityContext";
 import { useUser } from "@/contexts/UserContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { useGet } from "@/hooks/useApi";
@@ -253,6 +254,8 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
 
   // Hide navbar while this page is mounted using in-memory context (no persistence).
   const { visible, setVisible } = useNavbarVisibility();
+  // Hide footer while this page is mounted (default is visible)
+  const { visible: footerVisible, setVisible: setFooterVisible } = useFooterVisibility();
 
   // Determine ownership: if the logged-in user's username matches the slug (case-insensitive)
   const { user, isAuthenticated } = useUser();
@@ -352,6 +355,13 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
     const prev = visible;
     setVisible(false);
     return () => setVisible(prev);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const prevF = footerVisible;
+    setFooterVisible(false);
+    return () => setFooterVisible(prevF);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
