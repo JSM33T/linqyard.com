@@ -4,6 +4,7 @@ using Linqyard.Api.Middleware; // CorrelationIdMiddleware
 using Linqyard.Api.Services;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Repositories;
+using Linqyard.Repositories.Configuration;
 using Serilog;
 using Serilog.Exceptions;
 
@@ -53,12 +54,17 @@ builder.Services.Configure<Linqyard.Infra.Configuration.AzureBlobStorageSettings
     builder.Configuration.GetSection("AzureBlobStorage"));
 builder.Services.AddScoped<Linqyard.Infra.IAzureBlobStorageService, Linqyard.Infra.AzureBlobStorageService>();
 
+// Tier & payment configuration
+builder.Services.Configure<RazorpaySettings>(builder.Configuration.GetSection("Payments:Razorpay"));
+builder.Services.Configure<TierPricingOptions>(builder.Configuration.GetSection("TierPricing"));
+
 // Repository Services
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
 builder.Services.AddScoped<ILinkRepository, LinkRepository>();
 builder.Services.AddScoped<IViewTelemetryRepository, ViewTelemetryRepository>();
+builder.Services.AddScoped<ITierService, TierService>();
 
 // Add custom app services (example)
 // builder.Services.AddSingleton<ILoggingService, LoggingService>();

@@ -44,6 +44,45 @@ export interface UsePostReturn<T = any> {
   reset: () => void;
 }
 
+// Tier & billing related types
+export interface TierBillingCycle {
+  billingPeriod: string;
+  amount: number;
+  durationMonths: number;
+  description?: string | null;
+}
+
+export interface UserTierInfo {
+  tierId: number;
+  name: string;
+  activeFrom: string;
+  activeUntil?: string | null;
+}
+
+export interface TierDetails {
+  tierId: number;
+  name: string;
+  description?: string | null;
+  currency: string;
+  plans: TierBillingCycle[];
+}
+
+export interface TierOrderData {
+  tierName: string;
+  billingPeriod: string;
+  orderId: string;
+  receipt: string;
+  amount: number;
+  currency: string;
+  razorpayKeyId: string;
+}
+
+export interface TierUpgradeConfirmationData {
+  tier: UserTierInfo;
+  message: string;
+  billingPeriod: string;
+}
+
 // Authentication API Types
 export interface LoginRequest {
   emailOrUsername: string;
