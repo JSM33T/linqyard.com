@@ -115,12 +115,9 @@ public sealed class GroupsController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
 
             // Check tier-based limits for free tier users
-            var user = await _context.Users
-                .AsNoTracking()
-                .Include(u => u.Tier)
-                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+            var activeTierId = await GetActiveTierIdAsync(userId, cancellationToken) ?? (int)TierType.Free;
 
-            if (user?.TierId == (int)TierType.Free)
+            if (activeTierId == (int)TierType.Free)
             {
                 var existingGroupsCount = await _context.LinkGroups
                     .CountAsync(g => g.UserId == userId, cancellationToken);
@@ -288,5 +285,20 @@ public sealed class GroupsController : BaseApiController
             _logger.LogError(ex, "Error resequencing groups for user {UserId}", userId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "An error occurred while resequencing groups");
         }
+    }
+
+    private async Task<int?> GetActiveTierIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        return await _context.UserTiers
+            .AsNoTracking()
+            .Where(ut => ut.UserId == userId &&
+                         ut.IsActive &&
+                         ut.ActiveFrom <= now &&
+                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+            .OrderByDescending(ut => ut.ActiveFrom)
+            .Select(ut => (int?)ut.TierId)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

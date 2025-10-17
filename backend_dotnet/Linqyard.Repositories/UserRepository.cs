@@ -37,6 +37,8 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
 
         // Case-insensitive username match + not deleted
         // If you use CITEXT in PG, you can compare directly without ToLower.
+        var now = DateTimeOffset.UtcNow;
+
         var user = await _db.Users
             .AsNoTracking()
             .Where(u => u.DeletedAt == null &&
@@ -50,8 +52,18 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
                 u.AvatarUrl,
                 u.CoverUrl,
                 u.Bio,
-                u.TierId,
-                TierName = u.Tier != null ? u.Tier.Name : null
+                ActiveTier = u.UserTiers
+                    .Where(ut => ut.IsActive &&
+                                 ut.ActiveFrom <= now &&
+                                 (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                    .OrderByDescending(ut => ut.ActiveFrom)
+                    .Select(ut => new UserTierInfo(
+                        ut.TierId,
+                        ut.Tier.Name,
+                        ut.ActiveFrom,
+                        ut.ActiveUntil
+                    ))
+                    .FirstOrDefault()
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -65,8 +77,7 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
             user.AvatarUrl,
             user.CoverUrl,
             user.Bio,
-            user.TierId,
-            user.TierName
+            user.ActiveTier
         );
     }
 

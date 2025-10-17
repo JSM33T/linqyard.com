@@ -17,6 +17,7 @@ public class LinqyardDbContext : DbContext
     public DbSet<Role> Roles { get; set; }
     public DbSet<UserRole> UserRoles { get; set; }
     public DbSet<Tier> Tiers { get; set; }
+    public DbSet<UserTier> UserTiers { get; set; }
     public DbSet<ExternalLogin> ExternalLogins { get; set; }
     public DbSet<OtpCode> OtpCodes { get; set; }
     public DbSet<Session> Sessions { get; set; }
@@ -43,6 +44,7 @@ public class LinqyardDbContext : DbContext
         ConfigureRoleEntity(modelBuilder);
         ConfigureUserRoleEntity(modelBuilder);
         ConfigureTierEntity(modelBuilder);
+        ConfigureUserTierEntity(modelBuilder);
         ConfigureExternalLoginEntity(modelBuilder);
         ConfigureOtpCodeEntity(modelBuilder);
         ConfigureSessionEntity(modelBuilder);
@@ -112,6 +114,11 @@ public class LinqyardDbContext : DbContext
               .WithOne(al => al.User)
               .HasForeignKey(al => al.UserId)
               .OnDelete(DeleteBehavior.SetNull);
+
+        entity.HasMany(u => u.UserTiers)
+              .WithOne(ut => ut.User)
+              .HasForeignKey(ut => ut.UserId)
+              .OnDelete(DeleteBehavior.Cascade);
     }
 
     private void ConfigureRoleEntity(ModelBuilder modelBuilder)
@@ -147,10 +154,21 @@ public class LinqyardDbContext : DbContext
         entity.HasKey(e => e.Id);
 
         // Relationships
-        entity.HasMany(t => t.Users)
-              .WithOne(u => u.Tier)
-              .HasForeignKey(u => u.TierId)
-              .OnDelete(DeleteBehavior.SetNull);
+        entity.HasMany(t => t.UserTiers)
+              .WithOne(ut => ut.Tier)
+              .HasForeignKey(ut => ut.TierId)
+              .OnDelete(DeleteBehavior.Restrict);
+    }
+
+    private void ConfigureUserTierEntity(ModelBuilder modelBuilder)
+    {
+        var entity = modelBuilder.Entity<UserTier>();
+
+        entity.HasKey(e => e.Id);
+
+        entity.HasIndex(e => new { e.UserId, e.IsActive });
+        entity.HasIndex(e => new { e.UserId, e.ActiveFrom });
+        entity.HasIndex(e => new { e.UserId, e.ActiveUntil });
     }
 
     private void ConfigureExternalLoginEntity(ModelBuilder modelBuilder)

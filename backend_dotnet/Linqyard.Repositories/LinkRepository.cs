@@ -123,12 +123,9 @@ public sealed class LinkRepository : ILinkRepository
             throw new ArgumentException("Url is not a valid absolute URL.");
 
         // Free plan enforcement (12 links)
-        var user = await _db.Users
-            .AsNoTracking()
-            .Include(u => u.Tier)
-            .FirstOrDefaultAsync(u => u.Id == userId, ct);
+        var activeTierId = await GetActiveTierIdAsync(userId, ct) ?? (int)TierType.Free;
 
-        if (user?.TierId == (int)TierType.Free)
+        if (activeTierId == (int)TierType.Free)
         {
             var existingCount = await _db.Links.LongCountAsync(l => l.UserId == userId, ct);
             if (existingCount >= 12)
@@ -310,6 +307,21 @@ public sealed class LinkRepository : ILinkRepository
     // --------------------------
     // Helpers
     // --------------------------
+
+    private async Task<int?> GetActiveTierIdAsync(Guid userId, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        return await _db.UserTiers
+            .AsNoTracking()
+            .Where(ut => ut.UserId == userId &&
+                         ut.IsActive &&
+                         ut.ActiveFrom <= now &&
+                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+            .OrderByDescending(ut => ut.ActiveFrom)
+            .Select(ut => (int?)ut.TierId)
+            .FirstOrDefaultAsync(ct);
+    }
 
     private static LinkSummary MapSummary(Link l) => new(
         Id: l.Id,

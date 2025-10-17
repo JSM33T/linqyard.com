@@ -19,8 +19,7 @@ public sealed record UserInfo(
     DateTimeOffset CreatedAt,
     IReadOnlyList<string> Roles,
     string? AuthMethod,
-    int? TierId,
-    string? TierName
+    UserTierInfo? ActiveTier
 );
 
 public sealed record RefreshTokenResponse(

@@ -209,12 +209,9 @@ public class LinksController : BaseApiController
                 return BadRequestProblem("Name and Url are required");
 
             // Check tier-based limits for free tier users
-            var user = await _context.Users
-                .AsNoTracking()
-                .Include(u => u.Tier)
-                .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
+            var activeTierId = await GetActiveTierIdAsync(userId, cancellationToken) ?? (int)TierType.Free;
 
-            if (user?.TierId == (int)TierType.Free)
+            if (activeTierId == (int)TierType.Free)
             {
                 var existingLinksCount = await _context.Links
                     .CountAsync(l => l.UserId == userId, cancellationToken);
@@ -498,5 +495,20 @@ public class LinksController : BaseApiController
             _logger.LogError(ex, "Error deleting link {LinkId} by user {UserId}", id, UserId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "An error occurred while deleting the link");
         }
+    }
+
+    private async Task<int?> GetActiveTierIdAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        return await _context.UserTiers
+            .AsNoTracking()
+            .Where(ut => ut.UserId == userId &&
+                         ut.IsActive &&
+                         ut.ActiveFrom <= now &&
+                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+            .OrderByDescending(ut => ut.ActiveFrom)
+            .Select(ut => (int?)ut.TierId)
+            .FirstOrDefaultAsync(cancellationToken);
     }
 }

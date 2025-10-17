@@ -9,6 +9,7 @@ using Linqyard.Entities;
 using Linqyard.Entities.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -59,7 +60,8 @@ public sealed class AuthController : BaseApiController
             var user = await _context.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
-                .Include(u => u.Tier)
+                .Include(u => u.UserTiers)
+                    .ThenInclude(ut => ut.Tier)
                 .FirstOrDefaultAsync(u => u.Email == request.EmailOrUsername ||
                                          u.Username == request.EmailOrUsername, cancellationToken);
 
@@ -116,7 +118,10 @@ public sealed class AuthController : BaseApiController
             }
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(expiryMinutes);
 
-            var userInfo = BuildUserInfo(user, authMethod: "EmailPassword");
+            var userInfo = await BuildUserInfoAsync(
+                user,
+                authMethod: "EmailPassword",
+                cancellationToken: cancellationToken);
 
             // Set refresh token as HTTP-only cookie
             if (!string.IsNullOrEmpty(refreshTokenValue))
@@ -248,21 +253,52 @@ public sealed class AuthController : BaseApiController
 
             // ── Create user ────────────────────────────────────────────────────
             var userId = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+
+            var freeTier = await _context.Tiers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == (int)TierType.Free, cancellationToken);
+
+            if (freeTier is null)
+            {
+                _logger.LogError("Default free tier definition is missing. Unable to register user {UserId}", userId);
+                return Problem(
+                    statusCode: StatusCodes.Status500InternalServerError,
+                    title: "Configuration Error",
+                    detail: "Unable to complete registration because the default tier is not configured.");
+            }
             var user = new User
             {
                 Id = userId,
                 Email = normalizedEmail,
-                PasswordHash = HashPassword(request.Password!),
-                EmailVerified = false,
-                FirstName = request.FirstName,
-                LastName = request.LastName,
-                Username = normalizedUsername,
-                TierId = (int)TierType.Free, // Assign free tier by default
-                CreatedAt = DateTimeOffset.UtcNow,
-                UpdatedAt = DateTimeOffset.UtcNow
+            PasswordHash = HashPassword(request.Password!),
+            EmailVerified = false,
+            FirstName = request.FirstName,
+            LastName = request.LastName,
+            Username = normalizedUsername,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+            var userTier = new UserTier
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                TierId = freeTier.Id,
+                ActiveFrom = now,
+                ActiveUntil = null,
+                IsActive = true,
+                Notes = "Assigned during email registration",
+                CreatedAt = now,
+                UpdatedAt = now
             };
 
+            user.UserTiers.Add(userTier);
+
             _context.Users.Add(user);
+            _context.UserTiers.Add(userTier);
+
+            var activeTierInfo = new UserTierInfo(freeTier.Id, freeTier.Name, now, null);
 
             // Assign default role (assumes cascade on UserRoles; no AsNoTracking here)
             var userRole = await _context.Roles
@@ -270,11 +306,14 @@ public sealed class AuthController : BaseApiController
 
             if (userRole != null)
             {
-                _context.UserRoles.Add(new UserRole
+                var userRoleLink = new UserRole
                 {
                     UserId = userId,
                     RoleId = userRole.Id
-                });
+                };
+
+                _context.UserRoles.Add(userRoleLink);
+                user.UserRoles.Add(userRoleLink);
             }
 
             // Create email verification token
@@ -305,7 +344,11 @@ public sealed class AuthController : BaseApiController
                 // Non-fatal: user can resend verification
             }
 
-            var userInfo = BuildUserInfo(user, userRole != null ? new[] { userRole.Name } : Array.Empty<string>());
+            var userInfo = await BuildUserInfoAsync(
+                user,
+                userRole != null ? new[] { userRole.Name } : Array.Empty<string>(),
+                cancellationToken: cancellationToken,
+                activeTierOverride: activeTierInfo);
 
             _logger.LogInformation("User {UserId} registered successfully", user.Id);
 
@@ -361,7 +404,8 @@ public sealed class AuthController : BaseApiController
                     .ThenInclude(u => u.UserRoles)
                         .ThenInclude(ur => ur.Role)
                 .Include(rt => rt.User)
-                    .ThenInclude(u => u.Tier)
+                    .ThenInclude(u => u.UserTiers)
+                        .ThenInclude(ut => ut.Tier)
                 .Include(rt => rt.Session)
                 .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
 
@@ -731,7 +775,8 @@ public sealed class AuthController : BaseApiController
             .AsNoTracking()
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-            .Include(u => u.Tier)
+            .Include(u => u.UserTiers)
+                .ThenInclude(ut => ut.Tier)
             .FirstOrDefaultAsync(u => u.Id == userId, cancellationToken);
 
         if (user == null)
@@ -766,7 +811,10 @@ public sealed class AuthController : BaseApiController
             authMethod = hasGoogleLogin ? "Google" : "EmailPassword";
         }
 
-        var userInfo = BuildUserInfo(user, authMethod: authMethod);
+        var userInfo = await BuildUserInfoAsync(
+            user,
+            authMethod: authMethod,
+            cancellationToken: cancellationToken);
 
         return OkEnvelope(userInfo);
     }
@@ -1264,7 +1312,8 @@ public sealed class AuthController : BaseApiController
                 .ThenInclude(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
             .Include(el => el.User)
-                .ThenInclude(u => u.Tier)
+                .ThenInclude(u => u.UserTiers)
+                    .ThenInclude(ut => ut.Tier)
             .FirstOrDefaultAsync(el => el.Provider == "google" && el.ProviderUserId == googleUser.Id, cancellationToken);
 
         if (existingExternalLogin != null)
@@ -1285,7 +1334,8 @@ public sealed class AuthController : BaseApiController
         var existingUser = await _context.Users
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
-            .Include(u => u.Tier)
+            .Include(u => u.UserTiers)
+                .ThenInclude(ut => ut.Tier)
             .FirstOrDefaultAsync(u => u.Email == googleUser.Email, cancellationToken);
 
         if (existingUser != null)
@@ -1335,6 +1385,18 @@ public sealed class AuthController : BaseApiController
         }
 
         // Create new user
+        var now = DateTimeOffset.UtcNow;
+
+        var freeTier = await _context.Tiers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == (int)TierType.Free, cancellationToken);
+
+        if (freeTier is null)
+        {
+            _logger.LogError("Default free tier definition is missing. Unable to create Google OAuth user for {Email}", googleUser.Email);
+            throw new InvalidOperationException("Default tier configuration is missing.");
+        }
+
         var newUser = new User
         {
             Id = Guid.NewGuid(),
@@ -1347,13 +1409,28 @@ public sealed class AuthController : BaseApiController
             Username = await GenerateUniqueUsername(fullName != string.Empty ? fullName : googleUser.Email.Split('@')[0], cancellationToken),
             DisplayName = string.IsNullOrEmpty(parsedFirstName) ? fullName : parsedFirstName,
             AvatarUrl = googleUser.Picture,
-            TierId = (int)TierType.Free, // Assign free tier by default
             IsActive = true,
-            CreatedAt = DateTimeOffset.UtcNow,
-            UpdatedAt = DateTimeOffset.UtcNow
+            CreatedAt = now,
+            UpdatedAt = now
         };
 
+        var newUserTier = new UserTier
+        {
+            Id = Guid.NewGuid(),
+            UserId = newUser.Id,
+            TierId = freeTier.Id,
+            ActiveFrom = now,
+            ActiveUntil = null,
+            IsActive = true,
+            Notes = "Assigned during Google OAuth registration",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        newUser.UserTiers.Add(newUserTier);
+
         _context.Users.Add(newUser);
+        _context.UserTiers.Add(newUserTier);
 
         // Add external login record
         var newExternalLogin = new ExternalLogin
@@ -1363,7 +1440,7 @@ public sealed class AuthController : BaseApiController
             Provider = "google",
             ProviderUserId = googleUser.Id,
             ProviderEmail = googleUser.Email,
-            LinkedAt = DateTimeOffset.UtcNow
+            LinkedAt = now
         };
 
         _context.ExternalLogins.Add(newExternalLogin);
@@ -1372,11 +1449,14 @@ public sealed class AuthController : BaseApiController
         var defaultRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
         if (defaultRole != null)
         {
-            _context.UserRoles.Add(new UserRole
+            var userRoleLink = new UserRole
             {
                 UserId = newUser.Id,
                 RoleId = defaultRole.Id
-            });
+            };
+
+            _context.UserRoles.Add(userRoleLink);
+            newUser.UserRoles.Add(userRoleLink);
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -1433,7 +1513,10 @@ public sealed class AuthController : BaseApiController
         // Generate JWT with session ID
         var accessToken = _jwtService.GenerateToken(user, session.Id);
 
-        var userInfo = BuildUserInfo(user, authMethod: authMethod);
+        var userInfo = await BuildUserInfoAsync(
+            user,
+            authMethod: authMethod,
+            cancellationToken: cancellationToken);
 
         return new AuthResponse(accessToken, refreshTokenValue, DateTimeOffset.UtcNow.AddMinutes(15), userInfo);
     }
@@ -1465,7 +1548,12 @@ public sealed class AuthController : BaseApiController
     }
 
     // Helper to build a UserInfo response with safe fallbacks for username and names
-    private UserInfo BuildUserInfo(User user, IEnumerable<string>? rolesOverride = null, string? authMethod = null)
+    private async Task<UserInfo> BuildUserInfoAsync(
+        User user,
+        IEnumerable<string>? rolesOverride = null,
+        string? authMethod = null,
+        CancellationToken cancellationToken = default,
+        UserTierInfo? activeTierOverride = null)
     {
         // Ensure username - if missing, generate a generic one: user + short id
         var username = string.IsNullOrWhiteSpace(user.Username)
@@ -1480,6 +1568,9 @@ public sealed class AuthController : BaseApiController
             ? rolesOverride.ToArray()
             : user.UserRoles?.Select(ur => ur.Role.Name).ToArray() ?? Array.Empty<string>();
 
+        var activeTier = activeTierOverride ?? ResolveActiveTier(user);
+        activeTier ??= await GetActiveTierInfoAsync(user.Id, cancellationToken);
+
         return new UserInfo(
             Id: user.Id,
             Email: user.Email,
@@ -1492,9 +1583,53 @@ public sealed class AuthController : BaseApiController
             CreatedAt: user.CreatedAt,
             Roles: roles,
             AuthMethod: authMethod,
-            TierId: user.TierId,
-            TierName: user.Tier?.Name
+            ActiveTier: activeTier
         );
+    }
+
+    private static UserTierInfo? ResolveActiveTier(User user)
+    {
+        if (user.UserTiers is null || user.UserTiers.Count == 0)
+            return null;
+
+        var now = DateTimeOffset.UtcNow;
+
+        var active = user.UserTiers
+            .Where(ut => ut.IsActive &&
+                         ut.ActiveFrom <= now &&
+                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+            .OrderByDescending(ut => ut.ActiveFrom)
+            .FirstOrDefault();
+
+        if (active?.Tier is null)
+            return null;
+
+        return new UserTierInfo(
+            active.TierId,
+            active.Tier.Name,
+            active.ActiveFrom,
+            active.ActiveUntil
+        );
+    }
+
+    private async Task<UserTierInfo?> GetActiveTierInfoAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        return await _context.UserTiers
+            .AsNoTracking()
+            .Where(ut => ut.UserId == userId &&
+                         ut.IsActive &&
+                         ut.ActiveFrom <= now &&
+                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+            .OrderByDescending(ut => ut.ActiveFrom)
+            .Select(ut => new UserTierInfo(
+                ut.TierId,
+                ut.Tier.Name,
+                ut.ActiveFrom,
+                ut.ActiveUntil
+            ))
+            .FirstOrDefaultAsync(cancellationToken);
     }
 
     // Helper method for consistent cookie options

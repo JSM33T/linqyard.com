@@ -12,6 +12,6 @@ public class Tier
 
     public string? Description { get; set; }
 
-    // Navigation property - users who have this tier
-    public ICollection<User> Users { get; set; } = new List<User>();
+    // Navigation property - user tier assignments for this tier
+    public ICollection<UserTier> UserTiers { get; set; } = new List<UserTier>();
 }
