@@ -431,7 +431,7 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
           ) : !groupedData ? (
             <motion.div variants={cardVariants} className="py-16 text-center">
               <div className="h-16 w-16 rounded-full bg-muted/20 flex items-center justify-center mx-auto mb-6">
-                <Globe className="h-8 w-8 text-muted-foreground" />
+                <Image src="/logo.svg" alt="Linqyard" width={40} height={40} className="h-8 w-8 text-muted-foreground" />
               </div>
               <h3 className="text-lg font-semibold mb-2">No links found</h3>
               <p className="text-muted-foreground">You don&apos;t have any links yet.</p>
@@ -479,16 +479,16 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
             <div className="flex flex-col items-center justify-center gap-3 text-center">
               <Link href="/" className="flex items-center gap-2 group">
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
-                  <Globe className="h-4 w-4 text-primary" />
+                  <Image src="/logo.svg" alt="Linqyard" width={28} height={28} className="object-contain" />
                 </div>
                 <span className="font-semibold text-lg group-hover:text-primary transition-colors">Linqyard</span>
               </Link>
               <p className="text-xs text-muted-foreground max-w-md">
-                Create your own beautiful link-in-bio page and share your content with the world.
-              </p>
-              <a href="/account/signup" target="_blank" className="text-xs text-primary hover:underline">
-                Create your free Linqyard
+                powred by Linqyard,  <a href="/account/signup" target="_blank" className="text-xs text-primary hover:underline">
+                Create your own
               </a>
+              </p>
+             
             </div>
           </motion.div>
         </motion.div>
