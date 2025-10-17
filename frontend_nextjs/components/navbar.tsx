@@ -81,6 +81,9 @@ export default function Navbar() {
 
   const THRESHOLD = 2; // px movement before reacting
 
+  const role = (user?.role ?? "").toLowerCase();
+  const canAccessManagement = role === "admin" || role === "mod";
+
 // Helper function to get icon component
 const getIcon = (iconName: string) => {
   const icons: Record<string, any> = {
@@ -341,6 +344,14 @@ const getIcon = (iconName: string) => {
                       Security
                     </Link>
                   </DropdownMenuItem>
+                  {canAccessManagement ? (
+                    <DropdownMenuItem asChild>
+                      <Link href="/management" className="cursor-pointer">
+                        <Wrench className="mr-2 h-4 w-4" />
+                        Management
+                      </Link>
+                    </DropdownMenuItem>
+                  ) : null}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <button
@@ -544,6 +555,17 @@ const getIcon = (iconName: string) => {
                                 Security
                               </Link>
                             </SheetClose>
+                            {canAccessManagement ? (
+                              <SheetClose asChild>
+                                <Link
+                                  href="/management"
+                                  className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+                                >
+                                  <Wrench className="h-4 w-4 mr-2" />
+                                  Management
+                                </Link>
+                              </SheetClose>
+                            ) : null}
                           </div>
                         </div>
                       </>
