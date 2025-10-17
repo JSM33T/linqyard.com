@@ -217,7 +217,10 @@ const getIcon = (iconName: string) => {
                     <ChevronDown className="ml-1 h-3 w-3" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-64 p-2">
+                <DropdownMenuContent
+                  align="start"
+                  className="w-64 p-2 bg-background/70 backdrop-blur supports-[backdrop-filter]:bg-background/60 border shadow-md"
+                >
                   {resourcesLinks.map((resource) => (
                     <DropdownMenuItem key={resource.name} asChild className="cursor-pointer">
                       <Link
