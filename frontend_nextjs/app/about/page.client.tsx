@@ -122,7 +122,7 @@ export default function AboutClient() {
             variants={itemVariants}
           >
             <Button asChild size="lg">
-              <Link href="/account" className="inline-flex items-center">
+              <Link href="/account/signup" className="inline-flex items-center">
                 Get Started Free <ExternalLink className="ml-2 h-4 w-4" />
               </Link>
             </Button>

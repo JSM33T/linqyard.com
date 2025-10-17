@@ -20,6 +20,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { PLAN_FEATURES, extractData, formatCurrency, formatDurationLabel, sortPlans } from "@/app/plans/plan-utils";
 
 declare global {
   interface Window {
@@ -77,21 +78,6 @@ type ApiEnvelope<T> = {
   meta?: any;
 };
 
-const PLAN_FEATURES: Record<string, string[]> = {
-  plus: [
-    "Unlimited links & groups",
-    "Advanced analytics dashboard",
-    "Priority email support",
-    "Custom themes & branding",
-  ],
-  pro: [
-    "Everything in Plus",
-    "Team collaboration tools",
-    "Export analytics & data sync",
-    "Dedicated success manager",
-  ],
-};
-
 const RAZORPAY_SCRIPT_URL = "https://checkout.razorpay.com/v1/checkout.js";
 let razorpayScriptPromise: Promise<void> | null = null;
 
@@ -125,36 +111,6 @@ async function ensureRazorpayScript(): Promise<void> {
   if (!window.Razorpay) {
     throw new Error("Razorpay SDK did not initialize.");
   }
-}
-
-function extractData<T>(payload: any): T | null {
-  if (!payload) return null;
-  if (Array.isArray(payload)) return (payload as unknown) as T;
-  if (typeof payload === "object") {
-    if ("data" in payload) {
-      return payload.data as T;
-    }
-  }
-  return payload as T;
-}
-
-function formatCurrency(amountInMinorUnits: number, currency: string): string {
-  try {
-    return new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: currency === "JPY" ? 0 : 2,
-    }).format(amountInMinorUnits / 100);
-  } catch {
-    return `${currency} ${(amountInMinorUnits / 100).toFixed(2)}`;
-  }
-}
-
-function formatDurationLabel(durationMonths: number): string {
-  if (durationMonths <= 0) return "One-time";
-  if (durationMonths === 1) return "Monthly";
-  if (durationMonths === 12) return "Yearly";
-  return `${durationMonths}-month`;
 }
 
 function extractErrorMessage(error: ApiError | null | undefined): string {
@@ -394,7 +350,7 @@ export default function TierUpgradePage() {
           {paidTiers.map((tier) => {
             const tierName = tier.name.toLowerCase();
             const isCurrent = tierName === activeTierName?.toLowerCase();
-            const plans = tier.plans.sort((a, b) => a.durationMonths - b.durationMonths);
+            const plans = sortPlans(tier);
 
             return (
               <Card key={tier.tierId} className={cn("h-full", isCurrent && "border-primary shadow-lg")}>

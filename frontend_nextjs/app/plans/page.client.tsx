@@ -1,12 +1,27 @@
 "use client";
 
+import dynamic from "next/dynamic";
+import { Suspense, useMemo } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { CheckCircle, Sparkles } from "lucide-react";
+import { Check, CheckCircle, Loader2, Sparkles } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
+import { useGet } from "@/hooks/useApi";
+import { ApiError, TierDetails } from "@/hooks/types";
+import { PLAN_FEATURES, extractData, formatCurrency, formatDurationLabel, sortPlans } from "./plan-utils";
+
+const TierUpgradePage = dynamic(() => import("../account/upgrade/page"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-16 text-muted-foreground">
+      <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+      Preparing your personalized plan&hellip;
+    </div>
+  ),
+});
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -21,38 +36,19 @@ const itemVariants = {
   visible: { y: 0, opacity: 1 },
 };
 
-const tiers = [
-  {
-    id: "free",
-    name: "Free",
-    price: "$0",
-    desc: "Great for getting started — 12 links, 2 groups, basic analytics, and 2 theme presets.",
-    features: ["12 links","2 groups","Basic analytics","Custom Subdomain", "Mobile-optimized", "Email support"],
-    cta: "/account",
-    variant: "default",
-  },
-  {
-    id: "plus",
-    name: "Plus",
-    price: "$2/mo",
-    desc: "For creators who want more customization and improved analytics.",
-    features: ["Unlimited Links","Unlimited Groups", "Advanced analytics", "Priority email support"],
-    cta: "/account/upgrade",
-    variant: "secondary",
-  },
-  {
-    id: "pro",
-    name: "Pro",
-    price: "$5/mo",
-    desc: "Designed for teams and power users — full analytics and team management.",
-    features: ["All Plus features", "Advanced analytics and more dashboards", "Data export"],
-    cta: "/account/upgrade",
-    variant: "outline",
-  },
-];
+type TierResponseEnvelope = { data: TierDetails[] };
 
-export default function PlansClient() {
-  const { isAuthenticated, isInitialized } = useUser();
+function MarketingPlans({
+  tiers,
+  loading,
+  error,
+}: {
+  tiers: TierDetails[];
+  loading: boolean;
+  error: ApiError | null;
+}) {
+  const sortedTiers = useMemo(() => [...tiers].sort((a, b) => a.tierId - b.tierId), [tiers]);
+
   return (
     <div className="min-h-screen bg-background">
       <motion.section
@@ -61,105 +57,181 @@ export default function PlansClient() {
         initial="hidden"
         animate="visible"
       >
-        <motion.div className="space-y-6 max-w-4xl mx-auto" variants={itemVariants}>
-          <Badge variant="secondary" className="text-sm px-4 py-2">
-            <Sparkles className="h-4 w-4 mr-2" /> Pricing
+        <motion.div className="mx-auto max-w-4xl space-y-6" variants={itemVariants}>
+          <Badge variant="secondary" className="px-4 py-2 text-sm">
+            <Sparkles className="mr-2 h-4 w-4" />
+            Pricing
           </Badge>
 
-          <motion.h1 className="text-4xl md:text-6xl font-bold tracking-tight" variants={itemVariants}>
+          <motion.h1 className="text-4xl font-bold tracking-tight md:text-6xl" variants={itemVariants}>
             Simple, predictable pricing
           </motion.h1>
 
-          <motion.p className="text-lg md:text-xl text-muted-foreground" variants={itemVariants}>
-            Choose a plan that fits your needs — start free and upgrade as you grow. Monthly billing with no surprise fees.
+          <motion.p className="text-lg text-muted-foreground md:text-xl" variants={itemVariants}>
+            Start free and upgrade when you&apos;re ready. Monthly or yearly billing, no hidden fees, cancel anytime.
           </motion.p>
 
-          <motion.div className="flex items-center justify-center gap-2 text-sm text-muted-foreground" variants={itemVariants}>
-            <CheckCircle className="h-4 w-4" /> Cancel anytime
-            <CheckCircle className="h-4 w-4 ml-4" /> 30 day money-back (for paid tiers)
-            <CheckCircle className="h-4 w-4 ml-4" /> Secure payments
+          <motion.div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground" variants={itemVariants}>
+            <span className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              Cancel anytime
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              30-day money-back guarantee
+            </span>
+            <span className="flex items-center gap-2">
+              <CheckCircle className="h-4 w-4" />
+              Secure Razorpay payments
+            </span>
           </motion.div>
         </motion.div>
       </motion.section>
 
-      <motion.section className="container mx-auto px-4 py-14" variants={containerVariants} initial="hidden" whileInView="visible" viewport={{ once: true }}>
-        <div className="max-w-5xl mx-auto">
-          <div className="grid md:grid-cols-3 gap-6">
-            {tiers.map((t, i) => (
-              <motion.div key={t.id} initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: i * 0.08 }} viewport={{ once: true }}>
-                {/* outer wrapper made relative so badges or ribbons can be absolutely positioned */}
-                <div className={`relative ${t.id === "plus" ? "z-10 transform scale-105" : ""}`}>
-                  <Card className={`h-full ${t.id === "plus" ? "shadow-2xl border-2 border-primary" : ""}`}>
-                    <CardHeader className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Badge variant={t.variant as "default" | "destructive" | "outline" | "secondary" | null | undefined}>{t.name}</Badge>
+      <motion.section
+        className="container mx-auto px-4 pb-20"
+        variants={containerVariants}
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+      >
+        <div className="mx-auto grid max-w-5xl gap-6 md:grid-cols-3">
+          {sortedTiers.map((tier, index) => {
+            const tierName = tier.name.toLowerCase();
+            const isFree = tierName === "free";
+            const plans = sortPlans(tier);
+            const spotlightPlan = plans[0];
+            const priceLabel =
+              spotlightPlan && spotlightPlan.amount > 0 ? formatCurrency(spotlightPlan.amount, tier.currency) : "Free";
+            const durationLabel = spotlightPlan ? formatDurationLabel(spotlightPlan.durationMonths) : "Flexible";
+            const cta = isFree
+              ? { label: "Get started", href: "/account/signup" }
+              : { label: "Log in to upgrade", href: "/account/login" };
+            const highlight = tierName === "plus";
+
+            return (
+              <motion.div
+                key={tier.tierId}
+                initial={{ opacity: 0, y: 30 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: index * 0.08 }}
+                viewport={{ once: true }}
+              >
+                <Card className={highlight ? "relative z-10 h-full border-primary shadow-2xl" : "h-full"}>
+                  <CardHeader className="text-center">
+                    <div className="flex items-center justify-center gap-2">
+                      <Badge variant={highlight ? "secondary" : "outline"} className="capitalize">
+                        {tier.name}
+                      </Badge>
+                    </div>
+                    {highlight && (
+                      <div className="absolute -top-3 left-1/2 -translate-x-1/2 transform">
+                        <Badge variant="secondary" className="px-3 py-1 text-sm">
+                          Most popular
+                        </Badge>
                       </div>
+                    )}
+                    <CardTitle className="mt-6 text-2xl">
+                      {priceLabel}
+                      {!isFree && spotlightPlan ? (
+                        <span className="text-base font-normal text-muted-foreground">
+                          {" "}
+                          / {durationLabel.toLowerCase()}
+                        </span>
+                      ) : null}
+                    </CardTitle>
+                    <CardDescription className="mt-2">
+                      {tier.description ??
+                        (isFree
+                          ? "Everything you need to publish your profile and start sharing instantly."
+                          : "Unlock deeper analytics, personalization, and workflow automation to grow faster.")}
+                    </CardDescription>
+                  </CardHeader>
 
-                      {/* Highlight badge for the Plus plan */}
-                      {t.id === "plus" && (
-                        <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
-                          <Badge variant="secondary" className="px-3 py-1 text-sm">Most feasible</Badge>
-                        </div>
-                      )}
+                  <CardContent className="space-y-4">
+                    <ul className="space-y-2 text-sm">
+                      {(PLAN_FEATURES[tierName] ?? PLAN_FEATURES.plus ?? []).map((feature) => (
+                        <li key={feature} className="flex items-start gap-2">
+                          <Check className={`mt-0.5 h-4 w-4 ${highlight ? "text-primary" : "text-muted-foreground"}`} />
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                      {!isFree && spotlightPlan ? (
+                        <li className="flex items-start gap-2 text-sm text-muted-foreground">
+                          <Check className="mt-0.5 h-4 w-4 text-primary" />
+                          Billed {durationLabel.toLowerCase()} · processed securely through Razorpay
+                        </li>
+                      ) : null}
+                    </ul>
 
-                      <CardTitle className="mt-6 text-2xl">{t.price}</CardTitle>
-                      <CardDescription className="mt-2">{t.desc}</CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <ul className="text-sm space-y-2">
-                        {t.features.map((f, ii) => (
-                          <li key={ii} className="flex items-start gap-2">
-                            <CheckCircle className={`h-4 w-4 mt-1 ${t.id === "plus" ? "text-primary" : "text-primary"}`} />
-                            <span>{f}</span>
-                          </li>
-                        ))}
-                      </ul>
-
-                      <div className="pt-2">
-                        {t.id === "free" ? (
-                          // Auth-aware CTA: show 'Active' when logged in, otherwise link to signup.
-                          !isInitialized ? (
-                            <button
-                              className="inline-flex items-center justify-center w-full rounded-md px-4 py-3 text-sm font-medium opacity-80 bg-muted text-muted-foreground"
-                              aria-disabled={true}
-                              disabled
-                            >
-                              Loading...
-                            </button>
-                          ) : isAuthenticated ? (
-                            <button
-                              className="inline-flex items-center justify-center w-full rounded-md px-4 py-3 text-sm font-medium bg-primary text-primary-foreground cursor-default"
-                              aria-disabled={true}
-                              disabled
-                            >
-                              Active
-                            </button>
-                          ) : (
-                            <Button asChild size="lg">
-                                <Link href="/account/signup" className="inline-flex items-center justify-center w-full" aria-label="Sign up">
-                                  Get Started (Free)
-                                </Link>
-                            </Button>
-                          )
-                        ) : (
-                          // Paid tiers are coming soon: render a faded, disabled button
-                          <button
-                            className="inline-flex items-center justify-center w-full rounded-md px-4 py-3 text-sm font-medium opacity-60 cursor-not-allowed bg-muted text-muted-foreground"
-                            aria-disabled={true}
-                            disabled
-                          >
-                            Coming soon
-                          </button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
+                    <div className="pt-2">
+                      <Button asChild size="lg" className="w-full">
+                        <Link href={cta.href} aria-label={cta.label}>
+                          {cta.label}
+                        </Link>
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
               </motion.div>
-            ))}
-          </div>
+            );
+          })}
         </div>
+
+        {error && (
+          <div className="mx-auto mt-6 max-w-2xl rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-center text-sm text-destructive">
+            {error.message || "Unable to load plans right now. Please try again shortly."}
+          </div>
+        )}
+
+        {loading && (
+          <div className="flex items-center justify-center py-10 text-muted-foreground">
+            <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+            Loading plans…
+          </div>
+        )}
       </motion.section>
     </div>
   );
+}
+
+export default function PlansClient() {
+  const { isAuthenticated, isInitialized } = useUser();
+  const shouldLoadMarketing = isInitialized && !isAuthenticated;
+
+  const { data: tiersEnvelope, loading, error } = useGet<TierResponseEnvelope>(
+    "/tiers",
+    useMemo(() => ({ enabled: shouldLoadMarketing }), [shouldLoadMarketing]),
+  );
+
+  const tiers = useMemo(() => {
+    const payload = extractData<TierDetails[]>(tiersEnvelope);
+    return Array.isArray(payload) ? payload : [];
+  }, [tiersEnvelope]);
+
+  if (!isInitialized) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+        Loading&hellip;
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex items-center justify-center py-16 text-muted-foreground">
+            <Loader2 className="mr-3 h-5 w-5 animate-spin" />
+            Preparing your personalized plan&hellip;
+          </div>
+        }
+      >
+        <TierUpgradePage />
+      </Suspense>
+    );
+  }
+
+  return <MarketingPlans tiers={tiers} loading={loading} error={error} />;
 }
