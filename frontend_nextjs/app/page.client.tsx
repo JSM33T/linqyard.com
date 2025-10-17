@@ -170,11 +170,11 @@ export default function HomeClient() {
         }}
       />
       {/* soft watermark top-left using /logo.svg (decorative) */}
-      <div
+      {/* <div
         aria-hidden
         className="pointer-events-none absolute top-0 left-0
                    w-[50vw] max-w-[640px] h-[45vh]
-                   opacity-[0.12] dark:opacity-[0.14]"
+                   opacity-[1] dark:opacity-[1]"
         style={{
           zIndex: 9,
           backgroundImage: "url('/logo.svg')",
@@ -185,7 +185,27 @@ export default function HomeClient() {
           WebkitMaskImage: "radial-gradient(80% 80% at 0% 0%, black 65%, transparent 100%)",
           mixBlendMode: "soft-light",
         }}
-      />
+      /> */}
+      <div
+  aria-hidden
+  className="
+    pointer-events-none absolute top-0 left-0
+    w-[50vw] max-w-[640px] h-[45vh]
+    bg-no-repeat bg-left-top bg-contain
+    opacity-10 dark:opacity-60
+    mix-blend-multiply dark:mix-blend-soft-light
+    [mask-image:radial-gradient(80%_80%_at_0%_0%,#000_65%,transparent_100%)]
+    [--m:radial-gradient(80%_80%_at_0%_0%,_#000_65%,_transparent_100%)]
+  "
+  style={{
+    zIndex: 9,
+    backgroundImage: "url('/logo.svg')",
+    WebkitMaskImage:
+      "radial-gradient(80% 80% at 0% 0%, black 65%, transparent 100%)",
+    maskImage:
+      "radial-gradient(80% 80% at 0% 0%, black 65%, transparent 100%)",
+  }}
+/>
       {/* decorative grid / gradient */}
       <div
         aria-hidden
