@@ -365,7 +365,7 @@ const getIcon = (iconName: string) => {
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : (
-              <Link href="/account/signup">
+              <Link href="/account">
                 <Button variant="default" size="sm" className="rounded-full">
                   <User className="h-3 w-3 mr-1" />
                   Join

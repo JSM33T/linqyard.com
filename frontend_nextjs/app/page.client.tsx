@@ -245,7 +245,7 @@ export default function HomeClient() {
                   keep things simple and privacy‑aware.
                 </motion.p><motion.div variants={item} className="flex flex-col sm:flex-row gap-3">
                   <Button size="lg" className="text-base px-7">
-                    <Link className="inline-flex items-center" href={"/account/login"}>Join Now<ArrowRight className="ml-2 h-5 w-5" /></Link>
+                    <Link className="inline-flex items-center" href={"/account/signup"}>Join Now<ArrowRight className="ml-2 h-5 w-5" /></Link>
                   </Button>
                   <Button asChild variant="outline" size="lg" className="text-base px-7">
                     <Link href="/about" className="inline-flex items-center">Learn more</Link>
