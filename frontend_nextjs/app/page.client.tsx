@@ -16,6 +16,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useUser, userHelpers } from "@/contexts/UserContext";
+import { TextHoverEffect } from "@/components/ui/text-hover-effect";
 
 // ---- Motion presets ----
 const container = {
@@ -138,9 +139,8 @@ function AltSection({
   return (
     <section className="container mx-auto px-4 py-14 md:py-20">
       <div
-        className={`grid items-center gap-10 md:gap-12 lg:gap-16 lg:grid-cols-2 ${
-          flip ? "lg:[&>div:nth-child(1)]:order-2" : ""
-        }`}
+        className={`grid items-center gap-10 md:gap-12 lg:gap-16 lg:grid-cols-2 ${flip ? "lg:[&>div:nth-child(1)]:order-2" : ""
+          }`}
       >
         {/* text */}
         <motion.div
@@ -229,6 +229,7 @@ export default function HomeClient() {
                 <Badge variant="secondary" className="text-sm px-3 py-1.5 inline-flex items-center">
                   <Sparkles className="h-4 w-4 mr-2" /> Welcome aboard
                 </Badge>
+             
                 <motion.h1 variants={item} className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight">
                   Welcome onboard, <span className="text-primary">{displayName}</span>!
                 </motion.h1>
