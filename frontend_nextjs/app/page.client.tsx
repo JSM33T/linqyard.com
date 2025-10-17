@@ -22,10 +22,12 @@ import {
   Globe,
   Wand2,
   Link2,
+  Edit,
   BarChart3,
   Mail,
   ExternalLink,
 } from "lucide-react";
+import { useUser, userHelpers } from "@/contexts/UserContext";
 
 // ---- Motion presets ----
 const container = {
@@ -92,11 +94,11 @@ function DeviceMockup() {
                 {/* profile header */}
                 <div className="flex items-center gap-3">
                   <div className="h-12 w-12 shrink-0 rounded-full bg-primary/10 grid place-items-center">
-                    <Sparkles className="h-5 w-5 text-primary" />
+                    <Link2 className="h-5 w-5 text-primary" />
                   </div>
                   <div>
                     <p className="text-sm text-muted-foreground">linqyard</p>
-                    <p className="text-base font-semibold">@yourname</p>
+                    <p className="text-base font-semibold"><span className="text-primary">@linqyard</span></p>
                   </div>
                 </div>
 
@@ -155,6 +157,8 @@ function DeviceMockup() {
 }
 
 export default function HomeClient() {
+  const { user, isAuthenticated } = useUser();
+  const displayName = userHelpers.getDisplayName(user);
   return (
     <div className="min-h-screen bg-background relative">
        <div
@@ -201,36 +205,61 @@ export default function HomeClient() {
       >
         <div className="grid lg:grid-cols-2 gap-10 items-center">
           <motion.div className="space-y-6" variants={item}>
-            <Badge variant="secondary" className="text-sm px-3 py-1.5 inline-flex items-center">
-              <Link2 className="h-4 w-4 mr-2" /> Less Chaos • More Clicks
-            </Badge>
+            {isAuthenticated && (
+              <>
+                <Badge variant="secondary" className="text-sm px-3 py-1.5 inline-flex items-center">
+                  <Sparkles className="h-4 w-4 mr-2" /> Welcome aboard
+                </Badge>
 
-            <motion.h1
-              variants={item}
-              className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight"
-            >
-              Stop juggling links. Share one.
-            </motion.h1>
+                <motion.h1
+                  variants={item}
+                  className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight"
+                >
+                  Welcome onboard, <span className="text-primary">{displayName}</span>!
+                </motion.h1>
 
-            <motion.p variants={item} className="text-lg md:text-xl text-muted-foreground max-w-2xl">
-              Share a single page for all your socials and actions. Update in minutes,
-              keep things simple and privacy‑aware.
-            </motion.p>
+                <motion.p variants={item} className="text-lg md:text-xl text-muted-foreground max-w-2xl">
+                  Jump back into your page. Create new links or tweak your profile.
+                </motion.p>
 
-            <motion.div variants={item} className="flex flex-col sm:flex-row gap-3">
-              <Button size="lg" className="text-base px-7">
-                <Link className="inline-flex items-center" href={"/account/login"}>Join Now<ArrowRight className="ml-2 h-5 w-5" /></Link>
-              </Button>
-              <Button asChild variant="outline" size="lg" className="text-base px-7">
-                <Link href="/about" className="inline-flex items-center">Learn more</Link>
-              </Button>
-            </motion.div>
+                <motion.div variants={item} className="flex flex-col sm:flex-row gap-3">
+                  <Button asChild size="lg" className="text-base px-7">
+                    <Link href="/account/links" className="inline-flex items-center"><Link2 className="h-5 w-5 mr-2" />Create Links</Link>
+                  </Button>
+                  <Button asChild variant="outline" size="lg" className="text-base px-7">
+                    <Link href="/account/profile" className="inline-flex items-center"><Edit className="h-5 w-5 mr-2" />Edit Profile</Link>
+                  </Button>
+                </motion.div>
+              </>
+            )}
+            {!isAuthenticated && (
+            <><Badge variant="secondary" className="text-sm px-3 py-1.5 inline-flex items-center">
+                <Link2 className="h-4 w-4 mr-2" /> Less Chaos • More Clicks
+              </Badge><motion.h1
+                variants={item}
+                className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight"
+              >
+                  Stop juggling links. Share one.
+                </motion.h1><motion.p variants={item} className="text-lg md:text-xl text-muted-foreground max-w-2xl">
+                  Share a single page for all your socials and actions. Update in minutes,
+                  keep things simple and privacy‑aware.
+                </motion.p><motion.div variants={item} className="flex flex-col sm:flex-row gap-3">
+                  <Button size="lg" className="text-base px-7">
+                    <Link className="inline-flex items-center" href={"/account/login"}>Join Now<ArrowRight className="ml-2 h-5 w-5" /></Link>
+                  </Button>
+                  <Button asChild variant="outline" size="lg" className="text-base px-7">
+                    <Link href="/about" className="inline-flex items-center">Learn more</Link>
+                  </Button>
+                </motion.div></>
+            )}
 
-            <motion.div variants={item} className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground pt-2">
-              <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> No credit card for demo</span>
-              <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> Email support</span>
-              <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> Sensible defaults</span>
-            </motion.div>
+            {!isAuthenticated && (
+              <motion.div variants={item} className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground pt-2">
+                <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> No credit card for demo</span>
+                <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> Email support</span>
+                <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> Sensible defaults</span>
+              </motion.div>
+            )}
           </motion.div>
 
           {/* phone mockup */}
