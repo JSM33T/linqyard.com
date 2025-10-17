@@ -97,6 +97,14 @@ export default async function BlogViewPage({ params }: BlogPageParams) {
     <section className="container mx-auto max-w-3xl py-16 lg:py-24">
       <article className="space-y-10">
         <header className="space-y-6">
+          <div>
+            <Link
+              href="/blog"
+              className="text-sm text-muted-foreground transition-colors hover:text-primary"
+            >
+              ← Back to blogs
+            </Link>
+          </div>
           <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
             <time dateTime={post.meta.datePublished}>
               {dateFormatter.format(publishedDate)}

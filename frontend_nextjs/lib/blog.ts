@@ -14,6 +14,7 @@ export type BlogFrontMatter = {
   };
   tags: string[];
   datePublished: string;
+  isActive?: boolean;
 };
 
 export type BlogSummary = BlogFrontMatter & {
@@ -81,6 +82,13 @@ const validateFrontMatter = (slug: string, data: any): BlogFrontMatter => {
     }
   }
 
+  if (
+    typeof data.isActive !== "undefined" &&
+    typeof data.isActive !== "boolean"
+  ) {
+    errors.push("isActive must be a boolean when provided");
+  }
+
   if (errors.length > 0) {
     throw new Error(
       `Invalid front matter in blog post "${slug}": ${errors.join(", ")}`
@@ -97,6 +105,7 @@ const validateFrontMatter = (slug: string, data: any): BlogFrontMatter => {
     },
     tags: data.tags,
     datePublished: data.datePublished,
+    isActive: typeof data.isActive === "boolean" ? data.isActive : true,
   };
 };
 
@@ -135,6 +144,8 @@ export const getAllPosts = async (): Promise<BlogSummary[]> => {
 
   return posts
     .map((post) => post.meta)
+    // filter out posts that explicitly set isActive: false
+    .filter((meta) => meta.isActive !== false)
     .sort((a, b) => {
       const dateA = new Date(a.datePublished).valueOf();
       const dateB = new Date(b.datePublished).valueOf();
