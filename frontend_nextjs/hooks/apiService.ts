@@ -231,7 +231,7 @@ class ApiService {
 
   // Generic request method
   private async request<T = any>(
-    method: 'GET' | 'POST',
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
     endpoint: string,
     data?: any,
     config: RequestConfig = {},
@@ -253,7 +253,7 @@ class ApiService {
       credentials: 'include', // Include cookies in all requests
     };
 
-    if (method === 'POST' && data !== undefined) {
+    if (method !== 'GET' && data !== undefined) {
       if (isFormData) {
         requestInit.body = data as BodyInit;
       } else {
@@ -319,6 +319,11 @@ class ApiService {
   // POST method
   async post<T = any>(endpoint: string, data?: any, config?: RequestConfig): Promise<ApiResponse<T>> {
     return this.request<T>('POST', endpoint, data, config);
+  }
+
+  // PUT method
+  async put<T = any>(endpoint: string, data?: any, config?: RequestConfig): Promise<ApiResponse<T>> {
+    return this.request<T>('PUT', endpoint, data, config);
   }
 
   // Set token in localStorage

@@ -5,7 +5,7 @@ export * from './types';
 export { apiService, ApiService } from './apiService';
 
 // Export hooks
-export { useGet, usePost, useApi } from './useApi';
+export { useGet, usePost, usePut, useApi } from './useApi';
 export { useSessionCheck } from './useSessionCheck';
 
 // Utility functions for common API patterns

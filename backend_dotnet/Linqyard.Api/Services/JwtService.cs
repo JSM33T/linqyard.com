@@ -1,10 +1,12 @@
+using System;
+using System.Linq;
+using System.Text;
+using System.Security.Claims;
+using System.IdentityModel.Tokens.Jwt;
 using Linqyard.Api.Configuration;
 using Linqyard.Entities;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
 
 namespace Linqyard.Api.Services;
 
@@ -45,6 +47,19 @@ public class JwtService : IJwtService
         if (!string.IsNullOrEmpty(user.DisplayName))
         {
             claims.Add(new Claim("display_name", user.DisplayName));
+        }
+
+        if (user.UserRoles is not null && user.UserRoles.Count > 0)
+        {
+            var roleNames = user.UserRoles
+                .Where(ur => ur.Role != null && !string.IsNullOrWhiteSpace(ur.Role.Name))
+                .Select(ur => ur.Role.Name)
+                .Distinct(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var roleName in roleNames)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, roleName));
+            }
         }
 
         var tokenDescriptor = new SecurityTokenDescriptor

@@ -25,6 +25,12 @@ export interface RequestConfig {
   requireAuth?: boolean;
 }
 
+export interface PagedMeta {
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export interface UseApiState<T = any> {
   data: T | null;
   loading: boolean;
@@ -354,6 +360,69 @@ export interface LogoutAllSessionsResponse {
     deletedAt: string;
   };
   meta: any | null;
+}
+
+// Admin user management types
+export interface AdminUserListItem {
+  id: string;
+  email: string;
+  emailVerified: boolean;
+  username: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  verifiedBadge: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  activeTier?: UserTierInfo | null;
+  roles: string[];
+}
+
+export interface AdminUserListResponse {
+  data: AdminUserListItem[];
+  meta: PagedMeta | null;
+}
+
+export interface AdminUserTierAssignment {
+  assignmentId: string;
+  tierId: number;
+  tierName: string;
+  activeFrom: string;
+  activeUntil?: string | null;
+  isActive: boolean;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminUserDetails {
+  profile: ProfileData;
+  activeTier?: UserTierInfo | null;
+  tierHistory: AdminUserTierAssignment[];
+  isActive: boolean;
+}
+
+export interface AdminUserDetailsResponse {
+  data: AdminUserDetails;
+  meta: any | null;
+}
+
+export interface AdminUpdateUserRequest {
+  email?: string | null;
+  emailVerified?: boolean | null;
+  username?: string | null;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  coverUrl?: string | null;
+  timezone?: string | null;
+  locale?: string | null;
+  verifiedBadge?: boolean | null;
+  isActive?: boolean | null;
+  roles?: string[] | null;
 }
 
 // Refresh Token Types
