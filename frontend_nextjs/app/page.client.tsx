@@ -16,7 +16,6 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { useUser, userHelpers } from "@/contexts/UserContext";
-import { TextHoverEffect } from "@/components/ui/text-hover-effect";
 
 // ---- Motion presets ----
 const container = {

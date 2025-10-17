@@ -137,7 +137,7 @@ export default function AdminUsersPage() {
     refetch: refetchUsers,
   } = useGet<AdminUserListResponse>(listEndpoint, listConfig);
 
-  const users = listData?.data ?? [];
+  const users = useMemo(() => listData?.data ?? [], [listData?.data]);
   const meta: PagedMeta | null = listData?.meta ?? null;
   const totalPages = useMemo(() => {
     if (!meta) return 1;
@@ -202,6 +202,11 @@ export default function AdminUsersPage() {
     );
   }, [formState]);
 
+  const selectableRoles = useMemo(() => {
+    const current = formState?.roles ?? [];
+    return Array.from(new Set([...ROLE_OPTIONS, ...current]));
+  }, [formState?.roles]);
+
   if (!isInitialized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -233,11 +238,6 @@ export default function AdminUsersPage() {
       </div>
     );
   }
-
-  const selectableRoles = useMemo(() => {
-    const current = formState?.roles ?? [];
-    return Array.from(new Set([...ROLE_OPTIONS, ...current]));
-  }, [formState?.roles]);
 
   const start = meta ? Math.min(meta.total, (meta.page - 1) * meta.pageSize + 1) : users.length ? 1 : 0;
   const end = meta ? Math.min(meta.total, meta.page * meta.pageSize) : users.length;

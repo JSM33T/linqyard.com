@@ -13,16 +13,21 @@ type PreProps = React.HTMLAttributes<HTMLPreElement>
 type TableProps = React.TableHTMLAttributes<HTMLTableElement>
 
 const createHeading =
-  (component: `h${1 | 2 | 3 | 4 | 5 | 6}`, className: string) =>
-  ({ className: customClassName, ...props }: HeadingProps) =>
-    React.createElement(component, {
-      className: cn(
-        "scroll-m-20 font-semibold tracking-tight text-foreground",
-        className,
-        customClassName
-      ),
-      ...props,
-    })
+  (component: `h${1 | 2 | 3 | 4 | 5 | 6}`, className: string) => {
+    const HeadingComponent = ({ className: customClassName, ...props }: HeadingProps) =>
+      React.createElement(component, {
+        className: cn(
+          "scroll-m-20 font-semibold tracking-tight text-foreground",
+          className,
+          customClassName
+        ),
+        ...props,
+      })
+    
+    HeadingComponent.displayName = `Heading${component.toUpperCase()}`
+    
+    return HeadingComponent
+  }
 
 const components = {
   h1: createHeading("h1", "text-4xl sm:text-5xl"),
