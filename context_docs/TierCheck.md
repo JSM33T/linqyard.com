@@ -22,14 +22,20 @@ public class Tier
     public int Id { get; set; }
     
     [Required]
-    [MaxLength(50)]
+    [MaxLength(64)]
     public string Name { get; set; } = string.Empty;
+
+    [MaxLength(3)]
+    public string Currency { get; set; } = "INR";
     
     [MaxLength(500)]
     public string? Description { get; set; }
     
-    // Navigation property
-    public ICollection<User> Users { get; set; } = new List<User>();
+    public ICollection<TierBillingCycle> BillingCycles { get; set; } = new List<TierBillingCycle>();
+
+    public ICollection<UserTier> UserTiers { get; set; } = new List<UserTier>();
+
+    public ICollection<Coupon> Coupons { get; set; } = new List<Coupon>();
 }
 ```
 
@@ -55,7 +61,79 @@ namespace Linqyard.Entities.Enums
 - IntelliSense support
 - Easy to maintain
 
-### 3. User Entity Update
+### 3. TierBillingCycle Entity
+
+Located in: `Linqyard.Entities/TierBillingCycle.cs`
+
+```csharp
+public class TierBillingCycle
+{
+    [Key]
+    public int Id { get; set; }
+
+    [Required]
+    public int TierId { get; set; }
+
+    [Required]
+    [MaxLength(64)]
+    public string BillingPeriod { get; set; } = null!;
+
+    public int Amount { get; set; }
+
+    public int DurationMonths { get; set; }
+
+    [MaxLength(256)]
+    public string? Description { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public Tier Tier { get; set; } = null!;
+}
+```
+
+Billing cycles store the Razorpay-facing price (in paise) and the duration in months for each tier/period combination (monthly, yearly, etc.). They replace the legacy `appsettings.json` configuration.
+
+### 4. Coupon Entity
+
+Located in: `Linqyard.Entities/Coupon.cs`
+
+```csharp
+public class Coupon
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [Required]
+    [MaxLength(64)]
+    public string Code { get; set; } = null!;
+
+    public decimal DiscountPercentage { get; set; }
+
+    public string? Description { get; set; }
+
+    public int? TierId { get; set; }
+
+    public int? MaxRedemptions { get; set; }
+
+    public int RedemptionCount { get; set; }
+
+    public DateTimeOffset? ValidFrom { get; set; }
+
+    public DateTimeOffset? ValidUntil { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public Tier? Tier { get; set; }
+}
+```
+
+Coupons are optional per-tier discounts that can later be surfaced in the checkout experience. A `TierId` of `null` can be used for global coupons.
+
+### 5. User Entity Update
 
 Located in: `Linqyard.Entities/User.cs`
 
@@ -71,7 +149,7 @@ public class User
 }
 ```
 
-### 4. Database Context Configuration
+### 6. Database Context Configuration
 
 Located in: `Linqyard.Api/Data/LinqyardDbContext.cs`
 
@@ -109,7 +187,7 @@ private void SeedTiers(ModelBuilder modelBuilder)
 }
 ```
 
-### 5. Assign Default Tier on User Registration
+### 7. Assign Default Tier on User Registration
 
 Located in: `Linqyard.Api/Controllers/AuthController.cs`
 
@@ -156,7 +234,7 @@ public async Task<IActionResult> GoogleCallback([FromQuery] string code, [FromQu
 }
 ```
 
-### 6. Include Tier in API Responses
+### 8. Include Tier in API Responses
 
 Located in: `Linqyard.Api/Controllers/AuthController.cs`
 
@@ -190,7 +268,7 @@ return Ok(new ApiResponse<AuthResponse>
 });
 ```
 
-### 7. Tier-Based Resource Limits
+### 9. Tier-Based Resource Limits
 
 Located in: `Linqyard.Api/Controllers/LinksController.cs` and `GroupsController.cs`
 
@@ -250,7 +328,7 @@ public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest reque
 }
 ```
 
-### 8. Create Database Migration
+### 10. Create Database Migration
 
 ```bash
 # Navigate to API project
@@ -592,15 +670,60 @@ if (!canCreate) {
 -- Tiers table
 CREATE TABLE "Tiers" (
     "Id" INTEGER PRIMARY KEY,
-    "Name" VARCHAR(50) NOT NULL,
+    "Name" CITEXT NOT NULL,
+    "Currency" VARCHAR(3) NOT NULL DEFAULT 'INR',
     "Description" VARCHAR(500)
 );
 
 -- Insert default tiers
-INSERT INTO "Tiers" VALUES 
-    (1, 'free', 'Free tier - 12 links, 2 groups'),
-    (2, 'plus', 'Plus tier - Unlimited links and groups'),
-    (3, 'pro', 'Pro tier - All features unlocked');
+INSERT INTO "Tiers" ("Id", "Name", "Currency", "Description") VALUES 
+    (1, 'free', 'INR', 'Free tier - 12 links, 2 groups'),
+    (2, 'plus', 'INR', 'Plus tier - Unlimited links and groups'),
+    (3, 'pro', 'INR', 'Pro tier - All features unlocked');
+
+-- Tier billing cycles replace appsettings.json pricing
+CREATE TABLE "TierBillingCycles" (
+    "Id" INTEGER PRIMARY KEY,
+    "TierId" INTEGER NOT NULL REFERENCES "Tiers"("Id") ON DELETE CASCADE,
+    "BillingPeriod" CITEXT NOT NULL,
+    "Amount" INTEGER NOT NULL,
+    "DurationMonths" INTEGER NOT NULL DEFAULT 1,
+    "Description" VARCHAR(256),
+    "IsActive" BOOLEAN NOT NULL DEFAULT TRUE,
+    CONSTRAINT "AK_TierBillingCycles_TierId_BillingPeriod" UNIQUE ("TierId", "BillingPeriod")
+);
+
+INSERT INTO "TierBillingCycles"("Id", "TierId", "BillingPeriod", "Amount", "DurationMonths", "Description", "IsActive") VALUES
+    (1, 2, 'monthly', 6900, 1, 'Monthly subscription for Plus', TRUE),
+    (2, 2, 'yearly', 70000, 12, 'Yearly subscription for Plus', TRUE),
+    (3, 3, 'monthly', 9900, 1, 'Monthly subscription for Pro', TRUE),
+    (4, 3, 'yearly', 95000, 12, 'Yearly subscription for Pro', TRUE);
+
+-- Coupon table prepares for future discount handling
+CREATE TABLE "Coupons" (
+    "Id" UUID PRIMARY KEY,
+    "Code" CITEXT NOT NULL UNIQUE,
+    "DiscountPercentage" NUMERIC(5,2) NOT NULL,
+    "Description" VARCHAR(256),
+    "TierId" INTEGER REFERENCES "Tiers"("Id") ON DELETE SET NULL,
+    "MaxRedemptions" INTEGER,
+    "RedemptionCount" INTEGER NOT NULL DEFAULT 0,
+    "ValidFrom" TIMESTAMPTZ,
+    "ValidUntil" TIMESTAMPTZ,
+    "IsActive" BOOLEAN NOT NULL DEFAULT TRUE,
+    "CreatedAt" TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now()),
+    "UpdatedAt" TIMESTAMPTZ NOT NULL DEFAULT timezone('utc', now())
+);
+
+INSERT INTO "Coupons"(
+    "Id", "Code", "DiscountPercentage", "Description", "TierId", "MaxRedemptions",
+    "RedemptionCount", "ValidFrom", "ValidUntil", "IsActive", "CreatedAt", "UpdatedAt")
+VALUES (
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'WELCOME10', 10.00,
+    'Introductory 10% discount for Plus tier', 2, 500, 0,
+    '2025-10-01T00:00:00+00', '2026-10-01T00:00:00+00', TRUE,
+    '2025-10-01T00:00:00+00', '2025-10-01T00:00:00+00'
+);
 
 -- Update Users table
 ALTER TABLE "Users" ADD COLUMN "TierId" INTEGER;
@@ -613,6 +736,6 @@ UPDATE "Users" SET "TierId" = 1 WHERE "TierId" IS NULL;
 
 ---
 
-**Last Updated:** October 11, 2025  
-**Version:** 1.0  
+**Last Updated:** October 21, 2025  
+**Version:** 1.1  
 **Author:** Development Team

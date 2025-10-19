@@ -81,12 +81,26 @@ export interface TierOrderData {
   amount: number;
   currency: string;
   razorpayKeyId: string;
+  subtotalAmount: number;
+  discountAmount: number;
+  couponCode?: string | null;
 }
 
 export interface TierUpgradeConfirmationData {
   tier: UserTierInfo;
   message: string;
   billingPeriod: string;
+}
+
+export interface TierCouponPreviewData {
+  couponCode: string;
+  discountPercentage: number;
+  discountAmount: number;
+  subtotalAmount: number;
+  finalAmount: number;
+  currency: string;
+  description?: string | null;
+  validUntil?: string | null;
 }
 
 // Authentication API Types

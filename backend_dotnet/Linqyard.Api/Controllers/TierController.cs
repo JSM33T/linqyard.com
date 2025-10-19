@@ -53,6 +53,51 @@ public sealed class TierController : BaseApiController
     }
 
     /// <summary>
+    /// Validate a coupon against a tier and billing period.
+    /// </summary>
+    [HttpPost("coupons/preview")]
+    [AllowAnonymous]
+    [ProducesResponseType(typeof(ApiResponse<TierCouponPreviewResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> PreviewCoupon(
+        [FromBody] TierCouponPreviewRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null ||
+            string.IsNullOrWhiteSpace(request.TierName) ||
+            string.IsNullOrWhiteSpace(request.BillingPeriod) ||
+            string.IsNullOrWhiteSpace(request.CouponCode))
+        {
+            return BadRequestProblem("Tier name, billing period, and coupon code are required.");
+        }
+
+        try
+        {
+            var preview = await _tierService.PreviewCouponAsync(request, cancellationToken);
+            return OkEnvelope(preview);
+        }
+        catch (TierNotFoundException ex)
+        {
+            _logger.LogWarning(ex, "Tier not found while previewing coupon {CouponCode}", request.CouponCode);
+            return NotFoundProblem("Tier not found", ex.Message);
+        }
+        catch (TierServiceException ex)
+        {
+            _logger.LogWarning(ex, "Coupon preview failed for tier {TierName}", request.TierName);
+            return BadRequestProblem("Unable to apply coupon", ex.Message);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error while previewing coupon for tier {TierName}", request.TierName);
+            return Problem(
+                StatusCodes.Status500InternalServerError,
+                "Internal Server Error",
+                "An unexpected error occurred while previewing the coupon.");
+        }
+    }
+
+    /// <summary>
     /// Create a Razorpay order so the authenticated user can upgrade their tier.
     /// </summary>
     [HttpPost("upgrade/order")]

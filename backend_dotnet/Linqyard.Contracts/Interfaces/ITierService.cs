@@ -37,4 +37,11 @@ public interface ITierService
         Guid userId,
         TierPaymentConfirmationRequest request,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Validates a coupon for a particular tier billing period and computes the discounted amount.
+    /// </summary>
+    Task<TierCouponPreviewResponse> PreviewCouponAsync(
+        TierCouponPreviewRequest request,
+        CancellationToken cancellationToken = default);
 }
