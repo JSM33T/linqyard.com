@@ -36,7 +36,9 @@ export default function GoogleOAuthButton({
       // Call backend to get Google OAuth URL
       const response = await get<GoogleInitResponse>("/auth/google");
       
-      if (response.data?.data?.authUrl) {
+      const authUrl = response.data?.data?.authUrl;
+
+      if (authUrl) {
         // Store current page URL for redirect after OAuth
         const currentUrl = window.location.pathname;
         localStorage.setItem("oauthRedirect", currentUrl === "/account/login" || currentUrl === "/account/signup" ? "/" : currentUrl);
@@ -46,7 +48,7 @@ export default function GoogleOAuthButton({
         
         // Small delay to show the success message and loading state
         setTimeout(() => {
-          window.location.href = response.data.data.authUrl;
+          window.location.href = authUrl;
         }, 500);
         
         // Don't set loading to false here since we're redirecting

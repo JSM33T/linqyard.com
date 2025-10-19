@@ -61,6 +61,7 @@ export function generateFingerprint(): string {
       components.push(canvas.toDataURL());
     }
   } catch (e) {
+    console.warn('Canvas fingerprinting failed:', e);
     // Canvas fingerprinting blocked
   }
 
@@ -76,6 +77,7 @@ export function generateFingerprint(): string {
       }
     }
   } catch (e) {
+    console.warn('WebGL fingerprinting failed:', e);
     // WebGL fingerprinting blocked
   }
 
@@ -117,6 +119,7 @@ export function getFingerprint(): string {
       return stored;
     }
   } catch (e) {
+    console.warn('localStorage access failed:', e);
     // Fall through to generate new one
   }
 

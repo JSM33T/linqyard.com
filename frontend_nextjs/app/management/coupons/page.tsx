@@ -1,7 +1,6 @@
 "use client";
 
 import type { JSX } from "react";
-import type { JSX } from "react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import { BadgePercent, Loader2, Pencil, Plus, Trash2, X, Check } from "lucide-react";

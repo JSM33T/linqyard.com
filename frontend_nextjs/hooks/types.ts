@@ -6,7 +6,8 @@ export interface ApiConfig {
 }
 
 export interface ApiResponse<T = any> {
-  data: T;
+  // Response body may be absent (204 No Content) or empty; make nullable to reflect runtime
+  data: T | null;
   status: number;
   statusText: string;
   headers: Record<string, string>;

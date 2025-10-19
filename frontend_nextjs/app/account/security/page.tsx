@@ -271,7 +271,7 @@ export default function SecurityPage() {
       const response = await apiService.post<LogoutSessionResponse>(`/profile/sessions/${sessionToLogout.id}/logout`, {});
       
       if (response.status === 200) {
-        toast.success(response.data.data?.message || "Session logged out successfully");
+        toast.success(response.data?.data?.message || "Session logged out successfully");
         refetchSessions();
       }
     } catch (error: any) {
@@ -304,7 +304,7 @@ export default function SecurityPage() {
       const response = await logoutAllSessions();
       
       if (response.status === 200) {
-        toast.success(response.data.data.message);
+        toast.success(response.data?.data.message);
         refetchSessions();
       }
     } catch (error: any) {

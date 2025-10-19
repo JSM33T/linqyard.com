@@ -341,7 +341,7 @@ function AnalyticsOverview({ countsProp }: { countsProp?: Array<{ linkId: string
     } catch (err) {
       console.warn('AnalyticsOverview build rows failed', err);
     }
-  }, [countsResp, linksResp]);
+  }, [countsResp, linksResp, countsProp]);
 
   const total = useMemo(() => rows.reduce((s, r) => s + (r.clicks || 0), 0), [rows]);
 

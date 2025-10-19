@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo } from "react";
+import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
 import { Globe, ExternalLink } from "lucide-react";
@@ -108,8 +109,10 @@ export default function LinksPreview({ groups, ungrouped, header, user }: { grou
                   <div className="relative w-full">
                     <div className="overflow-hidden aspect-[820/312] bg-gradient-to-r from-primary/8 via-transparent to-primary/8">
                       {user.coverUrl ? (
-                        // eslint-disable-next-line jsx-a11y/img-redundant-alt
-                        <img src={user.coverUrl} alt="Cover image" className="w-full h-full object-cover" />
+                        // cover image using next/image fill inside positioned parent
+                        <div className="relative w-full h-full">
+                          <Image src={user.coverUrl} alt="Cover image" className="w-full h-full object-cover" fill unoptimized />
+                        </div>
                       ) : (
                         <div className="h-full w-full bg-gradient-to-r from-primary/10 via-background to-primary/10" />
                       )}
@@ -117,7 +120,7 @@ export default function LinksPreview({ groups, ungrouped, header, user }: { grou
 
                     <div className="absolute inset-x-0 bottom-0 flex justify-center translate-y-1/2 z-20">
                       <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-full ring-4 ring-card bg-white overflow-hidden shadow-lg relative">
-                        <img src={user.avatarUrl ?? "/images/avatar-placeholder.png"} alt={user.username} className="w-full h-full object-cover" />
+                        <Image src={user.avatarUrl ?? "/images/avatar-placeholder.png"} alt={user.username} width={96} height={96} className="w-full h-full object-cover" unoptimized />
                       </div>
                     </div>
                   </div>

@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import Link from "next/link";
+import Image from "next/image";
 import AccessDenied from "@/components/AccessDenied";
 import { ArrowLeft, Camera, User, Mail, Calendar, Shield, Edit, Save, X, Clock, Globe } from "lucide-react";
 import { toast } from "sonner";
@@ -531,7 +532,15 @@ export default function ProfilePage() {
                 {/* Cover Section */}
                 <div className="relative w-full overflow-hidden rounded-xl bg-muted aspect-[820/312]">
                   {coverImage ? (
-                    <img src={coverImage} alt="Cover" className="h-full w-full object-cover" />
+                    <div className="absolute inset-0">
+                      <Image
+                        src={coverImage}
+                        alt="Cover"
+                        fill
+                        className="object-cover"
+                        sizes="(max-width: 768px) 100vw, 820px"
+                      />
+                    </div>
                   ) : (
                     <div className="h-full w-full bg-gradient-to-br from-muted to-muted-foreground/30" />
                   )}

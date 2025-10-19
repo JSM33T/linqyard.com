@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardTitle, CardContent, CardDescription } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
@@ -31,9 +32,11 @@ export default function NotFound() {
         <Card className="w-full max-w-lg shadow-md">
         <CardHeader>
           <div className="flex items-center justify-center mb-4">
-            <img
+            <Image
               src="/logo.svg"
               alt="Linqyard logo"
+              width={112}
+              height={112}
               className="h-28 w-28 object-contain drop-shadow-[0_10px_20px_rgba(0,0,0,0.06)]"
             />
           </div>
