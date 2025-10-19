@@ -22,6 +22,13 @@ const dateFormatter = new Intl.DateTimeFormat("en-US", {
 export default async function BlogPage() {
   const posts = await getAllPosts()
 
+  const getCoverSrc = (src?: string) => {
+    if (!src) return undefined
+    if (/^https?:\/\//i.test(src)) return src
+    const path = src.startsWith("/") ? src : `/${src}`
+    return `${path}`
+  }
+
   return (
     <section className="container mx-auto max-w-5xl px-4 sm:px-6 space-y-12 py-16 lg:space-y-16 lg:py-24">
       <header className="space-y-4 text-center">
@@ -48,67 +55,81 @@ export default async function BlogPage() {
           {posts.map((post) => (
             <Card
               key={post.slug}
-              className="group border-border/70 transition-colors hover:border-primary/50"
+              className="group border-border/70 transition-colors hover:border-primary/50 overflow-hidden p-0"
             >
-              <CardHeader className="gap-4 pb-0">
-                <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-                  <time dateTime={post.datePublished}>
-                    {dateFormatter.format(new Date(post.datePublished))}
-                  </time>
-                  <Separator
-                    orientation="vertical"
-                    className="h-4 w-px bg-border/70"
-                  />
-                  <span>{post.readMinutes} min read</span>
-                  <Separator
-                    orientation="vertical"
-                    className="h-4 w-px bg-border/70"
-                  />
-                  <Link
-                    href={post.author.url}
-                    className="font-medium text-foreground transition-colors hover:text-primary"
-                  >
-                    {post.author.name}
-                  </Link>
-                </div>
+              <div className="md:flex md:items-center">
+                  {post.coverImage && (
+                    <div className="md:w-1/3 flex-shrink-0 p-6 flex items-center justify-center">
+                      <div className="relative w-full md:max-w-[320px] pb-[56.25%] md:pb-[75%] overflow-hidden rounded-md bg-muted flex items-center justify-center">
+                        <img
+                          src={getCoverSrc(post.coverImage)}
+                          alt={post.title}
+                          className="absolute inset-0 w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                  )}
 
-                <div className="space-y-2">
-                  <CardTitle className="text-2xl font-semibold leading-tight sm:text-3xl">
+                  <div className="p-6 flex-1">
+                  <div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                    <time dateTime={post.datePublished}>
+                      {dateFormatter.format(new Date(post.datePublished))}
+                    </time>
+                    <Separator
+                      orientation="vertical"
+                      className="h-4 w-px bg-border/70"
+                    />
+                    <span>{post.readMinutes} min read</span>
+                    <Separator
+                      orientation="vertical"
+                      className="h-4 w-px bg-border/70"
+                    />
+                    <Link
+                      href={post.author.url}
+                      className="font-medium text-foreground transition-colors hover:text-primary"
+                    >
+                      {post.author.name}
+                    </Link>
+                  </div>
+
+                  <div className="space-y-2 mt-3">
+                    <CardTitle className="text-2xl font-semibold leading-tight sm:text-3xl">
+                      <Link
+                        href={`/blog/${post.slug}`}
+                        className="transition-colors hover:text-primary"
+                      >
+                        {post.title}
+                      </Link>
+                    </CardTitle>
+                    <CardDescription className="text-base text-muted-foreground">
+                      {post.description}
+                    </CardDescription>
+                  </div>
+
+                  {post.tags.length > 0 && (
+                    <div className="flex flex-wrap gap-2 pt-4">
+                      {post.tags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          className="border-transparent bg-accent text-accent-foreground shadow-sm"
+                        >
+                          {tag}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="mt-6">
                     <Link
                       href={`/blog/${post.slug}`}
-                      className="transition-colors hover:text-primary"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-primary/80"
                     >
-                      {post.title}
+                      Read article
+                      <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
                     </Link>
-                  </CardTitle>
-                  <CardDescription className="text-base text-muted-foreground">
-                    {post.description}
-                  </CardDescription>
+                  </div>
                 </div>
-              </CardHeader>
-
-              {post.tags.length > 0 && (
-                <CardContent className="flex flex-wrap gap-2 pb-0 pt-6">
-                  {post.tags.map((tag) => (
-                    <Badge
-                      key={tag}
-                      className="border-transparent bg-accent text-accent-foreground shadow-sm"
-                    >
-                      {tag}
-                    </Badge>
-                  ))}
-                </CardContent>
-              )}
-
-              <CardFooter className="flex items-center justify-between pt-6">
-                <Link
-                  href={`/blog/${post.slug}`}
-                  className="inline-flex items-center gap-2 text-sm font-medium text-primary transition-colors hover:text-primary/80"
-                >
-                  Read article
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </Link>
-              </CardFooter>
+              </div>
             </Card>
           ))}
         </div>

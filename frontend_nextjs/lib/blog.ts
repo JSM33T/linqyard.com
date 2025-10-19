@@ -15,6 +15,7 @@ export type BlogFrontMatter = {
   tags: string[];
   datePublished: string;
   isActive?: boolean;
+  coverImage?: string;
 };
 
 export type BlogSummary = BlogFrontMatter & {
@@ -89,6 +90,28 @@ const validateFrontMatter = (slug: string, data: any): BlogFrontMatter => {
     errors.push("isActive must be a boolean when provided");
   }
 
+  if (typeof data.coverImage !== "undefined") {
+    if (typeof data.coverImage !== "string") {
+      errors.push("coverImage must be a string when provided");
+    } else {
+      const v = data.coverImage.trim()
+      if (v.length === 0) {
+        errors.push("coverImage must be a non-empty string when provided")
+      } else if (/^https?:\/\//i.test(v)) {
+        // absolute URL, validate via URL constructor
+        try {
+          // eslint-disable-next-line no-new
+          new URL(v)
+        } catch {
+          errors.push("coverImage must be a valid absolute URL when provided")
+        }
+      } else {
+        // relative path (e.g. /images/...) — allow it
+        // nothing to do
+      }
+    }
+  }
+
   if (errors.length > 0) {
     throw new Error(
       `Invalid front matter in blog post "${slug}": ${errors.join(", ")}`
@@ -106,6 +129,7 @@ const validateFrontMatter = (slug: string, data: any): BlogFrontMatter => {
     tags: data.tags,
     datePublished: data.datePublished,
     isActive: typeof data.isActive === "boolean" ? data.isActive : true,
+    coverImage: typeof data.coverImage === "string" ? data.coverImage : undefined,
   };
 };
 

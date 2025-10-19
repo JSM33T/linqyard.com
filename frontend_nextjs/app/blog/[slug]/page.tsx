@@ -45,7 +45,10 @@ export const generateMetadata = async ({
   params,
 }: BlogPageParams): Promise<Metadata> => {
   try {
-    const post = await getPostBySlug(params.slug)
+    // `params` can be a thenable in Next.js — await it before accessing properties
+    // See: https://nextjs.org/docs/messages/sync-dynamic-apis
+    const awaitedParams = (await params) as BlogPageParams["params"]
+    const post = await getPostBySlug(awaitedParams.slug)
     const publishedDate = new Date(post.meta.datePublished)
 
     return {
@@ -79,7 +82,9 @@ export const generateMetadata = async ({
 }
 
 export default async function BlogViewPage({ params }: BlogPageParams) {
-  const post = await loadPostOr404(params.slug)
+  // `params` can be a thenable in Next.js — await it before accessing properties
+  const awaitedParams = (await params) as BlogPageParams["params"]
+  const post = await loadPostOr404(awaitedParams.slug)
 
   const { content } = await compileMDX({
     source: post.body,
@@ -93,6 +98,14 @@ export default async function BlogViewPage({ params }: BlogPageParams) {
   })
 
   const publishedDate = new Date(post.meta.datePublished)
+  // normalize cover image URL: if it's not an absolute URL, prefix with base + /cover
+  const getCoverSrc = (src?: string) => {
+    if (!src) return undefined
+    if (/^https?:\/\//i.test(src)) return src
+    const path = src.startsWith("/") ? src : `/${src}`
+    return `${path}`
+  }
+
   return (
     <section className="container mx-auto max-w-3xl px-4 sm:px-6 py-16 lg:py-24">
       <article className="space-y-10">
@@ -124,6 +137,16 @@ export default async function BlogViewPage({ params }: BlogPageParams) {
               {post.meta.description}
             </p>
           </div>
+
+          {post.meta.coverImage && (
+            <div className="mt-6 overflow-hidden rounded-md">
+              <img
+                src={getCoverSrc(post.meta.coverImage)}
+                alt={`Cover image for ${post.meta.title}`}
+                className="w-full h-64 sm:h-72 md:h-80 object-cover rounded-md"
+              />
+            </div>
+          )}
 
           <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
             <span className="uppercase tracking-[0.2em] text-xs text-accent">
