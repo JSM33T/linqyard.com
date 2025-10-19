@@ -291,7 +291,11 @@ class ApiService {
         await this.handleError(response);
       }
 
-      const responseData = await response.json();
+      let responseData: T | null = null;
+      if (response.status !== 204) {
+        const raw = await response.text();
+        responseData = raw ? (JSON.parse(raw) as T) : null;
+      }
       
       return {
         data: responseData,
@@ -324,6 +328,11 @@ class ApiService {
   // PUT method
   async put<T = any>(endpoint: string, data?: any, config?: RequestConfig): Promise<ApiResponse<T>> {
     return this.request<T>('PUT', endpoint, data, config);
+  }
+
+  // DELETE method
+  async delete<T = any>(endpoint: string, config?: RequestConfig): Promise<ApiResponse<T>> {
+    return this.request<T>('DELETE', endpoint, undefined, config);
   }
 
   // Set token in localStorage

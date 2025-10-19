@@ -73,6 +73,39 @@ export interface TierDetails {
   plans: TierBillingCycle[];
 }
 
+export interface TierAdminBillingCycle {
+  id: number;
+  billingPeriod: string;
+  amount: number;
+  durationMonths: number;
+  description?: string | null;
+  isActive: boolean;
+}
+
+export interface TierAdminDetails {
+  tierId: number;
+  name: string;
+  currency: string;
+  description?: string | null;
+  billingCycles: TierAdminBillingCycle[];
+}
+
+export interface CouponAdmin {
+  id: string;
+  code: string;
+  discountPercentage: number;
+  description?: string | null;
+  tierId?: number | null;
+  tierName?: string | null;
+  maxRedemptions?: number | null;
+  redemptionCount: number;
+  validFrom?: string | null;
+  validUntil?: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TierOrderData {
   tierName: string;
   billingPeriod: string;

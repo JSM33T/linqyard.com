@@ -7,7 +7,7 @@ import AccessDenied from "@/components/AccessDenied";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ShieldCheck, Users as UsersIcon, Layers, Hammer } from "lucide-react";
+import { ShieldCheck, Users as UsersIcon, Layers, Hammer, TicketPercent, Activity } from "lucide-react";
 
 type ToolCard = {
   title: string;
@@ -35,6 +35,20 @@ export default function ManagementHomePage() {
         icon: UsersIcon,
         badge: "Admin",
       });
+      tools.push({
+        title: "Tier Management",
+        description: "Adjust subscription tiers, billing cycles, and availability.",
+        href: "/management/tiers",
+        icon: Layers,
+        badge: "Admin",
+      });
+      tools.push({
+        title: "Coupon Management",
+        description: "Create and monitor promotional coupon codes.",
+        href: "/management/coupons",
+        icon: TicketPercent,
+        badge: "Admin",
+      });
     }
 
     if (isModerator) {
@@ -51,7 +65,7 @@ export default function ManagementHomePage() {
       title: "System Status",
       description: "Quick links to infrastructure dashboards and uptime monitoring.",
       href: "/status",
-      icon: Layers,
+      icon: Activity,
     });
 
     return tools;

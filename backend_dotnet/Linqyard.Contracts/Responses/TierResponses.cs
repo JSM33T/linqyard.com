@@ -84,3 +84,66 @@ public sealed record TierCouponPreviewResponse(
     string Currency,
     string? Description,
     DateTimeOffset? ValidUntil);
+
+/// <summary>
+/// Detailed tier information for admin consoles, including billing cycles.
+/// </summary>
+/// <param name="TierId">Database identifier.</param>
+/// <param name="Name">Canonical tier name.</param>
+/// <param name="Currency">Currency code used for pricing.</param>
+/// <param name="Description">Optional tier description.</param>
+/// <param name="BillingCycles">Full billing cycle list for the tier.</param>
+public sealed record TierAdminDetailsResponse(
+    int TierId,
+    string Name,
+    string Currency,
+    string? Description,
+    IReadOnlyList<TierAdminBillingCycleResponse> BillingCycles);
+
+/// <summary>
+/// Represents a billing cycle as viewed/edited from the admin console.
+/// </summary>
+/// <param name="Id">Primary key of the billing cycle.</param>
+/// <param name="BillingPeriod">Identifier such as "monthly".</param>
+/// <param name="Amount">Price in the smallest unit.</param>
+/// <param name="DurationMonths">Duration of the plan in months.</param>
+/// <param name="Description">Optional description override.</param>
+/// <param name="IsActive">Indicates if the plan can be purchased.</param>
+public sealed record TierAdminBillingCycleResponse(
+    int Id,
+    string BillingPeriod,
+    int Amount,
+    int DurationMonths,
+    string? Description,
+    bool IsActive);
+
+/// <summary>
+/// Coupon payload exposed to admin clients.
+/// </summary>
+/// <param name="Id">Coupon identifier.</param>
+/// <param name="Code">Coupon code (case-insensitive).</param>
+/// <param name="DiscountPercentage">Percent discount represented by the coupon.</param>
+/// <param name="Description">Optional description.</param>
+/// <param name="TierId">Tier the coupon is limited to (null for global).</param>
+/// <param name="TierName">Human readable tier name if limited.</param>
+/// <param name="MaxRedemptions">Maximum number of times this coupon can be redeemed.</param>
+/// <param name="RedemptionCount">Number of completed redemptions.</param>
+/// <param name="ValidFrom">Optional start time.</param>
+/// <param name="ValidUntil">Optional expiration.</param>
+/// <param name="IsActive">Whether the coupon can currently be used.</param>
+/// <param name="CreatedAt">Creation timestamp.</param>
+/// <param name="UpdatedAt">Last update timestamp.</param>
+public sealed record CouponAdminResponse(
+    Guid Id,
+    string Code,
+    decimal DiscountPercentage,
+    string? Description,
+    int? TierId,
+    string? TierName,
+    int? MaxRedemptions,
+    int RedemptionCount,
+    DateTimeOffset? ValidFrom,
+    DateTimeOffset? ValidUntil,
+    bool IsActive,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);

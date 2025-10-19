@@ -39,3 +39,75 @@ public sealed record TierCouponPreviewRequest(
     string TierName,
     string BillingPeriod,
     string CouponCode);
+
+/// <summary>
+/// Request payload for creating a new billing cycle for a tier.
+/// </summary>
+/// <param name="TierId">Tier to which the billing cycle belongs.</param>
+/// <param name="BillingPeriod">Identifier such as "monthly" or "yearly".</param>
+/// <param name="Amount">Price expressed in the smallest currency unit.</param>
+/// <param name="DurationMonths">Duration of the plan in months.</param>
+/// <param name="Description">Optional description override.</param>
+/// <param name="IsActive">Whether the billing cycle should be immediately purchasable.</param>
+public sealed record TierBillingCycleCreateRequest(
+    int TierId,
+    string BillingPeriod,
+    int Amount,
+    int DurationMonths,
+    string? Description,
+    bool IsActive);
+
+/// <summary>
+/// Request payload for updating an existing tier billing cycle.
+/// </summary>
+/// <param name="BillingPeriod">Identifier such as "monthly" or "yearly".</param>
+/// <param name="Amount">Price expressed in the smallest currency unit.</param>
+/// <param name="DurationMonths">Duration of the plan in months.</param>
+/// <param name="Description">Optional description override.</param>
+/// <param name="IsActive">Whether the billing cycle should be purchasable.</param>
+public sealed record TierBillingCycleUpdateRequest(
+    string BillingPeriod,
+    int Amount,
+    int DurationMonths,
+    string? Description,
+    bool IsActive);
+
+/// <summary>
+/// Request payload for creating a coupon.
+/// </summary>
+/// <param name="Code">Coupon code (case-insensitive).</param>
+/// <param name="DiscountPercentage">Discount percentage between 0 and 100.</param>
+/// <param name="Description">Optional description.</param>
+/// <param name="TierId">Optional tier limitation.</param>
+/// <param name="MaxRedemptions">Maximum allowed redemptions.</param>
+/// <param name="ValidFrom">Optional start date.</param>
+/// <param name="ValidUntil">Optional expiration date.</param>
+/// <param name="IsActive">Whether the coupon is active.</param>
+public sealed record CouponCreateRequest(
+    string Code,
+    decimal DiscountPercentage,
+    string? Description,
+    int? TierId,
+    int? MaxRedemptions,
+    DateTimeOffset? ValidFrom,
+    DateTimeOffset? ValidUntil,
+    bool IsActive);
+
+/// <summary>
+/// Request payload for updating an existing coupon.
+/// </summary>
+/// <param name="DiscountPercentage">Discount percentage between 0 and 100.</param>
+/// <param name="Description">Optional description.</param>
+/// <param name="TierId">Optional tier limitation.</param>
+/// <param name="MaxRedemptions">Maximum allowed redemptions.</param>
+/// <param name="ValidFrom">Optional start date.</param>
+/// <param name="ValidUntil">Optional expiration date.</param>
+/// <param name="IsActive">Whether the coupon is active.</param>
+public sealed record CouponUpdateRequest(
+    decimal DiscountPercentage,
+    string? Description,
+    int? TierId,
+    int? MaxRedemptions,
+    DateTimeOffset? ValidFrom,
+    DateTimeOffset? ValidUntil,
+    bool IsActive);

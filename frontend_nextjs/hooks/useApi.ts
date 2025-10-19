@@ -203,6 +203,10 @@ export function useApi() {
     return apiService.put<T>(endpoint, data, config);
   }, []);
 
+  const del = useCallback(<T = any>(endpoint: string, config?: RequestConfig) => {
+    return apiService.delete<T>(endpoint, config);
+  }, []);
+
   // Wrap apiService methods with stable callbacks so their identity doesn't change across renders
   const setToken = useCallback((token: string) => apiService.setToken(token), []);
   const setRefreshToken = useCallback((token: string) => apiService.setRefreshToken(token), []);
@@ -219,6 +223,7 @@ export function useApi() {
     get,
     post,
     put,
+    delete: del,
     setToken,
     setRefreshToken,
     setTokens,
