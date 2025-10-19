@@ -94,7 +94,7 @@ export default async function BlogViewPage({ params }: BlogPageParams) {
 
   const publishedDate = new Date(post.meta.datePublished)
   return (
-    <section className="container mx-auto max-w-3xl py-16 lg:py-24">
+    <section className="container mx-auto max-w-3xl px-4 sm:px-6 py-16 lg:py-24">
       <article className="space-y-10">
         <header className="space-y-6">
           <div>

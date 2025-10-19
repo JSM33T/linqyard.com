@@ -23,7 +23,7 @@ export default async function BlogPage() {
   const posts = await getAllPosts()
 
   return (
-    <section className="container mx-auto max-w-5xl space-y-12 py-16 lg:space-y-16 lg:py-24">
+    <section className="container mx-auto max-w-5xl px-4 sm:px-6 space-y-12 py-16 lg:space-y-16 lg:py-24">
       <header className="space-y-4 text-center">
         <p className="text-sm font-semibold uppercase tracking-[0.25em] text-accent">
           Blog
