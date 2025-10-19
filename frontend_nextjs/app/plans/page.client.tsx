@@ -7,11 +7,19 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { Check, CheckCircle, Loader2, Sparkles } from "lucide-react";
 import { useUser } from "@/contexts/UserContext";
 import { useGet } from "@/hooks/useApi";
 import { ApiError, TierDetails } from "@/hooks/types";
-import { PLAN_FEATURES, extractData, formatCurrency, formatDurationLabel, sortPlans } from "./plan-utils";
+import {
+  PLAN_FEATURES,
+  extractData,
+  formatBillingPeriodLabel,
+  formatCurrency,
+  formatDurationLabel,
+  sortPlans,
+} from "./plan-utils";
 
 const TierUpgradePage = dynamic(() => import("../account/upgrade/page"), {
   ssr: false,
@@ -118,7 +126,7 @@ function MarketingPlans({
                 viewport={{ once: true }}
               >
                 <Card className={highlight ? "relative z-10 h-full border-primary shadow-2xl" : "h-full"}>
-                  <CardHeader className="text-center">
+                  <CardHeader className="text-center space-y-6">
                     <div className="flex items-center justify-center gap-2">
                       <Badge variant={highlight ? "secondary" : "outline"} className="capitalize">
                         {tier.name}
@@ -131,24 +139,68 @@ function MarketingPlans({
                         </Badge>
                       </div>
                     )}
-                    <CardTitle className="mt-6 text-2xl">
-                      {priceLabel}
-                      {!isFree && spotlightPlan ? (
-                        <span className="text-base font-normal text-muted-foreground">
-                          {" "}
-                          / {durationLabel.toLowerCase()}
-                        </span>
-                      ) : null}
-                    </CardTitle>
-                    <CardDescription className="mt-2">
-                      {tier.description ??
-                        (isFree
-                          ? "Everything you need to publish your profile and start sharing instantly."
-                          : "Unlock deeper analytics, personalization, and workflow automation to grow faster.")}
-                    </CardDescription>
+                    <div className="space-y-2">
+                      <CardTitle className="text-3xl">
+                        {priceLabel}
+                        {!isFree && spotlightPlan ? (
+                          <span className="text-base font-normal text-muted-foreground">
+                            {" "}
+                            / {durationLabel.toLowerCase()}
+                          </span>
+                        ) : null}
+                      </CardTitle>
+                      <CardDescription>
+                        {tier.description ??
+                          (isFree
+                            ? "Everything you need to publish your profile and start sharing instantly."
+                            : "Unlock deeper analytics, personalization, and workflow automation to grow faster.")}
+                      </CardDescription>
+                    </div>
                   </CardHeader>
 
-                  <CardContent className="space-y-4">
+                  <CardContent className="space-y-6">
+                    <div className="space-y-3 text-sm">
+                      {plans.length === 0 ? (
+                        <div className="rounded-lg border border-dashed px-4 py-3 text-muted-foreground">
+                          Pricing configuration coming soon.
+                        </div>
+                      ) : (
+                        plans.map((plan) => {
+                          const isFeatured = plan === spotlightPlan && !isFree;
+                          const billingLabel = formatBillingPeriodLabel(plan.billingPeriod);
+                          return (
+                            <div
+                              key={`${tier.tierId}-${plan.billingPeriod}`}
+                              className={`rounded-lg border px-4 py-3 text-left transition ${
+                                isFeatured ? "border-primary bg-primary/5" : "border-border"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-lg font-semibold">
+                                    {formatCurrency(plan.amount, tier.currency)}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {billingLabel} · {formatDurationLabel(plan.durationMonths).toLowerCase()} billing
+                                  </div>
+                                </div>
+                                {isFeatured && (
+                                  <Badge variant="secondary" className="text-xs uppercase tracking-wide">
+                                    Best value
+                                  </Badge>
+                                )}
+                              </div>
+                              {plan.description ? (
+                                <p className="mt-2 text-xs text-muted-foreground">{plan.description}</p>
+                              ) : null}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+
+                    {plans.length > 0 && <Separator />}
+
                     <ul className="space-y-2 text-sm">
                       {(PLAN_FEATURES[tierName] ?? PLAN_FEATURES.plus ?? []).map((feature) => (
                         <li key={feature} className="flex items-start gap-2">
@@ -159,7 +211,7 @@ function MarketingPlans({
                       {!isFree && spotlightPlan ? (
                         <li className="flex items-start gap-2 text-sm text-muted-foreground">
                           <Check className="mt-0.5 h-4 w-4 text-primary" />
-                          Billed {durationLabel.toLowerCase()} · processed securely through Razorpay
+                          Coupon-ready Razorpay checkout once you activate
                         </li>
                       ) : null}
                     </ul>

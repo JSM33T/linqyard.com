@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
@@ -25,23 +26,22 @@ public sealed class TierService : ITierService
         DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
     };
 
+    private sealed record CouponEvaluation(Coupon Coupon, int DiscountAmount, int FinalAmount);
+
     private readonly LinqyardDbContext _db;
     private readonly ILogger<TierService> _logger;
     private readonly RazorpaySettings _razorpay;
-    private readonly TierPricingOptions _pricing;
     private readonly IHttpClientFactory _httpClientFactory;
 
     public TierService(
         LinqyardDbContext db,
         ILogger<TierService> logger,
         IOptions<RazorpaySettings> razorpayOptions,
-        IOptions<TierPricingOptions> pricingOptions,
         IHttpClientFactory httpClientFactory)
     {
         _db = db;
         _logger = logger;
         _razorpay = razorpayOptions.Value;
-        _pricing = pricingOptions.Value;
         _httpClientFactory = httpClientFactory;
     }
 
@@ -50,6 +50,7 @@ public sealed class TierService : ITierService
     {
         var tiers = await _db.Tiers
             .AsNoTracking()
+            .Include(t => t.BillingCycles.Where(bc => bc.IsActive))
             .OrderBy(t => t.Id)
             .ToListAsync(cancellationToken);
 
@@ -57,33 +58,27 @@ public sealed class TierService : ITierService
         {
             var plans = new List<TierPlanDetailsResponse>();
             string? description = tier.Description;
+            var currency = ResolveCurrency(tier.Currency);
 
-            if (_pricing.Plans.TryGetValue(tier.Name, out var configuredPlan) &&
-                configuredPlan is not null)
+            var orderedCycles = tier.BillingCycles
+                .Where(cycle => cycle.IsActive)
+                .OrderBy(cycle => cycle.DurationMonths <= 0 ? int.MaxValue : cycle.DurationMonths)
+                .ThenBy(cycle => cycle.BillingPeriod, StringComparer.OrdinalIgnoreCase);
+
+            foreach (var cycle in orderedCycles)
             {
-                description = configuredPlan.Description ?? description;
-
-                var orderedCycles = configuredPlan.BillingCycles
-                    .OrderBy(kvp => kvp.Value.DurationMonths <= 0 ? int.MaxValue : kvp.Value.DurationMonths)
-                    .ThenBy(kvp => kvp.Key, StringComparer.OrdinalIgnoreCase);
-
-                foreach (var (cycleKey, cycleOptions) in orderedCycles)
-                {
-                    if (cycleOptions is null) continue;
-
-                    plans.Add(new TierPlanDetailsResponse(
-                        cycleKey,
-                        cycleOptions.Amount,
-                        cycleOptions.DurationMonths,
-                        cycleOptions.Description ?? configuredPlan.Description ?? tier.Description));
-                }
+                plans.Add(new TierPlanDetailsResponse(
+                    cycle.BillingPeriod,
+                    cycle.Amount,
+                    cycle.DurationMonths,
+                    cycle.Description ?? description));
             }
 
             return new TierDetailsResponse(
                 tier.Id,
                 tier.Name,
                 description,
-                _pricing.Currency,
+                currency,
                 plans);
         }).ToList();
 
@@ -111,6 +106,57 @@ public sealed class TierService : ITierService
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task<TierCouponPreviewResponse> PreviewCouponAsync(
+        TierCouponPreviewRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+        if (string.IsNullOrWhiteSpace(request.TierName))
+        {
+            throw new TierServiceException("Tier name is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.BillingPeriod))
+        {
+            throw new TierServiceException("Billing period is required.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.CouponCode))
+        {
+            throw new TierServiceException("Coupon code is required.");
+        }
+
+        var tier = await GetTierByNameAsync(request.TierName, cancellationToken);
+        var planContext = await ResolveBillingPlanAsync(tier.Id, request.BillingPeriod, cancellationToken);
+        var plan = planContext.BillingCycle;
+
+        var couponEvaluation = await ResolveCouponAsync(
+            tier.Id,
+            plan.Amount,
+            request.CouponCode,
+            cancellationToken,
+            trackEntity: false,
+            requireCoupon: true);
+
+        if (couponEvaluation is null)
+        {
+            throw new TierServiceException("Unable to apply coupon.");
+        }
+
+        var coupon = couponEvaluation.Coupon;
+        var currency = ResolveCurrency(tier.Currency);
+
+        return new TierCouponPreviewResponse(
+            coupon.Code,
+            coupon.DiscountPercentage,
+            couponEvaluation.DiscountAmount,
+            plan.Amount,
+            couponEvaluation.FinalAmount,
+            currency,
+            coupon.Description,
+            coupon.ValidUntil);
+    }
+
     public async Task<TierOrderResponse> CreateUpgradeOrderAsync(
         Guid userId,
         TierUpgradeRequest request,
@@ -134,23 +180,39 @@ public sealed class TierService : ITierService
             throw new TierServiceException("Billing period is required.");
         }
 
-        var planContext = ResolveBillingPlan(tier.Name, billingPeriod);
+        var planContext = await ResolveBillingPlanAsync(tier.Id, billingPeriod, cancellationToken);
         var plan = planContext.BillingCycle;
+        var couponEvaluation = await ResolveCouponAsync(
+            tier.Id,
+            plan.Amount,
+            request.CouponCode,
+            cancellationToken,
+            trackEntity: false,
+            requireCoupon: false);
+        var discountAmount = couponEvaluation?.DiscountAmount ?? 0;
+        var finalAmount = couponEvaluation?.FinalAmount ?? plan.Amount;
+        var appliedCouponCode = couponEvaluation?.Coupon.Code;
+
+        if (finalAmount <= 0)
+        {
+            throw new TierServiceException("Coupon reduces the payable amount below the supported minimum.");
+        }
+
         var currentTier = await GetUserActiveTierAsync(userId, cancellationToken);
         if (currentTier is not null && currentTier.TierId == tier.Id)
         {
             throw new TierAlreadyActiveException($"User already has the {tier.Name} tier.");
         }
 
-    EnsureRazorpayConfigured();
-    var client = CreateRazorpayClient();
-
-    var receipt = GenerateReceipt(tier.Name, userId);
+        EnsureRazorpayConfigured();
+        var client = CreateRazorpayClient();
+        var currencyCode = ResolveCurrency(tier.Currency);
+        var receipt = GenerateReceipt(tier.Name, userId);
 
         var payload = new
         {
-            amount = plan.Amount,
-            currency = _pricing.Currency,
+            amount = finalAmount,
+            currency = currencyCode,
             receipt,
             payment_capture = 1,
             notes = new
@@ -158,7 +220,10 @@ public sealed class TierService : ITierService
                 userId = userId.ToString(),
                 tierId = tier.Id,
                 tierName = tier.Name,
-                billingPeriod = planContext.BillingPeriodKey
+                billingPeriod = planContext.BillingPeriodKey,
+                subtotalAmount = plan.Amount,
+                discountAmount,
+                couponCode = appliedCouponCode
             }
         };
 
@@ -183,7 +248,7 @@ public sealed class TierService : ITierService
 
         var orderId = root.GetProperty("id").GetString() ?? throw new TierServiceException("Razorpay order id missing.");
         var amount = root.GetProperty("amount").GetInt32();
-        var currency = root.GetProperty("currency").GetString() ?? _pricing.Currency;
+        var orderCurrency = root.GetProperty("currency").GetString() ?? currencyCode;
         var returnedReceipt = root.GetProperty("receipt").GetString() ?? receipt;
 
         _logger.LogInformation("Created Razorpay order {OrderId} for user {UserId} upgrading to {Tier} tier.",
@@ -195,8 +260,11 @@ public sealed class TierService : ITierService
             orderId,
             returnedReceipt,
             amount,
-            currency,
-            _razorpay.KeyId);
+            orderCurrency,
+            _razorpay.KeyId,
+            plan.Amount,
+            discountAmount,
+            appliedCouponCode);
     }
 
     public async Task<TierUpgradeConfirmationResponse> ConfirmUpgradeAsync(
@@ -220,14 +288,32 @@ public sealed class TierService : ITierService
             throw new TierServiceException("Billing period is required.");
         }
 
-        var planContext = ResolveBillingPlan(tier.Name, billingPeriod);
+        var planContext = await ResolveBillingPlanAsync(tier.Id, billingPeriod, cancellationToken);
         var plan = planContext.BillingCycle;
+        var couponEvaluation = await ResolveCouponAsync(
+            tier.Id,
+            plan.Amount,
+            request.CouponCode,
+            cancellationToken,
+            trackEntity: true,
+            requireCoupon: !string.IsNullOrWhiteSpace(request.CouponCode));
+        var discountAmount = couponEvaluation?.DiscountAmount ?? 0;
+        var expectedAmount = couponEvaluation?.FinalAmount ?? plan.Amount;
+        var appliedCouponCode = couponEvaluation?.Coupon.Code;
 
         EnsureRazorpayConfigured();
         VerifySignature(request.RazorpayOrderId, request.RazorpayPaymentId, request.RazorpaySignature);
 
         using var orderDetails = await FetchOrderAsync(request.RazorpayOrderId, cancellationToken);
-        ValidateOrder(orderDetails.RootElement, userId, tier, plan.Amount, planContext.BillingPeriodKey);
+        ValidateOrder(
+            orderDetails.RootElement,
+            userId,
+            tier,
+            expectedAmount,
+            planContext.BillingPeriodKey,
+            plan.Amount,
+            discountAmount,
+            appliedCouponCode);
 
         var now = DateTimeOffset.UtcNow;
         var strategy = _db.Database.CreateExecutionStrategy();
@@ -252,6 +338,22 @@ public sealed class TierService : ITierService
                 activeTier.UpdatedAt = now;
             }
 
+            if (couponEvaluation is { Coupon: { } couponEntity })
+            {
+                if (couponEntity.MaxRedemptions.HasValue &&
+                    couponEntity.RedemptionCount >= couponEntity.MaxRedemptions.Value)
+                {
+                    throw new TierServiceException("Coupon redemption limit reached.");
+                }
+
+                couponEntity.RedemptionCount += 1;
+                couponEntity.UpdatedAt = now;
+            }
+
+            var couponNote = string.IsNullOrWhiteSpace(appliedCouponCode)
+                ? string.Empty
+                : $" (coupon {appliedCouponCode})";
+
             var newUserTier = new UserTier
             {
                 Id = Guid.NewGuid(),
@@ -260,7 +362,7 @@ public sealed class TierService : ITierService
                 ActiveFrom = now,
                 ActiveUntil = plan.DurationMonths > 0 ? now.AddMonths(plan.DurationMonths) : null,
                 IsActive = true,
-                Notes = $"Upgraded via Razorpay payment {request.RazorpayPaymentId} ({planContext.BillingPeriodKey})",
+                Notes = $"Upgraded via Razorpay payment {request.RazorpayPaymentId} ({planContext.BillingPeriodKey}){couponNote}",
                 CreatedAt = now,
                 UpdatedAt = now
             };
@@ -282,8 +384,16 @@ public sealed class TierService : ITierService
                 planContext.BillingPeriodKey);
         });
 
-        _logger.LogInformation("Confirmed Razorpay payment {PaymentId} for user {UserId}, upgraded to {Tier}.",
-            request.RazorpayPaymentId, userId, tier.Name);
+        if (!string.IsNullOrWhiteSpace(appliedCouponCode))
+        {
+            _logger.LogInformation("Confirmed Razorpay payment {PaymentId} for user {UserId}, upgraded to {Tier} with coupon {Coupon}.",
+                request.RazorpayPaymentId, userId, tier.Name, appliedCouponCode);
+        }
+        else
+        {
+            _logger.LogInformation("Confirmed Razorpay payment {PaymentId} for user {UserId}, upgraded to {Tier}.",
+                request.RazorpayPaymentId, userId, tier.Name);
+        }
 
         return result;
     }
@@ -293,7 +403,7 @@ public sealed class TierService : ITierService
         var normalized = tierName.Trim();
         var tier = await _db.Tiers
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.Name.ToLower() == normalized.ToLower(), cancellationToken);
+            .FirstOrDefaultAsync(t => t.Name == normalized, cancellationToken);
 
         if (tier is null)
         {
@@ -303,45 +413,356 @@ public sealed class TierService : ITierService
         return tier;
     }
 
-    private (TierPlanOptions PlanOptions, TierBillingCycleOptions BillingCycle, string BillingPeriodKey) ResolveBillingPlan(
-        string tierName,
-        string billingPeriod)
+    private async Task<(TierBillingCycle BillingCycle, string BillingPeriodKey)> ResolveBillingPlanAsync(
+        int tierId,
+        string billingPeriod,
+        CancellationToken cancellationToken)
     {
-        if (!_pricing.Plans.TryGetValue(tierName, out var planOptions) || planOptions is null)
-        {
-            throw new TierServiceException($"Pricing configuration missing for tier '{tierName}'.");
-        }
-
-        if (planOptions.BillingCycles.Count == 0)
-        {
-            throw new TierServiceException($"Tier '{tierName}' does not have any billing cycles configured.");
-        }
-
         var normalizedPeriod = billingPeriod.Trim();
         if (string.IsNullOrEmpty(normalizedPeriod))
         {
             throw new TierServiceException("Billing period is required.");
         }
 
-        var match = planOptions.BillingCycles.FirstOrDefault(kvp =>
-            string.Equals(kvp.Key, normalizedPeriod, StringComparison.OrdinalIgnoreCase));
+        var cycle = await _db.TierBillingCycles
+            .AsNoTracking()
+            .Where(c => c.TierId == tierId && c.IsActive)
+            .FirstOrDefaultAsync(c => c.BillingPeriod == normalizedPeriod, cancellationToken);
 
-        if (string.IsNullOrEmpty(match.Key) || match.Value is null)
+        if (cycle is null)
         {
-            throw new TierServiceException($"Billing period '{billingPeriod}' is not configured for tier '{tierName}'.");
+            throw new TierServiceException($"Billing period '{billingPeriod}' is not configured for the selected tier.");
         }
 
-        if (match.Value.Amount <= 0)
+        if (cycle.Amount <= 0)
         {
-            throw new TierServiceException($"Billing period '{match.Key}' for tier '{tierName}' must have a positive price configured.");
+            throw new TierServiceException($"Billing period '{cycle.BillingPeriod}' must have a positive price configured.");
         }
 
-        if (match.Value.DurationMonths < 0)
+        if (cycle.DurationMonths < 0)
         {
-            throw new TierServiceException($"Billing period '{match.Key}' for tier '{tierName}' has an invalid duration.");
+            throw new TierServiceException($"Billing period '{cycle.BillingPeriod}' has an invalid duration.");
         }
 
-        return (planOptions, match.Value, match.Key);
+        return (cycle, cycle.BillingPeriod);
+    }
+
+    private async Task<CouponEvaluation?> ResolveCouponAsync(
+        int tierId,
+        int subtotalAmount,
+        string? couponCode,
+        CancellationToken cancellationToken,
+        bool trackEntity,
+        bool requireCoupon)
+    {
+        if (string.IsNullOrWhiteSpace(couponCode))
+        {
+            if (requireCoupon)
+            {
+                throw new TierServiceException("Coupon code is required.");
+            }
+
+            return null;
+        }
+
+        var trimmedCode = couponCode.Trim();
+        var query = trackEntity ? _db.Coupons : _db.Coupons.AsNoTracking();
+        var coupon = await query.FirstOrDefaultAsync(c => c.Code == trimmedCode, cancellationToken);
+
+        if (coupon is null || !coupon.IsActive)
+        {
+            throw new TierServiceException("Coupon code is invalid or inactive.");
+        }
+
+        if (coupon.TierId.HasValue && coupon.TierId.Value != tierId)
+        {
+            throw new TierServiceException("Coupon is not valid for the selected tier.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (coupon.ValidFrom.HasValue && coupon.ValidFrom.Value > now)
+        {
+            throw new TierServiceException("Coupon is not yet active.");
+        }
+
+        if (coupon.ValidUntil.HasValue && coupon.ValidUntil.Value < now)
+        {
+            throw new TierServiceException("Coupon has expired.");
+        }
+
+        if (coupon.MaxRedemptions.HasValue && coupon.RedemptionCount >= coupon.MaxRedemptions.Value)
+        {
+            throw new TierServiceException("Coupon redemption limit has been reached.");
+        }
+
+        if (coupon.DiscountPercentage <= 0)
+        {
+            throw new TierServiceException("Coupon does not provide a valid discount.");
+        }
+
+        var discountAmountDecimal = subtotalAmount * (coupon.DiscountPercentage / 100m);
+        var discountAmount = (int)Math.Round(discountAmountDecimal, MidpointRounding.AwayFromZero);
+
+        if (discountAmount <= 0)
+        {
+            throw new TierServiceException("Coupon does not provide a discount for this billing cycle.");
+        }
+
+        if (discountAmount > subtotalAmount)
+        {
+            discountAmount = subtotalAmount;
+        }
+
+        var finalAmount = subtotalAmount - discountAmount;
+        if (finalAmount <= 0)
+        {
+            throw new TierServiceException("Coupon reduces the payable amount below the supported minimum.");
+        }
+
+        return new CouponEvaluation(coupon, discountAmount, finalAmount);
+    }
+
+    public async Task<IReadOnlyList<TierAdminDetailsResponse>> GetAdminTiersAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var tiers = await _db.Tiers
+            .AsNoTracking()
+            .Include(t => t.BillingCycles)
+            .OrderBy(t => t.Id)
+            .ToListAsync(cancellationToken);
+
+        return tiers.Select(MapAdminTier).ToList();
+    }
+
+    public async Task<TierAdminBillingCycleResponse> CreateBillingCycleAsync(
+        TierBillingCycleCreateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+
+        var tier = await _db.Tiers.FirstOrDefaultAsync(t => t.Id == request.TierId, cancellationToken);
+        if (tier is null)
+        {
+            throw new TierNotFoundException($"Unknown tier id '{request.TierId}'.");
+        }
+
+        var normalizedPeriod = NormalizeBillingPeriod(request.BillingPeriod);
+        ValidateBillingCycleValues(normalizedPeriod, request.Amount, request.DurationMonths);
+
+        var duplicateExists = await _db.TierBillingCycles
+            .AnyAsync(c => c.TierId == request.TierId && c.BillingPeriod == normalizedPeriod, cancellationToken);
+
+        if (duplicateExists)
+        {
+            throw new TierServiceException($"Billing period '{normalizedPeriod}' already exists for this tier.");
+        }
+
+        var cycle = new TierBillingCycle
+        {
+            TierId = request.TierId,
+            BillingPeriod = normalizedPeriod,
+            Amount = request.Amount,
+            DurationMonths = request.DurationMonths,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            IsActive = request.IsActive
+        };
+
+        _db.TierBillingCycles.Add(cycle);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return MapAdminBillingCycle(cycle);
+    }
+
+    public async Task<TierAdminBillingCycleResponse> UpdateBillingCycleAsync(
+        int billingCycleId,
+        TierBillingCycleUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+
+        var cycle = await _db.TierBillingCycles.FirstOrDefaultAsync(c => c.Id == billingCycleId, cancellationToken);
+        if (cycle is null)
+        {
+            throw new TierServiceException("Billing cycle not found.");
+        }
+
+        var normalizedPeriod = NormalizeBillingPeriod(request.BillingPeriod);
+        ValidateBillingCycleValues(normalizedPeriod, request.Amount, request.DurationMonths);
+
+        var duplicateExists = await _db.TierBillingCycles
+            .AnyAsync(c => c.Id != billingCycleId &&
+                           c.TierId == cycle.TierId &&
+                           c.BillingPeriod == normalizedPeriod,
+                cancellationToken);
+
+        if (duplicateExists)
+        {
+            throw new TierServiceException($"Billing period '{normalizedPeriod}' already exists for this tier.");
+        }
+
+        cycle.BillingPeriod = normalizedPeriod;
+        cycle.Amount = request.Amount;
+        cycle.DurationMonths = request.DurationMonths;
+        cycle.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        cycle.IsActive = request.IsActive;
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return MapAdminBillingCycle(cycle);
+    }
+
+    public async Task DeleteBillingCycleAsync(int billingCycleId, CancellationToken cancellationToken = default)
+    {
+        var cycle = await _db.TierBillingCycles.FirstOrDefaultAsync(c => c.Id == billingCycleId, cancellationToken);
+        if (cycle is null)
+        {
+            throw new TierServiceException("Billing cycle not found.");
+        }
+
+        var tierInUse = await _db.UserTiers
+            .AsNoTracking()
+            .AnyAsync(ut => ut.TierId == cycle.TierId && ut.IsActive, cancellationToken);
+
+        if (tierInUse)
+        {
+            throw new TierServiceException("Cannot delete this billing cycle because users currently have the tier active. Disable it instead.");
+        }
+
+        _db.TierBillingCycles.Remove(cycle);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<CouponAdminResponse>> GetAdminCouponsAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var coupons = await _db.Coupons
+            .AsNoTracking()
+            .Include(c => c.Tier)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        return coupons.Select(MapAdminCoupon).ToList();
+    }
+
+    public async Task<CouponAdminResponse> CreateCouponAsync(
+        CouponCreateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+
+        var code = NormalizeCouponCode(request.Code);
+        ValidateCouponValues(code, request.DiscountPercentage, request.MaxRedemptions, request.ValidFrom, request.ValidUntil);
+
+        if (await _db.Coupons.AnyAsync(c => c.Code == code, cancellationToken))
+        {
+            throw new TierServiceException("Coupon code already exists.");
+        }
+
+        Tier? tier = null;
+        if (request.TierId.HasValue)
+        {
+            tier = await _db.Tiers.FirstOrDefaultAsync(t => t.Id == request.TierId.Value, cancellationToken);
+            if (tier is null)
+            {
+                throw new TierNotFoundException($"Unknown tier id '{request.TierId}'.");
+            }
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var coupon = new Coupon
+        {
+            Id = Guid.NewGuid(),
+            Code = code,
+            DiscountPercentage = request.DiscountPercentage,
+            Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            TierId = request.TierId,
+            MaxRedemptions = request.MaxRedemptions,
+            RedemptionCount = 0,
+            ValidFrom = request.ValidFrom,
+            ValidUntil = request.ValidUntil,
+            IsActive = request.IsActive,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        _db.Coupons.Add(coupon);
+        await _db.SaveChangesAsync(cancellationToken);
+
+        coupon.Tier = tier;
+        return MapAdminCoupon(coupon);
+    }
+
+    public async Task<CouponAdminResponse> UpdateCouponAsync(
+        Guid couponId,
+        CouponUpdateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null) throw new ArgumentNullException(nameof(request));
+
+        var coupon = await _db.Coupons.FirstOrDefaultAsync(c => c.Id == couponId, cancellationToken);
+        if (coupon is null)
+        {
+            throw new TierServiceException("Coupon not found.");
+        }
+
+        ValidateCouponValues(
+            coupon.Code,
+            request.DiscountPercentage,
+            request.MaxRedemptions,
+            request.ValidFrom,
+            request.ValidUntil);
+
+        if (request.TierId.HasValue)
+        {
+            var tierExists = await _db.Tiers.AnyAsync(t => t.Id == request.TierId.Value, cancellationToken);
+            if (!tierExists)
+            {
+                throw new TierNotFoundException($"Unknown tier id '{request.TierId}'.");
+            }
+        }
+
+        coupon.DiscountPercentage = request.DiscountPercentage;
+        coupon.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+        coupon.TierId = request.TierId;
+        coupon.MaxRedemptions = request.MaxRedemptions;
+        coupon.ValidFrom = request.ValidFrom;
+        coupon.ValidUntil = request.ValidUntil;
+        coupon.IsActive = request.IsActive;
+        coupon.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        if (coupon.TierId.HasValue)
+        {
+            coupon.Tier = await _db.Tiers
+                .AsNoTracking()
+                .FirstOrDefaultAsync(t => t.Id == coupon.TierId.Value, cancellationToken);
+        }
+        else
+        {
+            coupon.Tier = null;
+        }
+
+        return MapAdminCoupon(coupon);
+    }
+
+    public async Task DeleteCouponAsync(Guid couponId, CancellationToken cancellationToken = default)
+    {
+        var coupon = await _db.Coupons.FirstOrDefaultAsync(c => c.Id == couponId, cancellationToken);
+        if (coupon is null)
+        {
+            throw new TierServiceException("Coupon not found.");
+        }
+
+        _db.Coupons.Remove(coupon);
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static string ResolveCurrency(string? currency)
+    {
+        return string.IsNullOrWhiteSpace(currency)
+            ? "INR"
+            : currency.Trim().ToUpperInvariant();
     }
 
     private void EnsureRazorpayConfigured()
@@ -433,7 +854,15 @@ public sealed class TierService : ITierService
         return receipt;
     }
 
-    private void ValidateOrder(JsonElement orderRoot, Guid userId, Tier tier, int expectedAmount, string expectedBillingPeriod)
+    private void ValidateOrder(
+        JsonElement orderRoot,
+        Guid userId,
+        Tier tier,
+        int expectedAmount,
+        string expectedBillingPeriod,
+        int expectedSubtotalAmount,
+        int expectedDiscountAmount,
+        string? expectedCouponCode)
     {
         var status = orderRoot.GetProperty("status").GetString();
         if (!string.Equals(status, "paid", StringComparison.OrdinalIgnoreCase))
@@ -449,6 +878,13 @@ public sealed class TierService : ITierService
         {
             throw new PaymentVerificationException(
                 $"Paid amount {amountPaid} does not match expected amount {expectedAmount}.");
+        }
+
+        var orderAmount = orderRoot.GetProperty("amount").GetInt32();
+        if (orderAmount != expectedAmount)
+        {
+            throw new PaymentVerificationException(
+                $"Order amount {orderAmount} does not match expected amount {expectedAmount}.");
         }
 
         if (orderRoot.TryGetProperty("notes", out var notesElement) &&
@@ -484,10 +920,155 @@ public sealed class TierService : ITierService
             {
                 throw new PaymentVerificationException("Order is missing billing period metadata.");
             }
+
+            if (notesElement.TryGetProperty("subtotalAmount", out var subtotalElement))
+            {
+                var storedSubtotal = subtotalElement.GetInt32();
+                if (storedSubtotal != expectedSubtotalAmount)
+                {
+                    throw new PaymentVerificationException("Order subtotal mismatch.");
+                }
+            }
+            else if (expectedDiscountAmount > 0)
+            {
+                throw new PaymentVerificationException("Order is missing subtotal metadata.");
+            }
+
+            var storedDiscount = notesElement.TryGetProperty("discountAmount", out var discountElement)
+                ? discountElement.GetInt32()
+                : 0;
+
+            if (storedDiscount != expectedDiscountAmount)
+            {
+                throw new PaymentVerificationException("Order discount mismatch.");
+            }
+
+            var storedCouponCode = notesElement.TryGetProperty("couponCode", out var couponElement)
+                ? couponElement.GetString()
+                : null;
+
+            var normalizedExpectedCoupon = string.IsNullOrWhiteSpace(expectedCouponCode)
+                ? null
+                : expectedCouponCode.Trim();
+
+            if (!string.Equals(storedCouponCode ?? string.Empty, normalizedExpectedCoupon ?? string.Empty, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new PaymentVerificationException("Order coupon mismatch.");
+            }
         }
         else
         {
             throw new PaymentVerificationException("Order metadata is missing.");
         }
     }
+
+    private static string NormalizeBillingPeriod(string billingPeriod)
+    {
+        var normalized = billingPeriod?.Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            throw new TierServiceException("Billing period is required.");
+        }
+
+        if (normalized.Length > 64)
+        {
+            throw new TierServiceException("Billing period is too long.");
+        }
+
+        return normalized.ToLowerInvariant();
+    }
+
+    private static void ValidateBillingCycleValues(string billingPeriod, int amount, int durationMonths)
+    {
+        if (amount <= 0)
+        {
+            throw new TierServiceException("Billing cycle amount must be greater than zero.");
+        }
+
+        if (durationMonths < 0)
+        {
+            throw new TierServiceException("Billing cycle duration cannot be negative.");
+        }
+    }
+
+    private static TierAdminBillingCycleResponse MapAdminBillingCycle(TierBillingCycle cycle) =>
+        new(
+            cycle.Id,
+            cycle.BillingPeriod,
+            cycle.Amount,
+            cycle.DurationMonths,
+            cycle.Description,
+            cycle.IsActive);
+
+    private static TierAdminDetailsResponse MapAdminTier(Tier tier)
+    {
+        var cycles = tier.BillingCycles
+            .OrderByDescending(c => c.IsActive)
+            .ThenBy(c => c.DurationMonths <= 0 ? int.MaxValue : c.DurationMonths)
+            .ThenBy(c => c.BillingPeriod, StringComparer.OrdinalIgnoreCase)
+            .Select(MapAdminBillingCycle)
+            .ToList();
+
+        return new TierAdminDetailsResponse(
+            tier.Id,
+            tier.Name,
+            ResolveCurrency(tier.Currency),
+            tier.Description,
+            cycles);
+    }
+
+    private static string NormalizeCouponCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            throw new TierServiceException("Coupon code is required.");
+        }
+
+        var normalized = code.Trim();
+        if (normalized.Length > 64)
+        {
+            throw new TierServiceException("Coupon code cannot exceed 64 characters.");
+        }
+
+        return normalized.ToUpperInvariant();
+    }
+
+    private static void ValidateCouponValues(
+        string code,
+        decimal discountPercentage,
+        int? maxRedemptions,
+        DateTimeOffset? validFrom,
+        DateTimeOffset? validUntil)
+    {
+        if (discountPercentage <= 0 || discountPercentage > 100)
+        {
+            throw new TierServiceException("Discount percentage must be between 0 and 100.");
+        }
+
+        if (maxRedemptions.HasValue && maxRedemptions.Value < 1)
+        {
+            throw new TierServiceException("Max redemptions must be positive.");
+        }
+
+        if (validFrom.HasValue && validUntil.HasValue && validUntil < validFrom)
+        {
+            throw new TierServiceException("Valid until cannot be earlier than valid from.");
+        }
+    }
+
+    private static CouponAdminResponse MapAdminCoupon(Coupon coupon) =>
+        new(
+            coupon.Id,
+            coupon.Code,
+            coupon.DiscountPercentage,
+            coupon.Description,
+            coupon.TierId,
+            coupon.Tier?.Name,
+            coupon.MaxRedemptions,
+            coupon.RedemptionCount,
+            coupon.ValidFrom,
+            coupon.ValidUntil,
+            coupon.IsActive,
+            coupon.CreatedAt,
+            coupon.UpdatedAt);
 }

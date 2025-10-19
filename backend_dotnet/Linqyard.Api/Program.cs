@@ -56,7 +56,6 @@ builder.Services.AddScoped<Linqyard.Infra.IAzureBlobStorageService, Linqyard.Inf
 
 // Tier & payment configuration
 builder.Services.Configure<RazorpaySettings>(builder.Configuration.GetSection("Payments:Razorpay"));
-builder.Services.Configure<TierPricingOptions>(builder.Configuration.GetSection("TierPricing"));
 
 // Repository Services
 builder.Services.AddScoped<IUserRepository, UserRepository>();

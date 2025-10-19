@@ -48,3 +48,11 @@ export function formatDurationLabel(durationMonths: number): string {
 export function sortPlans(tier: TierDetails) {
   return [...tier.plans].sort((a, b) => a.durationMonths - b.durationMonths);
 }
+
+export function formatBillingPeriodLabel(billingPeriod: string) {
+  if (!billingPeriod) return "Flexible";
+  const normalized = billingPeriod.trim().toLowerCase();
+  if (normalized === "monthly") return "Monthly";
+  if (normalized === "yearly") return "Yearly";
+  return normalized.charAt(0).toUpperCase() + normalized.slice(1);
+}
