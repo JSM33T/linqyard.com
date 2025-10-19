@@ -13,7 +13,6 @@ import {
   Mail, 
   Lock, 
   User,
-  Github,
   ArrowLeft,
   UserPlus,
   Check 
@@ -23,6 +22,7 @@ import { usePost } from "@/hooks/useApi";
 import { SignupRequest, SignupResponse } from "@/hooks/types";
 import { useRouter } from "next/navigation";
 import GoogleOAuthButton from "@/components/GoogleOAuthButton";
+import GitHubOAuthButton from "@/components/GitHubOAuthButton";
 
 const containerVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -152,10 +152,6 @@ export default function SignupPage() {
     }
   };
 
-  const handleSocialSignup = (provider: string) => {
-    toast.info(`${provider} signup coming soon!`);
-  };
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
       <motion.div
@@ -195,14 +191,7 @@ export default function SignupPage() {
               {/* Social Signup Buttons */}
               <div className="grid grid-cols-2 gap-3">
                 <GoogleOAuthButton className="w-full" />
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleSocialSignup("GitHub")}
-                >
-                  <Github className="h-4 w-4 mr-2" />
-                  GitHub
-                </Button>
+                <GitHubOAuthButton className="w-full" />
               </div>
 
               {/* Divider */}

@@ -9,7 +9,9 @@ using Linqyard.Entities;
 using Linqyard.Entities.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -25,6 +27,7 @@ public sealed class AuthController : BaseApiController
     private readonly IJwtService _jwtService;
     private readonly HttpClient _httpClient;
     private readonly Linqyard.Infra.IEmailService _emailService;
+    private const string GitHubUserAgent = "LinqyardApp/1.0";
 
     public AuthController(
         ILogger<AuthController> logger,
@@ -1152,6 +1155,105 @@ public sealed class AuthController : BaseApiController
     }
 
     /// <summary>
+    /// Initiate GitHub OAuth flow
+    /// </summary>
+    [HttpGet("github")]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public IActionResult GitHubLogin()
+    {
+        _logger.LogInformation("Initiating GitHub OAuth flow with CorrelationId {CorrelationId}", CorrelationId);
+
+        var githubSettings = _configuration.GetSection("OAuth:GitHub").Get<GitHubOAuthSettings>();
+
+        if (githubSettings == null || string.IsNullOrEmpty(githubSettings.ClientId))
+        {
+            _logger.LogError("GitHub OAuth settings not configured");
+            return BadRequestProblem("GitHub OAuth not configured");
+        }
+
+        var state = Guid.NewGuid().ToString();
+        var scope = "read:user user:email";
+
+        var authUrl = "https://github.com/login/oauth/authorize" +
+                      $"?client_id={Uri.EscapeDataString(githubSettings.ClientId)}" +
+                      $"&redirect_uri={Uri.EscapeDataString(githubSettings.RedirectUri)}" +
+                      $"&scope={Uri.EscapeDataString(scope)}" +
+                      $"&state={state}" +
+                      "&allow_signup=true";
+
+        return Ok(new ApiResponse<object>(new { AuthUrl = authUrl }));
+    }
+
+    /// <summary>
+    /// Handle GitHub OAuth callback
+    /// </summary>
+    [HttpGet("github/callback")]
+    [ProducesResponseType(typeof(ApiResponse<AuthResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<IActionResult> GitHubCallback(string code, string state, CancellationToken cancellationToken = default)
+    {
+        _logger.LogInformation("Processing GitHub OAuth callback with CorrelationId {CorrelationId}", CorrelationId);
+
+        try
+        {
+            if (string.IsNullOrEmpty(state) || string.IsNullOrEmpty(code))
+            {
+                _logger.LogWarning("Missing OAuth parameters for GitHub");
+                return BadRequestProblem("Missing OAuth parameters");
+            }
+
+            var githubSettings = _configuration.GetSection("OAuth:GitHub").Get<GitHubOAuthSettings>();
+            if (githubSettings == null)
+            {
+                return BadRequestProblem("GitHub OAuth not configured");
+            }
+
+            var tokenResponse = await ExchangeCodeForGitHubToken(code, githubSettings, cancellationToken);
+            if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
+            {
+                return BadRequestProblem("Failed to exchange code for token");
+            }
+
+            var githubUser = await GetGitHubUserDetails(tokenResponse.AccessToken, cancellationToken);
+            if (githubUser == null)
+            {
+                return BadRequestProblem("Unable to retrieve required email information from GitHub. Please ensure your account has a verified email address.");
+            }
+
+            var user = await FindOrCreateGitHubUser(githubUser, cancellationToken);
+
+            var authResponse = await GenerateAuthResponse(user, "GitHub", cancellationToken);
+
+            _logger.LogInformation("GitHub OAuth login successful for user {UserId}", user.Id);
+
+            if (!string.IsNullOrEmpty(authResponse.RefreshToken))
+            {
+                var refreshTokenCookieOptions = CreateSecureCookieOptions(TimeSpan.FromDays(7));
+                Response.Cookies.Append("refreshToken", authResponse.RefreshToken, refreshTokenCookieOptions);
+                _logger.LogInformation("Set refresh token HTTP-only cookie for GitHub OAuth user {UserId}", user.Id);
+            }
+            else
+            {
+                _logger.LogWarning("No refresh token available to set as cookie for GitHub user {UserId}", user.Id);
+            }
+
+            var frontendUrl = _configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
+            var redirectUrl = $"{frontendUrl}/account/oauth/callback?success=true&token={authResponse.AccessToken}&expires={authResponse.ExpiresAt:yyyy-MM-ddTHH:mm:ssZ}";
+
+            return Redirect(redirectUrl);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing GitHub OAuth callback");
+
+            var frontendUrl = _configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
+            var errorUrl = $"{frontendUrl}/account/oauth/callback?success=false&error=authentication_failed";
+
+            return Redirect(errorUrl);
+        }
+    }
+
+    /// <summary>
     /// Initiate Google OAuth flow
     /// </summary>
     [HttpGet("google")]
@@ -1257,6 +1359,312 @@ public sealed class AuthController : BaseApiController
             return Redirect(errorUrl);
         }
     }
+
+    private async Task<GitHubTokenResponse?> ExchangeCodeForGitHubToken(string code, GitHubOAuthSettings settings, CancellationToken cancellationToken)
+    {
+        var tokenRequest = new HttpRequestMessage(HttpMethod.Post, "https://github.com/login/oauth/access_token")
+        {
+            Content = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("client_id", settings.ClientId),
+                new KeyValuePair<string, string>("client_secret", settings.ClientSecret),
+                new KeyValuePair<string, string>("code", code),
+                new KeyValuePair<string, string>("redirect_uri", settings.RedirectUri)
+            })
+        };
+
+        tokenRequest.Headers.Accept.Clear();
+        tokenRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+        tokenRequest.Headers.UserAgent.ParseAdd(GitHubUserAgent);
+
+        var response = await _httpClient.SendAsync(tokenRequest, cancellationToken);
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError("Failed to exchange code for GitHub token. Status: {StatusCode}", response.StatusCode);
+            return null;
+        }
+
+        var content = await response.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize<GitHubTokenResponse>(content, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        });
+    }
+
+    private async Task<GitHubUserDetails?> GetGitHubUserDetails(string accessToken, CancellationToken cancellationToken)
+    {
+        var options = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        };
+
+        var userRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user");
+        userRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        userRequest.Headers.UserAgent.ParseAdd(GitHubUserAgent);
+        userRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+
+        var userResponse = await _httpClient.SendAsync(userRequest, cancellationToken);
+
+        if (!userResponse.IsSuccessStatusCode)
+        {
+            _logger.LogError("Failed to get GitHub user info. Status: {StatusCode}", userResponse.StatusCode);
+            return null;
+        }
+
+        var userContent = await userResponse.Content.ReadAsStringAsync(cancellationToken);
+        var userInfo = JsonSerializer.Deserialize<GitHubUserInfo>(userContent, options);
+
+        if (userInfo == null)
+        {
+            _logger.LogError("Failed to deserialize GitHub user info");
+            return null;
+        }
+
+        var email = userInfo.Email;
+        var emailVerified = false;
+
+        if (string.IsNullOrEmpty(email))
+        {
+            var emails = await GetGitHubEmails(accessToken, cancellationToken);
+            var primaryEmail = emails?
+                .OrderByDescending(e => e.Primary)
+                .ThenByDescending(e => e.Verified)
+                .FirstOrDefault();
+
+            if (primaryEmail != null)
+            {
+                email = primaryEmail.Email;
+                emailVerified = primaryEmail.Verified;
+            }
+        }
+        else
+        {
+            emailVerified = true;
+        }
+
+        if (string.IsNullOrEmpty(email))
+        {
+            _logger.LogWarning("GitHub user {UserId} does not have an accessible email address", userInfo.Id);
+            return null;
+        }
+
+        return new GitHubUserDetails(
+            Id: userInfo.Id.ToString(),
+            Login: userInfo.Login,
+            Name: userInfo.Name,
+            Email: email,
+            EmailVerified: emailVerified,
+            AvatarUrl: userInfo.AvatarUrl
+        );
+    }
+
+    private async Task<GitHubEmailInfo[]?> GetGitHubEmails(string accessToken, CancellationToken cancellationToken)
+    {
+        var emailRequest = new HttpRequestMessage(HttpMethod.Get, "https://api.github.com/user/emails");
+        emailRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+        emailRequest.Headers.UserAgent.ParseAdd(GitHubUserAgent);
+        emailRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
+
+        var emailResponse = await _httpClient.SendAsync(emailRequest, cancellationToken);
+
+        if (!emailResponse.IsSuccessStatusCode)
+        {
+            _logger.LogWarning("Failed to load GitHub account emails. Status: {StatusCode}", emailResponse.StatusCode);
+            return null;
+        }
+
+        var content = await emailResponse.Content.ReadAsStringAsync(cancellationToken);
+        return JsonSerializer.Deserialize<GitHubEmailInfo[]>(content, new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
+        });
+    }
+
+    private async Task<User> FindOrCreateGitHubUser(GitHubUserDetails githubUser, CancellationToken cancellationToken)
+    {
+        var existingExternalLogin = await _context.ExternalLogins
+            .Include(el => el.User)
+                .ThenInclude(u => u.UserRoles)
+                    .ThenInclude(ur => ur.Role)
+            .Include(el => el.User)
+                .ThenInclude(u => u.UserTiers)
+                    .ThenInclude(ut => ut.Tier)
+            .FirstOrDefaultAsync(el => el.Provider == "github" && el.ProviderUserId == githubUser.Id, cancellationToken);
+
+        if (existingExternalLogin != null)
+        {
+            _logger.LogInformation("Found existing GitHub user {UserId}", existingExternalLogin.User.Id);
+            if (!existingExternalLogin.User.EmailVerified && githubUser.EmailVerified)
+            {
+                existingExternalLogin.User.EmailVerified = true;
+                existingExternalLogin.User.UpdatedAt = DateTimeOffset.UtcNow;
+                await _context.SaveChangesAsync(cancellationToken);
+            }
+
+            return existingExternalLogin.User;
+        }
+
+        var existingUser = await _context.Users
+            .Include(u => u.UserRoles)
+                .ThenInclude(ur => ur.Role)
+            .Include(u => u.UserTiers)
+                .ThenInclude(ut => ut.Tier)
+            .FirstOrDefaultAsync(u => u.Email == githubUser.Email, cancellationToken);
+
+        if (existingUser != null)
+        {
+            var externalLogin = new ExternalLogin
+            {
+                Id = Guid.NewGuid(),
+                UserId = existingUser.Id,
+                Provider = "github",
+                ProviderUserId = githubUser.Id,
+                ProviderEmail = githubUser.Email,
+                LinkedAt = DateTimeOffset.UtcNow
+            };
+
+            _context.ExternalLogins.Add(externalLogin);
+
+            if (!existingUser.EmailVerified && githubUser.EmailVerified)
+            {
+                existingUser.EmailVerified = true;
+                existingUser.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+
+            await _context.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation("Linked GitHub account to existing user {UserId}", existingUser.Id);
+            return existingUser;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        var freeTier = await _context.Tiers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == (int)TierType.Free, cancellationToken);
+
+        if (freeTier is null)
+        {
+            _logger.LogError("Default free tier definition is missing. Unable to create GitHub OAuth user for {Email}", githubUser.Email);
+            throw new InvalidOperationException("Default tier configuration is missing.");
+        }
+
+        var firstName = string.Empty;
+        var lastName = string.Empty;
+        var fullName = (githubUser.Name ?? string.Empty).Trim();
+
+        if (!string.IsNullOrEmpty(fullName))
+        {
+            var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 1)
+            {
+                firstName = parts[0];
+            }
+            else if (parts.Length >= 2)
+            {
+                firstName = parts[0];
+                lastName = parts[^1];
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(firstName))
+        {
+            firstName = githubUser.Login;
+        }
+
+        var usernameSeed = !string.IsNullOrWhiteSpace(githubUser.Login)
+            ? githubUser.Login
+            : githubUser.Email.Split('@')[0];
+
+        var displayName = !string.IsNullOrWhiteSpace(fullName)
+            ? fullName
+            : githubUser.Login;
+
+        var newUser = new User
+        {
+            Id = Guid.NewGuid(),
+            Email = githubUser.Email,
+            EmailVerified = githubUser.EmailVerified,
+            PasswordHash = GenerateRandomHash(),
+            FirstName = firstName,
+            LastName = lastName,
+            Username = await GenerateUniqueUsername(usernameSeed, cancellationToken),
+            DisplayName = displayName,
+            AvatarUrl = githubUser.AvatarUrl,
+            IsActive = true,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        var newUserTier = new UserTier
+        {
+            Id = Guid.NewGuid(),
+            UserId = newUser.Id,
+            TierId = freeTier.Id,
+            ActiveFrom = now,
+            ActiveUntil = null,
+            IsActive = true,
+            Notes = "Assigned during GitHub OAuth registration",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        newUser.UserTiers.Add(newUserTier);
+
+        _context.Users.Add(newUser);
+        _context.UserTiers.Add(newUserTier);
+
+        var newExternalLogin = new ExternalLogin
+        {
+            Id = Guid.NewGuid(),
+            UserId = newUser.Id,
+            Provider = "github",
+            ProviderUserId = githubUser.Id,
+            ProviderEmail = githubUser.Email,
+            LinkedAt = now
+        };
+
+        _context.ExternalLogins.Add(newExternalLogin);
+
+        var defaultRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
+        if (defaultRole != null)
+        {
+            var userRoleLink = new UserRole
+            {
+                UserId = newUser.Id,
+                RoleId = defaultRole.Id
+            };
+
+            _context.UserRoles.Add(userRoleLink);
+            newUser.UserRoles.Add(userRoleLink);
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation("Created new user from GitHub OAuth {UserId}", newUser.Id);
+
+        try
+        {
+            await _emailService.SendWelcomeEmailAsync(newUser.Email, newUser.FirstName ?? newUser.Username);
+            _logger.LogInformation("Welcome email sent to new GitHub OAuth user {Email}", newUser.Email);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to send welcome email to new GitHub OAuth user {Email}", newUser.Email);
+        }
+
+        return newUser;
+    }
+
+    private sealed record GitHubUserDetails(
+        string Id,
+        string Login,
+        string? Name,
+        string Email,
+        bool EmailVerified,
+        string? AvatarUrl
+    );
 
     private async Task<GoogleTokenResponse?> ExchangeCodeForGoogleToken(string code, GoogleOAuthSettings settings, CancellationToken cancellationToken)
     {

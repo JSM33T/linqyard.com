@@ -278,6 +278,13 @@ export interface GoogleInitResponse {
   meta: any | null;
 }
 
+export interface GitHubInitResponse {
+  data: {
+    authUrl: string;
+  };
+  meta: any | null;
+}
+
 export interface GoogleCallbackRequest {
   code: string;
   state: string;

@@ -12,7 +12,6 @@ import {
   EyeOff, 
   Mail, 
   Lock, 
-  Github,
   ArrowLeft,
   LogIn 
 } from "lucide-react";
@@ -22,6 +21,7 @@ import { LoginRequest, LoginResponse } from "@/hooks/types";
 import { useUser } from "@/contexts/UserContext";
 import { useRouter } from "next/navigation";
 import GoogleOAuthButton from "@/components/GoogleOAuthButton";
+import GitHubOAuthButton from "@/components/GitHubOAuthButton";
 
 const containerVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -114,10 +114,6 @@ export default function LoginPage() {
     }
   };
 
-  const handleSocialLogin = (provider: string) => {
-    toast.info(`${provider} login coming soon!`);
-  };
-
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4 py-8">
       <motion.div
@@ -157,14 +153,7 @@ export default function LoginPage() {
               {/* Social Login Buttons */}
               <div className="grid grid-cols-2 gap-3">
                 <GoogleOAuthButton className="w-full" />
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleSocialLogin("GitHub")}
-                >
-                  <Github className="h-4 w-4 mr-2" />
-                  GitHub
-                </Button>
+                <GitHubOAuthButton className="w-full" />
               </div>
 
               {/* Divider */}
