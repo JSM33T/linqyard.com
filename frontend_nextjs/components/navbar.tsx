@@ -153,6 +153,32 @@ const getIcon = (iconName: string) => {
   // If navbar visibility is false, render nothing. Visibility is controlled in-memory by context.
   if (!visible) return null;
 
+  // Smooth-scroll handler for same-page/hash links only.
+  // We intentionally do NOT enable global CSS `scroll-behavior: smooth` so scrolling is opt-in.
+  const handleLinkClick = (e: any, href: string) => {
+    if (!href) return;
+    const hashIndex = href.indexOf("#");
+    if (hashIndex === -1) return; // nothing to do
+
+    const pathPart = href.slice(0, hashIndex) || "/";
+    const hash = href.slice(hashIndex + 1);
+
+    // Only intercept when the link is a pure hash ("#section") or points to the current path
+    if (href.startsWith("#") || pathPart === pathname) {
+      e.preventDefault();
+      // Close mobile menu if open so content is visible while scrolling
+      setMenuOpen(false);
+
+      // Give the sheet a moment to close so the page content is visible (if mobile)
+      setTimeout(() => {
+        const el = document.getElementById(hash);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      }, 120);
+    }
+  };
+
   return (
     <>
       <nav
@@ -195,6 +221,7 @@ const getIcon = (iconName: string) => {
                 <Link
                   key={link.name}
                   href={link.href}
+                  onClick={(e) => handleLinkClick(e, link.href)}
                   className={[
                     "rounded-full px-3 py-2 text-sm font-medium transition-colors",
                     isActive(link.href)
@@ -225,6 +252,7 @@ const getIcon = (iconName: string) => {
                     <DropdownMenuItem key={resource.name} asChild className="cursor-pointer">
                       <Link
                         href={resource.href}
+                        onClick={(e) => handleLinkClick(e, resource.href)}
                         className="flex items-start gap-3 p-2 rounded-md"
                       >
                         <div className="mt-0.5">{getIcon(resource.icon)}</div>
@@ -463,6 +491,7 @@ const getIcon = (iconName: string) => {
                         <SheetClose asChild key={link.name}>
                           <Link
                             href={link.href}
+                            onClick={(e) => handleLinkClick(e, link.href)}
                             className={[
                               "flex items-center rounded-md px-3 py-2 text-base font-medium transition-colors",
                               isActive(link.href)
@@ -487,6 +516,7 @@ const getIcon = (iconName: string) => {
                         <SheetClose asChild key={resource.name}>
                           <Link
                             href={resource.href}
+                            onClick={(e) => handleLinkClick(e, resource.href)}
                             className="flex items-start gap-3 rounded-md px-3 py-2 text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
                           >
                             <div className="mt-0.5">{getIcon(resource.icon)}</div>
@@ -509,39 +539,43 @@ const getIcon = (iconName: string) => {
                           <SheetClose asChild>
                             <Link
                               href="/account/links"
+                              onClick={(e) => handleLinkClick(e, "/account/links")}
                               className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
                             >
                               <UserCircle className="h-4 w-4 mr-2" />
                               Links
                             </Link>
                           </SheetClose>
-                          <SheetClose asChild>
-                            <Link
-                              href="/account/profile"
-                              className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
-                            >
-                              <UserCircle className="h-4 w-4 mr-2" />
-                              Profile
-                            </Link>
-                          </SheetClose>
-                          <SheetClose asChild>
-                            <Link
-                              href="/account/insights"
-                              className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
-                            >
-                              <BarChart3 className="h-4 w-4 mr-2" />
-                              Insights
-                            </Link>
-                          </SheetClose>
-                          <SheetClose asChild>
-                            <Link
-                              href="/account/settings"
-                              className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
-                            >
-                              <Settings className="h-4 w-4 mr-2" />
-                              Settings
-                            </Link>
-                          </SheetClose>
+                            <SheetClose asChild>
+                              <Link
+                                href="/account/profile"
+                                onClick={(e) => handleLinkClick(e, "/account/profile")}
+                                className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+                              >
+                                <UserCircle className="h-4 w-4 mr-2" />
+                                Profile
+                              </Link>
+                            </SheetClose>
+                            <SheetClose asChild>
+                              <Link
+                                href="/account/insights"
+                                onClick={(e) => handleLinkClick(e, "/account/insights")}
+                                className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+                              >
+                                <BarChart3 className="h-4 w-4 mr-2" />
+                                Insights
+                              </Link>
+                            </SheetClose>
+                            <SheetClose asChild>
+                              <Link
+                                href="/account/settings"
+                                onClick={(e) => handleLinkClick(e, "/account/settings")}
+                                className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground transition-colors hover:text-foreground hover:bg-muted"
+                              >
+                                <Settings className="h-4 w-4 mr-2" />
+                                Settings
+                              </Link>
+                            </SheetClose>
 
                           <div className="border-t pt-3 mt-3 space-y-1">
                             <div className="flex items-center rounded-md px-3 py-2 text-base font-medium text-muted-foreground opacity-60">

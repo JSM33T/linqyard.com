@@ -399,7 +399,7 @@ export default function SecurityPage() {
                   <form onSubmit={handleSetPassword} className="space-y-4">
                     <div className="space-y-2">
                       <p className="text-xs text-muted-foreground">
-                        {isGoogle && 'Your account was created via Google sign-in. You can set a password to enable email/password sign in.'}
+                        {isGoogle && 'Your account was created via a third party auth sign-in. You can set a password to enable email/password sign in.'}
                         {isApple && 'Your account was created via Apple sign-in. You can set a password to enable email/password sign in.'}
                         {isGitHub && 'Your account was created via GitHub sign-in. You can set a password to enable email/password sign in.'}
                         {!isGoogle && !isApple && !isGitHub && 'You can set a password to enable email/password sign in for your account.'}
