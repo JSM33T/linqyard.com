@@ -13,3 +13,8 @@ public sealed record UpdateGroupRequest(
     int? Sequence = null,
     bool? IsActive = null
 );
+
+public sealed record GroupResequenceItemRequest(
+    Guid Id,
+    int Sequence
+);

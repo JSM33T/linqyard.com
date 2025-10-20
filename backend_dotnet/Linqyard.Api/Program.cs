@@ -64,6 +64,8 @@ builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
 builder.Services.AddScoped<ILinkRepository, LinkRepository>();
 builder.Services.AddScoped<IViewTelemetryRepository, ViewTelemetryRepository>();
+builder.Services.AddScoped<IGroupRepository, GroupRepository>();
+builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<ITierRepository, TierRepository>();
 builder.Services.AddScoped<ITierService, TierService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
