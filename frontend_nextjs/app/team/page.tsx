@@ -49,7 +49,7 @@ const DEFAULT_MEMBERS: TeamMember[] = [
     avatarUrl: "https://i.pravatar.cc/160?img=22",
     email: "sai@example.com",
     links: { linkedin: "https://linkedin.com", github: "https://github.com", website: "https://example.com" },
-    tags: ["UX", "Product", "Growth"],
+    tags: ["UX", "Product"],
     isCore: true,
   },
   // {
