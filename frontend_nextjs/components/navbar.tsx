@@ -134,8 +134,10 @@ export default function Navbar() {
     const tierName = userHelpers.getTierName(user);
 
     if (userHelpers.isProTier(user)) {
+      // Use primary color for tier badges instead of hardcoded gradients so the
+      // badge matches the app theme (Tailwind `bg-primary` / `text-primary-foreground`).
       return (
-        <Badge className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-gradient-to-r from-violet-600 to-indigo-500 text-white border-none shadow-sm">
+        <Badge className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-primary text-primary-foreground border-none shadow-sm">
           <Star className="h-3 w-3" />
           {tierLabel}
         </Badge>
@@ -143,8 +145,9 @@ export default function Navbar() {
     }
 
     if (userHelpers.isPlusTier(user)) {
+      // Use primary color for tier badges so Plus tier inherits theme color.
       return (
-        <Badge className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-sky-500 text-white border-none shadow-sm">
+        <Badge className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-primary text-primary-foreground border-none shadow-sm">
           <Sparkles className="h-3 w-3" />
           {tierLabel}
         </Badge>
