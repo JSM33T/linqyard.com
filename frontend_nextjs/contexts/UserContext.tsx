@@ -1,6 +1,7 @@
 ﻿"use client";
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
+import type { UserTierInfo } from "@/hooks/types";
 
 // User interface definition
 export interface User {
@@ -20,6 +21,7 @@ export interface User {
   // Additional optional fields for future use
   role?: string;
   preferences?: Record<string, any>;
+  activeTier?: UserTierInfo | null;
 }
 
 // Context value interface
@@ -145,8 +147,16 @@ export function UserProvider({ children }: UserProviderProps) {
                 coverUrl: userData.coverUrl,
                 login: true,
                 expiry: undefined, // Will be set from token expiry
-                tierId: userData.tierId,
-                tierName: userData.tierName,
+                tierId: userData.tierId ?? userData.activeTier?.tierId,
+                tierName: userData.tierName ?? userData.activeTier?.name,
+                activeTier: userData.activeTier
+                  ? {
+                      tierId: userData.activeTier.tierId,
+                      name: userData.activeTier.name,
+                      activeFrom: userData.activeTier.activeFrom,
+                      activeUntil: userData.activeTier.activeUntil,
+                    }
+                  : null,
                 role: userData.roles?.[0] || 'user',
                 preferences: userData.preferences
               };
@@ -299,6 +309,70 @@ export function useUser() {
   return context;
 }
 
+// Internal helpers to normalize tier data that might arrive in different shapes
+const resolveTierId = (user: User | null): number | undefined => {
+  if (!user) return undefined;
+
+  const anyUser = user as unknown as {
+    tierId?: number | string | null;
+    tier?: { tierId?: number | string | null; id?: number | string | null };
+    activeTier?: { tierId?: number | string | null; id?: number | string | null };
+    subscription?: { tierId?: number | string | null; tier?: { id?: number | string | null } };
+  };
+
+  const candidates: Array<number | string | null | undefined> = [
+    user.tierId,
+    anyUser?.tierId,
+    anyUser?.tier?.tierId,
+    anyUser?.tier?.id,
+    anyUser?.activeTier?.tierId,
+    anyUser?.activeTier?.id,
+    anyUser?.subscription?.tierId,
+    anyUser?.subscription?.tier?.id,
+  ];
+
+  for (const value of candidates) {
+    if (value === undefined || value === null) continue;
+    const numeric = Number(value);
+    if (!Number.isNaN(numeric)) {
+      return numeric;
+    }
+  }
+
+  return undefined;
+};
+
+const resolveTierName = (user: User | null): string | undefined => {
+  if (!user) return undefined;
+
+  const anyUser = user as unknown as {
+    tierName?: string | null;
+    tier?: { name?: string | null; slug?: string | null };
+    activeTier?: { name?: string | null };
+    subscription?: { tierName?: string | null; tier?: { name?: string | null } };
+  };
+
+  const candidates: Array<string | null | undefined> = [
+    user.tierName,
+    anyUser?.tierName,
+    anyUser?.tier?.name,
+    anyUser?.tier?.slug,
+    anyUser?.activeTier?.name,
+    anyUser?.subscription?.tierName,
+    anyUser?.subscription?.tier?.name,
+  ];
+
+  for (const value of candidates) {
+    if (!value) continue;
+    const normalized = String(value).trim().toLowerCase();
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  }
+
+  return undefined;
+};
+
 // Helper functions for working with user data
 export const userHelpers = {
   getFullName: (user: User | null): string => {
@@ -368,28 +442,33 @@ export const userHelpers = {
 
   // Get tier information
   getTierId: (user: User | null): number | undefined => {
-    return user?.tierId;
+    return resolveTierId(user);
   },
 
   getTierName: (user: User | null): string => {
-    if (!user?.tierName) return 'free';
-    return user.tierName;
+    return resolveTierName(user) ?? 'free';
   },
 
   // Check if user is on a specific tier
   isFreeTier: (user: User | null): boolean => {
     // Default to free tier if tier info is not available
     if (!user) return true;
-    if (user.tierId === undefined && user.tierName === undefined) return true;
-    return user.tierId === 1 || user.tierName === 'free';
+    const tierId = resolveTierId(user);
+    const tierName = resolveTierName(user);
+    if (tierId === undefined && tierName === undefined) return true;
+    return tierId === 1 || tierName === 'free';
   },
 
   isPlusTier: (user: User | null): boolean => {
-    return user?.tierId === 2 || user?.tierName === 'plus';
+    const tierId = resolveTierId(user);
+    const tierName = resolveTierName(user);
+    return tierId === 2 || tierName === 'plus';
   },
 
   isProTier: (user: User | null): boolean => {
-    return user?.tierId === 3 || user?.tierName === 'pro';
+    const tierId = resolveTierId(user);
+    const tierName = resolveTierName(user);
+    return tierId === 3 || tierName === 'pro';
   },
 
   // Get tier display name (capitalized)
@@ -398,4 +477,3 @@ export const userHelpers = {
     return tierName.charAt(0).toUpperCase() + tierName.slice(1);
   }
 };
-

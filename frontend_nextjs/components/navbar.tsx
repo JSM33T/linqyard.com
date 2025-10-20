@@ -30,9 +30,13 @@ import {
   Wrench,
   Mail,
   Activity,
+  Sparkles,
+  Star,
+  AtSign,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sheet,
@@ -81,8 +85,78 @@ export default function Navbar() {
 
   const THRESHOLD = 2; // px movement before reacting
 
-  const role = (user?.role ?? "").toLowerCase();
-  const canAccessManagement = role === "admin" || role === "mod";
+  const normalizedRole = (user?.role ?? "").toLowerCase();
+  const canAccessManagement = normalizedRole === "admin" || normalizedRole === "mod";
+
+  const roleDisplayName =
+    normalizedRole === "admin"
+      ? "Admin"
+      : normalizedRole === "mod"
+      ? "Mod"
+      : normalizedRole === "user"
+      ? "User"
+      : normalizedRole
+      ? normalizedRole.charAt(0).toUpperCase() + normalizedRole.slice(1)
+      : "User";
+
+  const renderRoleBadge = () => {
+    if (!user) return null;
+
+    const baseClasses =
+      "rounded-full px-2.5 py-0.5 text-[10px] font-semibold tracking-wide border";
+
+    const roleClasses =
+      normalizedRole === "admin"
+        ? "bg-red-500/15 text-red-300 border-red-500/40"
+        : normalizedRole === "mod"
+        ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
+        : "bg-muted text-muted-foreground border-border/60";
+
+    return (
+      <Badge className={`${baseClasses} ${roleClasses}`}>
+        {roleDisplayName.toUpperCase()}
+      </Badge>
+    );
+  };
+
+  const renderUsernameBadge = () =>
+    user?.username ? (
+      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+        <AtSign className="h-3 w-3 text-muted-foreground/80" />
+        <span className="font-medium">@{user.username}</span>
+      </div>
+    ) : null;
+
+  const renderTierBadge = () => {
+    if (!user) return null;
+
+    const tierLabel = userHelpers.getTierDisplayName(user);
+    const tierName = userHelpers.getTierName(user);
+
+    if (userHelpers.isProTier(user)) {
+      return (
+        <Badge className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-gradient-to-r from-violet-600 to-indigo-500 text-white border-none shadow-sm">
+          <Star className="h-3 w-3" />
+          {tierLabel}
+        </Badge>
+      );
+    }
+
+    if (userHelpers.isPlusTier(user)) {
+      return (
+        <Badge className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold bg-sky-500 text-white border-none shadow-sm">
+          <Sparkles className="h-3 w-3" />
+          {tierLabel}
+        </Badge>
+      );
+    }
+
+    return (
+      <Badge className="rounded-full px-2.5 py-0.5 text-[11px] font-medium bg-muted text-muted-foreground border-border/60">
+        {tierName === "free" ? "Free" : tierLabel}
+      </Badge>
+    );
+  };
 
 // Helper function to get icon component
 const getIcon = (iconName: string) => {
@@ -299,9 +373,16 @@ const getIcon = (iconName: string) => {
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {userHelpers.getFirstName(user)}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium leading-none">
+                          {userHelpers.getFirstName(user)}
+                        </p>
+                        {renderRoleBadge()}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
+                        {renderUsernameBadge()}
+                        {renderTierBadge()}
+                      </div>
                     </div>
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
@@ -460,14 +541,16 @@ const getIcon = (iconName: string) => {
                           <AvatarFallback>{userHelpers.getInitials(user)}</AvatarFallback>
                         </Avatar>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">
-                            {userHelpers.getFirstName(user)}
-                          </p>
-                          {user?.username && (
-                            <p className="text-xs text-muted-foreground truncate">
-                              @{user.username}
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium truncate">
+                              {userHelpers.getFirstName(user)}
                             </p>
-                          )}
+                            {renderRoleBadge()}
+                          </div>
+                          <div className="mt-1 flex flex-wrap items-center gap-2">
+                            {renderUsernameBadge()}
+                            {renderTierBadge()}
+                          </div>
                         </div>
                       </div>
                     ) : (

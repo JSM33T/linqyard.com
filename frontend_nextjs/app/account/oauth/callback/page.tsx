@@ -163,8 +163,16 @@ export default function OAuthCallbackPage() {
               avatarUrl: data.user.avatarUrl || undefined,
               login: true,
               expiry: new Date(data.expiresAt),
-              tierId: data.user.tierId ?? undefined,
-              tierName: data.user.tierName ?? undefined,
+              tierId: data.user.tierId ?? data.user.activeTier?.tierId ?? undefined,
+              tierName: data.user.tierName ?? data.user.activeTier?.name ?? undefined,
+              activeTier: data.user.activeTier
+                ? {
+                    tierId: data.user.activeTier.tierId,
+                    name: data.user.activeTier.name,
+                    activeFrom: data.user.activeTier.activeFrom,
+                    activeUntil: data.user.activeTier.activeUntil,
+                  }
+                : null,
               role: data.user.roles[0] || 'user'
             });
 
