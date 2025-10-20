@@ -129,6 +129,7 @@ export interface TierOrderData {
   currency: string;
   razorpayKeyId: string;
   subtotalAmount: number;
+  creditAmount: number;
   discountAmount: number;
   couponCode?: string | null;
 }
@@ -144,6 +145,7 @@ export interface TierCouponPreviewData {
   discountPercentage: number;
   discountAmount: number;
   subtotalAmount: number;
+  creditAmount: number;
   finalAmount: number;
   currency: string;
   description?: string | null;

@@ -27,6 +27,7 @@ public interface ITierRepository
         CancellationToken cancellationToken = default);
 
     Task<TierCouponPreviewResponse> PreviewCouponAsync(
+        Guid? userId,
         TierCouponPreviewRequest request,
         CancellationToken cancellationToken = default);
 
@@ -62,4 +63,3 @@ public interface ITierRepository
         Guid couponId,
         CancellationToken cancellationToken = default);
 }
-

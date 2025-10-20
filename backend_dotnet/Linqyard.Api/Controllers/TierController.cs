@@ -74,7 +74,13 @@ public sealed class TierController : BaseApiController
 
         try
         {
-            var preview = await _tierService.PreviewCouponAsync(request, cancellationToken);
+            Guid? userIdGuid = null;
+            if (Guid.TryParse(UserId, out var parsedUserId))
+            {
+                userIdGuid = parsedUserId;
+            }
+
+            var preview = await _tierService.PreviewCouponAsync(userIdGuid, request, cancellationToken);
             return OkEnvelope(preview);
         }
         catch (TierNotFoundException ex)

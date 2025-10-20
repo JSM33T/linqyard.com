@@ -11,6 +11,7 @@ using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Data;
 using Linqyard.Entities;
+using Linqyard.Entities.Enums;
 using Linqyard.Repositories.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -27,6 +28,12 @@ public sealed class TierRepository : ITierRepository
     };
 
     private sealed record CouponEvaluation(Coupon Coupon, int DiscountAmount, int FinalAmount);
+
+    private sealed record UpgradeCreditContext(int Amount, string? SourceTierName, string? SourceBillingPeriod)
+    {
+        public bool HasCredit => Amount > 0;
+        public static UpgradeCreditContext None { get; } = new(0, null, null);
+    }
 
     private readonly LinqyardDbContext _db;
     private readonly ILogger<TierRepository> _logger;
@@ -107,6 +114,7 @@ public sealed class TierRepository : ITierRepository
     }
 
     public async Task<TierCouponPreviewResponse> PreviewCouponAsync(
+        Guid? userId,
         TierCouponPreviewRequest request,
         CancellationToken cancellationToken = default)
     {
@@ -130,9 +138,27 @@ public sealed class TierRepository : ITierRepository
         var planContext = await ResolveBillingPlanAsync(tier.Id, request.BillingPeriod, cancellationToken);
         var plan = planContext.BillingCycle;
 
+        var currency = ResolveCurrency(tier.Currency);
+        var creditContext = userId.HasValue
+            ? await CalculateUpgradeCreditAsync(
+                userId.Value,
+                tier.Id,
+                currency,
+                planContext.BillingPeriodKey,
+                plan.DurationMonths,
+                plan.Amount,
+                cancellationToken)
+            : UpgradeCreditContext.None;
+
+        var payableSubtotal = plan.Amount - creditContext.Amount;
+        if (payableSubtotal <= 0)
+        {
+            throw new TierServiceException("Upgrade credit exceeds the payable amount for this plan.");
+        }
+
         var couponEvaluation = await ResolveCouponAsync(
             tier.Id,
-            plan.Amount,
+            payableSubtotal,
             request.CouponCode,
             cancellationToken,
             trackEntity: false,
@@ -144,13 +170,13 @@ public sealed class TierRepository : ITierRepository
         }
 
         var coupon = couponEvaluation.Coupon;
-        var currency = ResolveCurrency(tier.Currency);
 
         return new TierCouponPreviewResponse(
             coupon.Code,
             coupon.DiscountPercentage,
             couponEvaluation.DiscountAmount,
             plan.Amount,
+            creditContext.Amount,
             couponEvaluation.FinalAmount,
             currency,
             coupon.Description,
@@ -182,15 +208,36 @@ public sealed class TierRepository : ITierRepository
 
         var planContext = await ResolveBillingPlanAsync(tier.Id, billingPeriod, cancellationToken);
         var plan = planContext.BillingCycle;
+        var currencyCode = ResolveCurrency(tier.Currency);
+        var creditContext = await CalculateUpgradeCreditAsync(
+            userId,
+            tier.Id,
+            currencyCode,
+            planContext.BillingPeriodKey,
+            plan.DurationMonths,
+            plan.Amount,
+            cancellationToken);
+        var creditAmount = creditContext.Amount;
+        if (creditAmount < 0)
+        {
+            creditAmount = 0;
+        }
+
+        var payableSubtotal = plan.Amount - creditAmount;
+        if (payableSubtotal <= 0)
+        {
+            throw new TierServiceException("Upgrade credit exceeds the payable amount for this plan.");
+        }
+
         var couponEvaluation = await ResolveCouponAsync(
             tier.Id,
-            plan.Amount,
+            payableSubtotal,
             request.CouponCode,
             cancellationToken,
             trackEntity: false,
             requireCoupon: false);
         var discountAmount = couponEvaluation?.DiscountAmount ?? 0;
-        var finalAmount = couponEvaluation?.FinalAmount ?? plan.Amount;
+        var finalAmount = couponEvaluation?.FinalAmount ?? payableSubtotal;
         var appliedCouponCode = couponEvaluation?.Coupon.Code;
 
         if (finalAmount <= 0)
@@ -206,7 +253,6 @@ public sealed class TierRepository : ITierRepository
 
         EnsureRazorpayConfigured();
         var client = CreateRazorpayClient();
-        var currencyCode = ResolveCurrency(tier.Currency);
         var receipt = GenerateReceipt(tier.Name, userId);
 
         var payload = new
@@ -222,6 +268,7 @@ public sealed class TierRepository : ITierRepository
                 tierName = tier.Name,
                 billingPeriod = planContext.BillingPeriodKey,
                 subtotalAmount = plan.Amount,
+                creditAmount,
                 discountAmount,
                 couponCode = appliedCouponCode
             }
@@ -263,6 +310,7 @@ public sealed class TierRepository : ITierRepository
             orderCurrency,
             _razorpay.KeyId,
             plan.Amount,
+            creditAmount,
             discountAmount,
             appliedCouponCode);
     }
@@ -290,15 +338,36 @@ public sealed class TierRepository : ITierRepository
 
         var planContext = await ResolveBillingPlanAsync(tier.Id, billingPeriod, cancellationToken);
         var plan = planContext.BillingCycle;
+        var currencyCode = ResolveCurrency(tier.Currency);
+        var creditContext = await CalculateUpgradeCreditAsync(
+            userId,
+            tier.Id,
+            currencyCode,
+            planContext.BillingPeriodKey,
+            plan.DurationMonths,
+            plan.Amount,
+            cancellationToken);
+        var creditAmount = creditContext.Amount;
+        if (creditAmount < 0)
+        {
+            creditAmount = 0;
+        }
+
+        var payableSubtotal = plan.Amount - creditAmount;
+        if (payableSubtotal <= 0)
+        {
+            throw new TierServiceException("Upgrade credit exceeds the payable amount for this plan.");
+        }
+
         var couponEvaluation = await ResolveCouponAsync(
             tier.Id,
-            plan.Amount,
+            payableSubtotal,
             request.CouponCode,
             cancellationToken,
             trackEntity: true,
             requireCoupon: !string.IsNullOrWhiteSpace(request.CouponCode));
         var discountAmount = couponEvaluation?.DiscountAmount ?? 0;
-        var expectedAmount = couponEvaluation?.FinalAmount ?? plan.Amount;
+        var expectedAmount = couponEvaluation?.FinalAmount ?? payableSubtotal;
         var appliedCouponCode = couponEvaluation?.Coupon.Code;
 
         EnsureRazorpayConfigured();
@@ -312,6 +381,7 @@ public sealed class TierRepository : ITierRepository
             expectedAmount,
             planContext.BillingPeriodKey,
             plan.Amount,
+            creditAmount,
             discountAmount,
             appliedCouponCode);
 
@@ -445,6 +515,73 @@ public sealed class TierRepository : ITierRepository
         }
 
         return (cycle, cycle.BillingPeriod);
+    }
+
+    private async Task<UpgradeCreditContext> CalculateUpgradeCreditAsync(
+        Guid userId,
+        int targetTierId,
+        string targetCurrency,
+        string targetBillingPeriod,
+        int targetDurationMonths,
+        int targetPlanAmount,
+        CancellationToken cancellationToken)
+    {
+        if (targetPlanAmount <= 0)
+        {
+            return UpgradeCreditContext.None;
+        }
+
+        var activeTier = await _db.UserTiers
+            .AsNoTracking()
+            .Where(ut => ut.UserId == userId && ut.IsActive)
+            .OrderByDescending(ut => ut.ActiveFrom)
+            .Select(ut => new
+            {
+                ut.TierId,
+                TierName = ut.Tier.Name,
+                TierCurrency = ut.Tier.Currency
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (activeTier is null)
+        {
+            return UpgradeCreditContext.None;
+        }
+
+        if (activeTier.TierId == targetTierId ||
+            activeTier.TierId == (int)TierType.Free ||
+            targetTierId <= activeTier.TierId)
+        {
+            return UpgradeCreditContext.None;
+        }
+
+        if (!string.Equals(activeTier.TierCurrency, targetCurrency, StringComparison.OrdinalIgnoreCase))
+        {
+            return UpgradeCreditContext.None;
+        }
+
+        var normalizedBillingPeriod = targetBillingPeriod.Trim();
+        var candidatePlans = await _db.TierBillingCycles
+            .AsNoTracking()
+            .Where(c => c.TierId == activeTier.TierId && c.IsActive)
+            .Select(c => new { c.Amount, c.BillingPeriod, c.DurationMonths })
+            .ToListAsync(cancellationToken);
+
+        if (candidatePlans.Count == 0)
+        {
+            return UpgradeCreditContext.None;
+        }
+
+        var matchingPlan = candidatePlans
+            .FirstOrDefault(c => string.Equals(c.BillingPeriod, normalizedBillingPeriod, StringComparison.OrdinalIgnoreCase))
+            ?? candidatePlans.FirstOrDefault(c => c.DurationMonths == targetDurationMonths);
+
+        if (matchingPlan is null || matchingPlan.Amount <= 0)
+        {
+            return UpgradeCreditContext.None;
+        }
+
+        return new UpgradeCreditContext(matchingPlan.Amount, activeTier.TierName, matchingPlan.BillingPeriod);
     }
 
     private async Task<CouponEvaluation?> ResolveCouponAsync(
@@ -861,6 +998,7 @@ public sealed class TierRepository : ITierRepository
         int expectedAmount,
         string expectedBillingPeriod,
         int expectedSubtotalAmount,
+        int expectedCreditAmount,
         int expectedDiscountAmount,
         string? expectedCouponCode)
     {
@@ -932,6 +1070,15 @@ public sealed class TierRepository : ITierRepository
             else if (expectedDiscountAmount > 0)
             {
                 throw new PaymentVerificationException("Order is missing subtotal metadata.");
+            }
+
+            var storedCredit = notesElement.TryGetProperty("creditAmount", out var creditElement)
+                ? creditElement.GetInt32()
+                : 0;
+
+            if (storedCredit != expectedCreditAmount)
+            {
+                throw new PaymentVerificationException("Order credit mismatch.");
             }
 
             var storedDiscount = notesElement.TryGetProperty("discountAmount", out var discountElement)

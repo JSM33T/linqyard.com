@@ -39,7 +39,8 @@ public sealed record TierPlanDetailsResponse(
 /// <param name="RazorpayKeyId">Publishable Razorpay key to be used by the frontend.</param>
 /// <param name="BillingPeriod">Billing period associated with the order.</param>
 /// <param name="SubtotalAmount">Original price before discounts are applied.</param>
-/// <param name="DiscountAmount">Amount discounted in the smallest currency unit.</param>
+/// <param name="CreditAmount">Amount credited from the user's active plan in the smallest currency unit.</param>
+/// <param name="DiscountAmount">Coupon savings applied on top of the credited amount.</param>
 /// <param name="CouponCode">Coupon code applied to the order, if any.</param>
 public sealed record TierOrderResponse(
     string TierName,
@@ -50,6 +51,7 @@ public sealed record TierOrderResponse(
     string Currency,
     string RazorpayKeyId,
     int SubtotalAmount,
+    int CreditAmount,
     int DiscountAmount,
     string? CouponCode);
 
@@ -70,8 +72,9 @@ public sealed record TierUpgradeConfirmationResponse(
 /// <param name="CouponCode">Normalized coupon code.</param>
 /// <param name="DiscountPercentage">Percentage discount offered by the coupon.</param>
 /// <param name="DiscountAmount">Discount amount in the smallest currency unit.</param>
-/// <param name="SubtotalAmount">Subtotal before the coupon discount.</param>
-/// <param name="FinalAmount">Final amount after applying the coupon.</param>
+/// <param name="SubtotalAmount">Target plan price before applying credits or discounts.</param>
+/// <param name="CreditAmount">Amount credited from the user's active plan in the smallest currency unit.</param>
+/// <param name="FinalAmount">Final amount after applying credits and coupon discounts.</param>
 /// <param name="Currency">ISO 4217 currency code.</param>
 /// <param name="Description">Optional textual description of the coupon.</param>
 /// <param name="ValidUntil">UTC timestamp representing coupon expiry, if any.</param>
@@ -80,6 +83,7 @@ public sealed record TierCouponPreviewResponse(
     decimal DiscountPercentage,
     int DiscountAmount,
     int SubtotalAmount,
+    int CreditAmount,
     int FinalAmount,
     string Currency,
     string? Description,

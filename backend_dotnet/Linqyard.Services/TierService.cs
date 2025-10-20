@@ -36,9 +36,10 @@ public sealed class TierService : ITierService
         _tierRepository.ConfirmUpgradeAsync(userId, request, cancellationToken);
 
     public Task<TierCouponPreviewResponse> PreviewCouponAsync(
+        Guid? userId,
         TierCouponPreviewRequest request,
         CancellationToken cancellationToken = default) =>
-        _tierRepository.PreviewCouponAsync(request, cancellationToken);
+        _tierRepository.PreviewCouponAsync(userId, request, cancellationToken);
 
     public Task<IReadOnlyList<TierAdminDetailsResponse>> GetAdminTiersAsync(
         CancellationToken cancellationToken = default) =>

@@ -21,7 +21,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
-import { PLAN_FEATURES, extractData, formatCurrency, formatDurationLabel, sortPlans } from "@/app/plans/plan-utils";
+import {
+  PLAN_FEATURES,
+  calculateUpgradeCredit,
+  extractData,
+  formatCurrency,
+  formatDurationLabel,
+  sortPlans,
+} from "@/app/plans/plan-utils";
 import {
   Dialog,
   DialogContent,
@@ -379,6 +386,7 @@ export default function TierUpgradePage() {
           tierName: orderData.tierName,
           billingPeriod: orderData.billingPeriod,
           subtotalAmount: orderData.subtotalAmount,
+          creditAmount: orderData.creditAmount,
           discountAmount: orderData.discountAmount,
           couponCode: finalCouponCode,
         },
@@ -429,19 +437,31 @@ export default function TierUpgradePage() {
     }
 
     const { tier, plan } = checkoutContext;
-    const subtotalAmount = appliedCoupon?.subtotalAmount ?? plan.amount;
+    const planAmount = plan.amount;
+    const couponCredit =
+      typeof appliedCoupon?.creditAmount === "number" ? appliedCoupon.creditAmount : null;
+    const derivedCredit =
+      couponCredit ?? calculateUpgradeCredit(tiers, activeTierName, tier.name, plan);
+    const normalizedCredit = Math.max(0, Math.min(derivedCredit ?? 0, planAmount));
+    const payableSubtotal = Math.max(planAmount - normalizedCredit, 0);
     const discountAmount = appliedCoupon?.discountAmount ?? 0;
-    const finalAmount = appliedCoupon?.finalAmount ?? plan.amount;
+    const finalAmount = appliedCoupon?.finalAmount ?? payableSubtotal;
     const durationLabel = formatDurationLabel(plan.durationMonths);
     const currency = tier.currency;
     const effectiveMonthly =
-      plan.durationMonths > 1 ? formatCurrency(Math.round(finalAmount / plan.durationMonths), currency) : null;
-    const validUntil = appliedCoupon?.validUntil ? new Date(appliedCoupon.validUntil).toLocaleDateString() : null;
+      plan.durationMonths > 1 && finalAmount > 0
+        ? formatCurrency(Math.round(finalAmount / plan.durationMonths), currency)
+        : null;
+    const validUntil = appliedCoupon?.validUntil
+      ? new Date(appliedCoupon.validUntil).toLocaleDateString()
+      : null;
 
     return {
       tier,
       plan,
-      subtotalAmount,
+      subtotalAmount: planAmount,
+      creditAmount: normalizedCredit,
+      payableSubtotal,
       discountAmount,
       finalAmount,
       durationLabel,
@@ -449,7 +469,7 @@ export default function TierUpgradePage() {
       effectiveMonthly,
       validUntil,
     };
-  }, [checkoutContext, appliedCoupon]);
+  }, [checkoutContext, appliedCoupon, tiers, activeTierName]);
 
   if (!isAuthenticated) {
     return <AccessDenied />;
@@ -545,6 +565,9 @@ export default function TierUpgradePage() {
                       const periodLabel = formatDurationLabel(plan.durationMonths);
                       const effectiveMonthly =
                         plan.durationMonths > 1 ? formatCurrency(Math.round(plan.amount / plan.durationMonths), tier.currency) : null;
+                      const creditForPlan = calculateUpgradeCredit(tiers, activeTierName, tier.name, plan);
+                      const upgradeDifference =
+                        creditForPlan > 0 ? Math.max(plan.amount - creditForPlan, 0) : null;
                       const optionActive =
                         selectedOption?.tierName === tierName && selectedOption?.billingPeriod === plan.billingPeriod && isPaymentInProgress;
                       const planDisabled = isCurrent || optionActive || isBusy;
@@ -555,8 +578,13 @@ export default function TierUpgradePage() {
                             <div>
                               <div className="text-lg font-semibold">{formattedPrice}</div>
                               <div className="text-xs text-muted-foreground">
-                                {periodLabel} billing {effectiveMonthly ? `· ~${effectiveMonthly}/month` : ""}
+                                {periodLabel} billing {effectiveMonthly ? `~ ${effectiveMonthly}/month` : ""}
                               </div>
+                              {upgradeDifference !== null && (
+                                <div className="text-xs text-emerald-600">
+                                  Pay {formatCurrency(upgradeDifference, tier.currency)} today after credit
+                                </div>
+                              )}
                             </div>
                             <Badge variant="outline" className="flex items-center gap-1">
                               <Clock className="h-3.5 w-3.5" />
@@ -576,7 +604,7 @@ export default function TierUpgradePage() {
                             {optionActive ? (
                               <>
                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Securing checkout…
+                                Securing checkout...
                               </>
                             ) : isCurrent ? (
                               <>
@@ -622,7 +650,7 @@ export default function TierUpgradePage() {
         {tiersLoading && (
           <div className="flex items-center justify-center py-10 text-muted-foreground">
             <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-            Loading plans…
+            Loading plans...
           </div>
         )}
       </section>
@@ -650,9 +678,23 @@ export default function TierUpgradePage() {
                 </div>
                 <div className="space-y-2 pt-2 text-sm">
                   <div className="flex items-center justify-between">
-                    <span>Subtotal</span>
+                    <span>Plan price</span>
                     <span>{formatCurrency(checkoutSummary.subtotalAmount, checkoutSummary.currency)}</span>
                   </div>
+                  {checkoutSummary.creditAmount > 0 && (
+                    <>
+                      <div className="flex items-center justify-between text-blue-600">
+                        <span>Current plan credit</span>
+                        <span>
+                          -{formatCurrency(checkoutSummary.creditAmount, checkoutSummary.currency)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>Upgrade difference</span>
+                        <span>{formatCurrency(checkoutSummary.payableSubtotal, checkoutSummary.currency)}</span>
+                      </div>
+                    </>
+                  )}
                   {checkoutSummary.discountAmount > 0 && (
                     <div className="flex items-center justify-between text-emerald-600">
                       <span>Coupon savings</span>
