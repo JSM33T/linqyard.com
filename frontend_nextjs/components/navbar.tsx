@@ -123,7 +123,8 @@ export default function Navbar() {
     user?.username ? (
       <div className="flex items-center gap-1 text-xs text-muted-foreground">
         <AtSign className="h-3 w-3 text-muted-foreground/80" />
-        <span className="font-medium">@{user.username}</span>
+        {/* Strip any leading @ characters from stored username to avoid duplicate symbols */}
+        <span className="font-medium">{user.username.replace(/^@+/, "")}</span>
       </div>
     ) : null;
 
