@@ -25,7 +25,7 @@ public interface ILinkRepository
 
     /// <summary>
     /// Partially update a link. Enforces owner/admin permissions and validates Group ownership.
-    /// Returns null if link not found, throws ForbiddenAccessException if not permitted.
+    /// Returns null if link not found, throws LinkForbiddenException if not permitted.
     /// </summary>
     Task<LinkSummary?> EditLinkAsync(
         Guid editorUserId,
@@ -36,7 +36,7 @@ public interface ILinkRepository
 
     /// <summary>
     /// Resequence/move links exactly as specified (id, groupId, sequence). Returns the final states.
-    /// Throws ForbiddenAccessException if any item does not belong to user.
+    /// Throws LinkForbiddenException if any item does not belong to user.
     /// </summary>
     Task<IReadOnlyList<LinkSequenceState>> ResequenceAsync(
         Guid userId,

@@ -1,4 +1,5 @@
-﻿using Linqyard.Contracts.Interfaces;
+﻿using Linqyard.Contracts.Exceptions;
+using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Data;
@@ -13,11 +14,6 @@ using System.Text;
 using System.Threading.Tasks;
 
 namespace Linqyard.Repositories;
-
-public sealed class ForbiddenAccessException : Exception
-{
-    public ForbiddenAccessException(string message) : base(message) { }
-}
 
 public sealed class LinkRepository : ILinkRepository
 {
@@ -117,10 +113,10 @@ public sealed class LinkRepository : ILinkRepository
     public async Task<LinkSummary> CreateLinkAsync(Guid userId, CreateLinkRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name) || string.IsNullOrWhiteSpace(request.Url))
-            throw new ArgumentException("Name and Url are required.");
+            throw new LinkValidationException("Name and Url are required.");
 
         if (!IsValidAbsoluteUrl(request.Url))
-            throw new ArgumentException("Url is not a valid absolute URL.");
+            throw new LinkValidationException("Url is not a valid absolute URL.");
 
         // Free plan enforcement (12 links)
         var activeTierId = await GetActiveTierIdAsync(userId, ct) ?? (int)TierType.Free;
@@ -129,7 +125,7 @@ public sealed class LinkRepository : ILinkRepository
         {
             var existingCount = await _db.Links.LongCountAsync(l => l.UserId == userId, ct);
             if (existingCount >= 12)
-                throw new InvalidOperationException("Free tier users can create a maximum of 12 links. Please upgrade to create more links.");
+                throw new LinkLimitExceededException("Free tier users can create a maximum of 12 links. Please upgrade to create more links.");
         }
 
         // Group validation (Guid.Empty => ungroup)
@@ -138,7 +134,7 @@ public sealed class LinkRepository : ILinkRepository
         {
             var groupOk = await _db.LinkGroups
                 .AnyAsync(g => g.Id == groupId.Value && g.UserId == userId, ct);
-            if (!groupOk) throw new ArgumentException("Specified group does not exist or does not belong to you.");
+            if (!groupOk) throw new LinkValidationException("Specified group does not exist or does not belong to you.");
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -173,7 +169,7 @@ public sealed class LinkRepository : ILinkRepository
 
         var isOwner = link.UserId == editorUserId;
         if (!isOwner && !isAdmin)
-            throw new ForbiddenAccessException("You do not have permission to edit this link.");
+            throw new LinkForbiddenException("You do not have permission to edit this link.");
 
         // Apply partials
         if (!string.IsNullOrWhiteSpace(request.Name))
@@ -182,7 +178,7 @@ public sealed class LinkRepository : ILinkRepository
         if (!string.IsNullOrWhiteSpace(request.Url))
         {
             if (!IsValidAbsoluteUrl(request.Url))
-                throw new ArgumentException("Url is not a valid absolute URL.");
+                throw new LinkValidationException("Url is not a valid absolute URL.");
             link.Url = request.Url.Trim();
         }
 
@@ -198,7 +194,7 @@ public sealed class LinkRepository : ILinkRepository
                 var groupOk = await _db.LinkGroups
                     .AnyAsync(g => g.Id == normalized.Value && (g.UserId == editorUserId || isAdmin), ct);
                 if (!groupOk)
-                    throw new ArgumentException("Specified group does not exist or does not belong to you.");
+                    throw new LinkValidationException("Specified group does not exist or does not belong to you.");
             }
             link.GroupId = normalized;
         }
@@ -231,7 +227,7 @@ public sealed class LinkRepository : ILinkRepository
         // Ensure all belong to user
         var invalid = links.Where(l => l.UserId != userId).Select(l => l.Id).ToList();
         if (invalid.Count > 0)
-            throw new ForbiddenAccessException($"One or more links do not belong to the user: {string.Join(",", invalid)}");
+            throw new LinkForbiddenException($"One or more links do not belong to the user: {string.Join(",", invalid)}");
 
         // Pre-validate groups (when provided and not null/empty)
         var groupIds = items.Select(i => NormalizeGroupId(i.GroupId)).Where(g => g.HasValue).Select(g => g!.Value).Distinct().ToList();
@@ -244,7 +240,7 @@ public sealed class LinkRepository : ILinkRepository
 
             var missing = groupIds.Except(okGroups).ToList();
             if (missing.Count > 0)
-                throw new ArgumentException($"One or more groups do not exist or do not belong to you: {string.Join(",", missing)}");
+                throw new LinkValidationException($"One or more groups do not exist or do not belong to you: {string.Join(",", missing)}");
         }
 
         // Apply updates EXACTLY as requested in a transaction
@@ -280,8 +276,9 @@ public sealed class LinkRepository : ILinkRepository
         var final = await _db.Links
             .AsNoTracking()
             .Where(l => ids.Contains(l.Id))
+            .OrderBy(l => l.GroupId)
+            .ThenBy(l => l.Sequence)
             .Select(l => new LinkSequenceState(l.Id, l.Sequence, l.GroupId))
-            .OrderBy(l => l.GroupId).ThenBy(l => l.Sequence)
             .ToListAsync(ct);
 
         return final;
