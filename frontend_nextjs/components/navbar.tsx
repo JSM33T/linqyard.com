@@ -377,15 +377,23 @@ const getIcon = (iconName: string) => {
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                   <DropdownMenuLabel className="font-normal">
                     <div className="flex flex-col space-y-1">
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium leading-none">
-                          {userHelpers.getFirstName(user)}
-                        </p>
-                        {renderRoleBadge()}
+                      {/* first row: name left, tier badge right */}
+                      <div className="flex items-center justify-between w-full">
+                        <p className="text-sm font-medium leading-none truncate">{userHelpers.getFirstName(user)}</p>
+                        <div className="flex-shrink-0 ml-2">{renderTierBadge()}</div>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2 pt-0.5">
-                        {renderUsernameBadge()}
-                        {renderTierBadge()}
+
+                      {/* second row: username left, role right */}
+                      <div className="flex items-center justify-between w-full gap-2 pt-0.5 text-xs text-muted-foreground">
+                        <div className="flex items-center gap-1 truncate">
+                          <AtSign className="h-3 w-3 text-muted-foreground/80 flex-shrink-0" />
+                          <span className="font-medium truncate max-w-[10rem]">{user?.username?.replace(/^@+/, "")}</span>
+                        </div>
+                        {user?.role ? (
+                          <div className="flex-shrink-0">
+                            <span className="text-xs text-muted-foreground/70 uppercase tracking-wide">{roleDisplayName}</span>
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                   </DropdownMenuLabel>

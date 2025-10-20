@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import NextImage from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import LinksPreview from "@/components/LinksPreview";
 import {
@@ -45,6 +46,7 @@ import {
 
 import { ArrowLeft, Globe, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown, Share2, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
+import QRCode from "qrcode";
 
 import { useUser } from "@/contexts/UserContext";
 import { useApi, useGet } from "@/hooks/useApi";
@@ -340,6 +342,10 @@ export default function LinksPage() {
   // share modal
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [copiedPlatform, setCopiedPlatform] = useState<string | null>(null);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string | null>(null);
+  const [isGeneratingQrCode, setIsGeneratingQrCode] = useState(false);
+  const [isDownloadingQrCard, setIsDownloadingQrCard] = useState(false);
+  const [qrCodeError, setQrCodeError] = useState<string | null>(null);
 
   // delete confirmation modal
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
@@ -602,6 +608,60 @@ export default function LinksPage() {
     return `https://${user.username}.linqyard.com?src=${platform}`;
   };
 
+  useEffect(() => {
+    if (!isShareModalOpen) {
+      setQrCodeDataUrl(null);
+      setQrCodeError(null);
+      return;
+    }
+
+    if (!user?.username) {
+      setQrCodeError("Missing username for QR code");
+      setQrCodeDataUrl(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const generateQrCode = async () => {
+      setIsGeneratingQrCode(true);
+      setQrCodeError(null);
+      setQrCodeDataUrl(null);
+
+      try {
+        const shareUrlForQr = `https://${user.username}.linqyard.com?src=qr`;
+        const dataUrl = await QRCode.toDataURL(shareUrlForQr, {
+          margin: 1,
+          width: 600,
+          color: {
+            dark: "#111827",
+            light: "#ffffff",
+          },
+        });
+
+        if (!cancelled) {
+          setQrCodeDataUrl(dataUrl);
+        }
+      } catch (error) {
+        console.error("Failed to generate QR code", error);
+        if (!cancelled) {
+          setQrCodeError("We couldn't generate your QR code.");
+          toast.error("Failed to generate QR code");
+        }
+      } finally {
+        if (!cancelled) {
+          setIsGeneratingQrCode(false);
+        }
+      }
+    };
+
+    generateQrCode();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isShareModalOpen, user?.username]);
+
   const copyToClipboard = async (platform: string) => {
     const url = getShareUrl(platform);
     try {
@@ -633,6 +693,109 @@ export default function LinksPage() {
     
     if (shareUrl) {
       window.open(shareUrl, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const loadImage = (src: string) =>
+    new Promise<HTMLImageElement>((resolve, reject) => {
+      const img = new window.Image();
+      img.crossOrigin = "anonymous";
+      img.onload = () => resolve(img);
+      img.onerror = () => reject(new Error("Failed to load image"));
+      img.src = src;
+    });
+
+  const drawRoundedRect = (
+    context: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    radius: number
+  ) => {
+    const r = Math.min(radius, width / 2, height / 2);
+    context.beginPath();
+    context.moveTo(x + r, y);
+    context.lineTo(x + width - r, y);
+    context.quadraticCurveTo(x + width, y, x + width, y + r);
+    context.lineTo(x + width, y + height - r);
+    context.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+    context.lineTo(x + r, y + height);
+    context.quadraticCurveTo(x, y + height, x, y + height - r);
+    context.lineTo(x, y + r);
+    context.quadraticCurveTo(x, y, x + r, y);
+    context.closePath();
+    context.fill();
+  };
+
+  const downloadQrCard = async () => {
+    if (!qrCodeDataUrl || !user?.username) {
+      toast.error("QR code is not ready yet");
+      return;
+    }
+
+    setIsDownloadingQrCard(true);
+    try {
+      const canvas = document.createElement("canvas");
+      canvas.width = 900;
+      canvas.height = 1200;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas context unavailable");
+
+      // Background
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, "#f8fafc");
+      gradient.addColorStop(1, "#e2e8f0");
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Title
+      ctx.fillStyle = "#0f172a";
+      ctx.font = "600 56px 'Inter', 'Segoe UI', sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("Linqyard Profile", canvas.width / 2, 110);
+
+      // QR code container
+      const qrImage = await loadImage(qrCodeDataUrl);
+      const qrSize = 640;
+      const qrX = (canvas.width - qrSize) / 2;
+      const qrY = 200;
+
+      ctx.shadowColor = "rgba(15, 23, 42, 0.16)";
+      ctx.shadowBlur = 48;
+      ctx.shadowOffsetY = 24;
+      ctx.fillStyle = "#ffffff";
+      drawRoundedRect(ctx, qrX - 36, qrY - 36, qrSize + 72, qrSize + 72, 40);
+      ctx.shadowColor = "transparent";
+
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+
+      // Username
+      ctx.fillStyle = "#111827";
+      ctx.font = "700 52px 'Inter', 'Segoe UI', sans-serif";
+      ctx.fillText(`@${user.username}`, canvas.width / 2, qrY + qrSize + 130);
+
+      // Subtitle
+      ctx.fillStyle = "#475569";
+      ctx.font = "400 30px 'Inter', 'Segoe UI', sans-serif";
+      ctx.fillText("Scan to visit my Linqyard links", canvas.width / 2, qrY + qrSize + 190);
+
+      // Direct URL
+      const directLink = `https://${user.username}.linqyard.com`;
+      ctx.fillStyle = "#2563eb";
+      ctx.font = "500 28px 'Inter', 'Segoe UI', sans-serif";
+      ctx.fillText(directLink, canvas.width / 2, qrY + qrSize + 240);
+
+      const link = document.createElement("a");
+      link.href = canvas.toDataURL("image/png");
+      link.download = `${user.username}-linqyard-qr.png`;
+      link.click();
+      toast.success("QR card downloaded");
+    } catch (error) {
+      console.error("Failed to download QR card", error);
+      toast.error("Failed to download QR card");
+    } finally {
+      setIsDownloadingQrCard(false);
     }
   };
 
@@ -1091,7 +1254,72 @@ export default function LinksPage() {
                 Share your Linqyard profile across different platforms
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
+            <div className="space-y-5">
+              {/* QR share */}
+              <div className="rounded-xl border bg-card/80 p-4">
+                <div className="space-y-4">
+                  <div className="text-center space-y-1">
+                    <p className="text-sm font-semibold">Share with QR code</p>
+                    <p className="text-xs text-muted-foreground">
+                      Download a ready-to-share card with your QR code and username.
+                    </p>
+                  </div>
+                  <div className="flex flex-col items-center gap-3">
+                    {isGeneratingQrCode ? (
+                      <div className="h-48 w-48 rounded-xl bg-muted animate-pulse" />
+                    ) : qrCodeDataUrl ? (
+                      <>
+                        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+                          <NextImage
+                            src={qrCodeDataUrl}
+                            alt="Linqyard profile QR code"
+                            width={192}
+                            height={192}
+                            unoptimized
+                            className="h-48 w-48"
+                          />
+                        </div>
+                        <div className="text-center space-y-1">
+                          <p className="text-sm font-semibold">@{user?.username}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Scan to view my Linqyard profile
+                          </p>
+                        </div>
+                      </>
+                    ) : qrCodeError ? (
+                      <p className="text-sm text-destructive text-center">{qrCodeError}</p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground text-center">
+                        QR code unavailable.
+                      </p>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      className="w-full"
+                      onClick={downloadQrCard}
+                      disabled={isGeneratingQrCode || isDownloadingQrCard || !qrCodeDataUrl}
+                    >
+                      {isDownloadingQrCard ? "Preparing image..." : "Download QR image"}
+                    </Button>
+                    <Button
+                      className="w-full"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => copyToClipboard('qr')}
+                      disabled={!qrCodeDataUrl}
+                    >
+                      {copiedPlatform === 'qr' ? (
+                        <Check className="h-4 w-4 text-green-600" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
+                      <span className="ml-2">Copy QR link</span>
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
               <div className="space-y-3">
                 {/* WhatsApp */}
                 <div className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-accent/50 transition-colors">
