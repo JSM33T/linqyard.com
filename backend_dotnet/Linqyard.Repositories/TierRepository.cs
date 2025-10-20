@@ -18,7 +18,7 @@ using Microsoft.Extensions.Options;
 
 namespace Linqyard.Repositories;
 
-public sealed class TierService : ITierService
+public sealed class TierRepository : ITierRepository
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -29,13 +29,13 @@ public sealed class TierService : ITierService
     private sealed record CouponEvaluation(Coupon Coupon, int DiscountAmount, int FinalAmount);
 
     private readonly LinqyardDbContext _db;
-    private readonly ILogger<TierService> _logger;
+    private readonly ILogger<TierRepository> _logger;
     private readonly RazorpaySettings _razorpay;
     private readonly IHttpClientFactory _httpClientFactory;
 
-    public TierService(
+    public TierRepository(
         LinqyardDbContext db,
-        ILogger<TierService> logger,
+        ILogger<TierRepository> logger,
         IOptions<RazorpaySettings> razorpayOptions,
         IHttpClientFactory httpClientFactory)
     {

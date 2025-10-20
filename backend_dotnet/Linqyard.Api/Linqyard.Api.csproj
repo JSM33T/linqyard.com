@@ -49,6 +49,7 @@
 		<ProjectReference Include="..\Linqyard.Entities\Linqyard.Entities.csproj" />
 		<ProjectReference Include="..\Linqyard.Infra\Linqyard.Infra.csproj" />
 		<ProjectReference Include="..\Linqyard.Repositories\Linqyard.Repositories.csproj" />
+		<ProjectReference Include="..\Linqyard.Services\Linqyard.Services.csproj" />
 	</ItemGroup>
 
 	<ItemGroup>

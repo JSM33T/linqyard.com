@@ -5,6 +5,7 @@ using Linqyard.Api.Services;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Repositories;
 using Linqyard.Repositories.Configuration;
+using Linqyard.Services;
 using Serilog;
 using Serilog.Exceptions;
 
@@ -63,6 +64,7 @@ builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
 builder.Services.AddScoped<IProfileRepository, ProfileRepository>();
 builder.Services.AddScoped<ILinkRepository, LinkRepository>();
 builder.Services.AddScoped<IViewTelemetryRepository, ViewTelemetryRepository>();
+builder.Services.AddScoped<ITierRepository, TierRepository>();
 builder.Services.AddScoped<ITierService, TierService>();
 
 // Add custom app services (example)
@@ -121,4 +123,3 @@ finally
 {
     Log.CloseAndFlush();
 }
-
