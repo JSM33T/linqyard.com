@@ -176,6 +176,7 @@ export interface LoginResponse {
       roles: string[];
       tierId?: number | null;
       tierName?: string | null;
+      activeTier?: UserTierInfo | null;
     };
   };
   meta: any | null;
@@ -322,6 +323,7 @@ export interface GoogleCallbackResponse {
       roles: string[];
       tierId?: number | null;
       tierName?: string | null;
+      activeTier?: UserTierInfo | null;
     };
 }
 

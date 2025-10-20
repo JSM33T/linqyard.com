@@ -64,7 +64,7 @@ export default function OAuthCallbackPage() {
           
           // Get user info from the /auth/me endpoint
           try {
-            const userResponse = await get<{ 
+            const userResponse = await get<{
               data: {
                 id: string;
                 email: string;
@@ -77,6 +77,7 @@ export default function OAuthCallbackPage() {
                 roles: string[];
                 tierId?: number | null;
                 tierName?: string | null;
+                activeTier?: any | null; // typed as any here to match API shape
               };
               meta: any | null;
             }>("/auth/me");
