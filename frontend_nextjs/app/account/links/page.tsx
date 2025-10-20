@@ -63,6 +63,8 @@ const cardVariants = {
   visible: { opacity: 1, scale: 1, transition: { duration: 0.25 } },
 };
 
+const PRIMARY_COLOR_FALLBACK = "#5c558b";
+
 /* ---------- Sortable row (single Link chip) ---------- */
 function SortableLinkRow({ item, onEdit, onDelete }: { item: LinkItem; onEdit: (l: LinkItem) => void; onDelete: (l: LinkItem) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -347,6 +349,10 @@ export default function LinksPage() {
   const [isDownloadingQrCard, setIsDownloadingQrCard] = useState(false);
   const [qrCodeError, setQrCodeError] = useState<string | null>(null);
 
+  const getPrimaryColorHex = () => {
+    return PRIMARY_COLOR_FALLBACK;
+  };
+
   // delete confirmation modal
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<{ type: 'link' | 'group'; id: string; name: string } | null>(null);
@@ -630,11 +636,12 @@ export default function LinksPage() {
 
       try {
         const shareUrlForQr = `https://${user.username}.linqyard.com?src=qr`;
+        const primaryColorHex = getPrimaryColorHex();
         const dataUrl = await QRCode.toDataURL(shareUrlForQr, {
           margin: 1,
           width: 600,
           color: {
-            dark: "#111827",
+            dark: primaryColorHex,
             light: "#ffffff",
           },
         });
@@ -736,17 +743,18 @@ export default function LinksPage() {
 
     setIsDownloadingQrCard(true);
     try {
+      if (typeof document === "undefined" || typeof window === "undefined") {
+        throw new Error("Download is only available in the browser");
+      }
+      const primaryColorHex = getPrimaryColorHex();
       const canvas = document.createElement("canvas");
       canvas.width = 900;
-      canvas.height = 1200;
+      canvas.height = 1400;
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas context unavailable");
 
       // Background
-      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
-      gradient.addColorStop(0, "#f8fafc");
-      gradient.addColorStop(1, "#e2e8f0");
-      ctx.fillStyle = gradient;
+      ctx.fillStyle = "#f8fafc";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
       // Title
@@ -757,6 +765,13 @@ export default function LinksPage() {
 
       // QR code container
       const qrImage = await loadImage(qrCodeDataUrl);
+      let logoImage: HTMLImageElement | null = null;
+      try {
+        const logoUrl = new URL("/logo.svg", window.location.origin).toString();
+        logoImage = await loadImage(logoUrl);
+      } catch (logoError) {
+        console.warn("Failed to load watermark logo", logoError);
+      }
       const qrSize = 640;
       const qrX = (canvas.width - qrSize) / 2;
       const qrY = 200;
@@ -780,11 +795,31 @@ export default function LinksPage() {
       ctx.font = "400 30px 'Inter', 'Segoe UI', sans-serif";
       ctx.fillText("Scan to visit my Linqyard links", canvas.width / 2, qrY + qrSize + 190);
 
+      if (logoImage) {
+        const naturalWidth = logoImage.naturalWidth || logoImage.width || 1;
+        const naturalHeight = logoImage.naturalHeight || logoImage.height || 1;
+        const logoWidth = 280;
+        const logoHeight = (logoWidth / naturalWidth) * naturalHeight;
+        const logoX = (canvas.width - logoWidth) / 2;
+        const baseY = qrY + qrSize + 300;
+        const maxY = canvas.height - logoHeight - 120;
+        const logoY = Math.min(maxY, baseY);
+
+        ctx.save();
+        ctx.globalAlpha = 0.22;
+        ctx.drawImage(logoImage, logoX, logoY, logoWidth, logoHeight);
+        ctx.restore();
+      }
+
       // Direct URL
       const directLink = `https://${user.username}.linqyard.com`;
-      ctx.fillStyle = "#2563eb";
-      ctx.font = "500 28px 'Inter', 'Segoe UI', sans-serif";
+      ctx.fillStyle = primaryColorHex;
+      ctx.font = "600 30px 'Inter', 'Segoe UI', sans-serif";
       ctx.fillText(directLink, canvas.width / 2, qrY + qrSize + 240);
+
+      ctx.fillStyle = "#475569";
+      ctx.font = "500 24px 'Inter', 'Segoe UI', sans-serif";
+      ctx.fillText("Powered by linqyard.com", canvas.width / 2, qrY + qrSize + 300);
 
       const link = document.createElement("a");
       link.href = canvas.toDataURL("image/png");
@@ -1247,14 +1282,14 @@ export default function LinksPage() {
 
         {/* Share Profile Modal */}
         <Dialog open={isShareModalOpen} onOpenChange={setIsShareModalOpen}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent className="sm:max-w-md max-h-[90vh]">
             <DialogHeader>
               <DialogTitle>Share Your Profile</DialogTitle>
               <DialogDescription>
                 Share your Linqyard profile across different platforms
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-5">
+            <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
               {/* QR share */}
               <div className="rounded-xl border bg-card/80 p-4">
                 <div className="space-y-4">
