@@ -543,6 +543,11 @@ export default function TierUpgradePage() {
             const tierName = tier.name.toLowerCase();
             const isCurrent = tierName === activeTierName?.toLowerCase();
             const plans = sortPlans(tier);
+            // Determine if this tier would be a downgrade compared to the user's active tier
+            const userTierId = activeTier?.tierId ?? userHelpers.getTierId(user) ?? 0;
+            const isDowngrade = tier.tierId < userTierId;
+            // Consider the user "Pro" if either server reports it or the user context indicates it
+            const isProActive = userHelpers.isProTier(user) || activeTierName === "pro";
 
             return (
               <Card key={tier.tierId} className={cn("h-full", isCurrent && "border-primary shadow-lg")}>
@@ -596,25 +601,32 @@ export default function TierUpgradePage() {
                             {plan.description ?? tier.description ?? "Enjoy more control, personalization, and insights."}
                           </p>
 
-                          <Button
-                            className="w-full"
-                            disabled={planDisabled}
-                            onClick={() => handleUpgrade(tier, plan)}
-                          >
-                            {optionActive ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Securing checkout...
-                              </>
-                            ) : isCurrent ? (
-                              <>
-                                <Check className="mr-2 h-4 w-4" />
-                                Active plan
-                              </>
-                            ) : (
-                              `Upgrade (${periodLabel.toLowerCase()})`
-                            )}
-                          </Button>
+                          {/* If the user is Pro and this tier is a downgrade, do not show the downgrade/upgrade CTA */}
+                          {isProActive && isDowngrade ? (
+                            <div className="w-full rounded-md border border-border p-3 text-sm text-muted-foreground text-center">
+                              Downgrading from Pro is not available here.
+                            </div>
+                          ) : (
+                            <Button
+                              className="w-full"
+                              disabled={planDisabled}
+                              onClick={() => handleUpgrade(tier, plan)}
+                            >
+                              {optionActive ? (
+                                <>
+                                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                  Securing checkout...
+                                </>
+                              ) : isCurrent ? (
+                                <>
+                                  <Check className="mr-2 h-4 w-4" />
+                                  Active plan
+                                </>
+                              ) : (
+                                `Upgrade (${periodLabel.toLowerCase()})`
+                              )}
+                            </Button>
+                          )}
                         </div>
                       );
                     })}
