@@ -353,12 +353,14 @@ export default function TierUpgradePage() {
           failure?.error?.reason ||
           "Payment was not completed. You were not charged.";
         toast.error(reason);
+        setIsCheckoutDialogOpen(true);
         setIsPaymentInProgress(false);
         setSelectedOption(null);
       };
 
       const onModalDismiss = () => {
         toast.info("Payment cancelled.");
+        setIsCheckoutDialogOpen(true);
         setIsPaymentInProgress(false);
         setSelectedOption(null);
       };
@@ -393,12 +395,15 @@ export default function TierUpgradePage() {
         },
       };
 
+      setIsCheckoutDialogOpen(false);
+
       const razorpay = new window.Razorpay!(razorpayOptions);
       razorpay.on("payment.failed", onPaymentFailure);
       razorpay.open();
     } catch (error) {
       console.error("Tier upgrade initiation failed", error);
       toast.error(extractErrorMessage(error as ApiError));
+      setIsCheckoutDialogOpen(true);
       setIsPaymentInProgress(false);
       setSelectedOption(null);
     }
