@@ -124,56 +124,52 @@ export function UserProvider({ children }: UserProviderProps) {
         setUser(null);
         setIsInitialized(true);
       } else {
-        // No user data and no token - check if we have any cookies that indicate a session
-        // This handles cases where localStorage was cleared but HTTP-only cookies remain
-        const hasRefreshTokenCookie = document.cookie.includes('refreshToken=');
-        if (hasRefreshTokenCookie) {
-          console.log('ðŸª Refresh token cookie found but no local user data - attempting session restore');
-          
-          // Attempt to restore the session proactively
-          try {
-            // Import apiService dynamically to avoid circular dependency
-            const { apiService } = await import('@/hooks/apiService');
-            const userData = await apiService.attemptSessionRestore();
-            
-            if (userData) {
-              const restoredUser = {
-                id: userData.id,
-                firstName: userData.firstName || '',
-                lastName: userData.lastName || '',
-                username: userData.username || '',
-                email: userData.email || '',
-                avatarUrl: userData.avatarUrl,
-                coverUrl: userData.coverUrl,
-                login: true,
-                expiry: undefined, // Will be set from token expiry
-                tierId: userData.tierId ?? userData.activeTier?.tierId,
-                tierName: userData.tierName ?? userData.activeTier?.name,
-                activeTier: userData.activeTier
-                  ? {
-                      tierId: userData.activeTier.tierId,
-                      name: userData.activeTier.name,
-                      activeFrom: userData.activeTier.activeFrom,
-                      activeUntil: userData.activeTier.activeUntil,
-                    }
-                  : null,
-                role: userData.roles?.[0] || 'user',
-                preferences: userData.preferences
-              };
-              
-              setUser(restoredUser);
-              userStorage.save(restoredUser);
-              console.log(' Session restored successfully from cookies');
-            } else {
-              console.log('Session restoration failed');
-              setUser(null);
-            }
-          } catch (error) {
-            console.log('Error during session restoration:', error);
+        // No user data and no token - attempt session restoration proactively.
+        // Previously this only ran when a refresh token cookie was detected. To ensure
+        // the UserContext can be populated on first page load (even when localStorage
+        // was cleared or cookies are used by the backend), call the session restore
+        // routine unconditionally. The backend will decide whether a session exists
+        // (via HTTP-only cookie) and the client will handle success/failure.
+        try {
+          // Import apiService dynamically to avoid circular dependency
+          const { apiService } = await import('@/hooks/apiService');
+          console.log('Attempting proactive session restore on initial load');
+          const userData = await apiService.attemptSessionRestore();
+
+          if (userData) {
+            const restoredUser = {
+              id: userData.id,
+              firstName: userData.firstName || '',
+              lastName: userData.lastName || '',
+              username: userData.username || '',
+              email: userData.email || '',
+              avatarUrl: userData.avatarUrl,
+              coverUrl: userData.coverUrl,
+              login: true,
+              expiry: undefined, // Will be set from token expiry
+              tierId: userData.tierId ?? userData.activeTier?.tierId,
+              tierName: userData.tierName ?? userData.activeTier?.name,
+              activeTier: userData.activeTier
+                ? {
+                    tierId: userData.activeTier.tierId,
+                    name: userData.activeTier.name,
+                    activeFrom: userData.activeTier.activeFrom,
+                    activeUntil: userData.activeTier.activeUntil,
+                  }
+                : null,
+              role: userData.roles?.[0] || 'user',
+              preferences: userData.preferences
+            };
+
+            setUser(restoredUser);
+            userStorage.save(restoredUser);
+            console.log('Session restored successfully on initial load');
+          } else {
+            console.log('Session restoration returned no user');
             setUser(null);
           }
-        } else {
-          // No refresh token cookie, definitely not authenticated
+        } catch (error) {
+          console.log('Error during proactive session restoration:', error);
           setUser(null);
         }
         
