@@ -12,6 +12,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http.Headers;
+using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -152,6 +153,199 @@ public sealed class AuthController : BaseApiController
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
                 detail: "An error occurred while processing your request");
+        }
+    }
+
+    /// <summary>
+    /// Check whether a username is syntactically valid and currently available.
+    /// </summary>
+    [HttpGet("availability/username")]
+    [ProducesResponseType(typeof(ApiResponse<AvailabilityResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CheckUsernameAvailability([FromQuery] string? username, CancellationToken cancellationToken = default)
+    {
+        var rawValue = username ?? string.Empty;
+        var normalized = rawValue.Trim();
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: string.Empty,
+                    IsValid: false,
+                    Available: false,
+                    Reason: "Username is required."
+                ));
+            }
+
+            if (normalized.Length < 3)
+            {
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: false,
+                    Available: false,
+                    Reason: "Username must be at least 3 characters long."
+                ));
+            }
+
+            if (normalized.Length > 30)
+            {
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: false,
+                    Available: false,
+                    Reason: "Username cannot be longer than 30 characters."
+                ));
+            }
+
+            if (!System.Text.RegularExpressions.Regex.IsMatch(normalized, @"^[a-zA-Z0-9_-]+$"))
+            {
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: false,
+                    Available: false,
+                    Reason: "Username can only contain letters, numbers, underscores, and hyphens."
+                ));
+            }
+
+            var normalizedLower = normalized.ToLowerInvariant();
+
+            var existing = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Username.ToLower() == normalizedLower, cancellationToken);
+
+            if (existing is null)
+            {
+                _logger.LogInformation("Username {Username} is available", normalized);
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: true,
+                    Available: true
+                ));
+            }
+
+            if (existing.EmailVerified)
+            {
+                _logger.LogInformation("Username {Username} is taken by a verified account", normalized);
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: true,
+                    Available: false,
+                    Reason: "This username is already taken.",
+                    ConflictType: "VerifiedUser"
+                ));
+            }
+
+            _logger.LogInformation("Username {Username} is held by an unverified account", normalized);
+            return OkEnvelope(new AvailabilityResponse(
+                Value: normalized,
+                IsValid: true,
+                Available: true,
+                Reason: "An unverified account currently holds this username. Continuing will replace it.",
+                ConflictType: "PendingVerification"
+            ));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking username availability for {Username}", normalized);
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Internal Server Error",
+                detail: "Could not check username availability at this time.");
+        }
+    }
+
+    /// <summary>
+    /// Check whether an email is syntactically valid and currently available.
+    /// </summary>
+    [HttpGet("availability/email")]
+    [ProducesResponseType(typeof(ApiResponse<AvailabilityResponse>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> CheckEmailAvailability([FromQuery] string? email, CancellationToken cancellationToken = default)
+    {
+        var rawValue = email ?? string.Empty;
+        var normalized = rawValue.Trim();
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(normalized))
+            {
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: string.Empty,
+                    IsValid: false,
+                    Available: false,
+                    Reason: "Email address is required."
+                ));
+            }
+
+            if (normalized.Length > 256)
+            {
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: false,
+                    Available: false,
+                    Reason: "Email address is too long."
+                ));
+            }
+
+            try
+            {
+                var mailAddress = new MailAddress(normalized);
+                normalized = mailAddress.Address;
+            }
+            catch (FormatException)
+            {
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: false,
+                    Available: false,
+                    Reason: "Please enter a valid email address."
+                ));
+            }
+
+            var normalizedLower = normalized.ToLowerInvariant();
+
+            var existing = await _context.Users
+                .AsNoTracking()
+                .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedLower, cancellationToken);
+
+            if (existing is null)
+            {
+                _logger.LogInformation("Email {Email} is available", normalized);
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: true,
+                    Available: true
+                ));
+            }
+
+            if (existing.EmailVerified)
+            {
+                _logger.LogInformation("Email {Email} is already in use by a verified account", normalized);
+                return OkEnvelope(new AvailabilityResponse(
+                    Value: normalized,
+                    IsValid: true,
+                    Available: false,
+                    Reason: "An account with this email already exists.",
+                    ConflictType: "VerifiedUser"
+                ));
+            }
+
+            _logger.LogInformation("Email {Email} is associated with an unverified account", normalized);
+            return OkEnvelope(new AvailabilityResponse(
+                Value: normalized,
+                IsValid: true,
+                Available: true,
+                Reason: "An unverified account exists for this email. Continuing will replace it.",
+                ConflictType: "PendingVerification"
+            ));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking email availability for {Email}", normalized);
+            return Problem(
+                statusCode: StatusCodes.Status500InternalServerError,
+                title: "Internal Server Error",
+                detail: "Could not check email availability at this time.");
         }
     }
 

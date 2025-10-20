@@ -26,6 +26,19 @@ export interface RequestConfig {
   requireAuth?: boolean;
 }
 
+export interface AvailabilityResponse {
+  value: string;
+  isValid: boolean;
+  available: boolean;
+  reason?: string | null;
+  conflictType?: string | null;
+}
+
+export interface AvailabilityCheckResponse {
+  data: AvailabilityResponse;
+  meta: any | null;
+}
+
 export interface PagedMeta {
   page: number;
   pageSize: number;
