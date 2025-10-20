@@ -66,6 +66,7 @@ builder.Services.AddScoped<ILinkRepository, LinkRepository>();
 builder.Services.AddScoped<IViewTelemetryRepository, ViewTelemetryRepository>();
 builder.Services.AddScoped<ITierRepository, TierRepository>();
 builder.Services.AddScoped<ITierService, TierService>();
+builder.Services.AddScoped<IProfileService, ProfileService>();
 
 // Add custom app services (example)
 // builder.Services.AddSingleton<ILoggingService, LoggingService>();

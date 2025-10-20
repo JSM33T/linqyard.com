@@ -1,12 +1,10 @@
-using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Requests;
 using Microsoft.AspNetCore.Http;
 using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using System.Security.Cryptography;
-using System.Text;
+using Linqyard.Contracts.Interfaces;
 
 namespace Linqyard.Api.Controllers;
 
@@ -15,14 +13,14 @@ namespace Linqyard.Api.Controllers;
 public sealed class ProfileController : BaseApiController
 {
     private readonly ILogger<ProfileController> _logger;
-    private readonly IProfileRepository _profileRepository;
+    private readonly IProfileService _profileService;
 
     public ProfileController(
         ILogger<ProfileController> logger,
-        IProfileRepository profileRepository)
+        IProfileService profileService)
     {
         _logger = logger;
-        _profileRepository = profileRepository;
+        _profileService = profileService;
     }
 
     /// <summary>
@@ -41,7 +39,7 @@ public sealed class ProfileController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
             }
 
-            var profile = await _profileRepository.GetProfileDetailsAsync(userIdGuid, cancellationToken);
+            var profile = await _profileService.GetProfileDetailsAsync(userIdGuid, cancellationToken);
             if (profile == null)
             {
                 _logger.LogWarning("User {UserId} not found", UserId);
@@ -80,49 +78,27 @@ public sealed class ProfileController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
             }
 
-            // Username validation
-            if (!string.IsNullOrWhiteSpace(request.Username))
+            var result = await _profileService.UpdateProfileAsync(userIdGuid, request, cancellationToken);
+
+            switch (result.Status)
             {
-                if (request.Username.Length < 4)
-                {
-                    return BadRequestProblem("Username must be at least 3 characters long");
-                }
-
-                if (request.Username.Length > 30)
-                {
-                    return BadRequestProblem("Username cannot exceed 30 characters");
-                }
-
-                if (!System.Text.RegularExpressions.Regex.IsMatch(request.Username, @"^[a-zA-Z0-9_.-]+$"))
-                {
-                    return BadRequestProblem("Username can only contain letters, numbers, underscores, dots, and hyphens");
-                }
+                case ProfileUpdateStatus.Success:
+                    _logger.LogInformation("Profile updated successfully for user {UserId}", UserId);
+                    return OkEnvelope(result.Response!);
+                case ProfileUpdateStatus.UserNotFound:
+                    _logger.LogWarning("User {UserId} not found", UserId);
+                    return NotFoundProblem("User not found");
+                case ProfileUpdateStatus.UsernameTaken:
+                case ProfileUpdateStatus.InvalidUsername:
+                case ProfileUpdateStatus.InvalidDisplayName:
+                case ProfileUpdateStatus.InvalidBio:
+                    return BadRequestProblem(result.ErrorMessage ?? "Invalid profile data supplied");
+                default:
+                    return Problem(
+                        statusCode: StatusCodes.Status500InternalServerError,
+                        title: "Internal Server Error",
+                        detail: "An error occurred while updating your profile");
             }
-
-            if (!string.IsNullOrWhiteSpace(request.DisplayName) && request.DisplayName.Length > 50)
-            {
-                return BadRequestProblem("Display name cannot exceed 50 characters");
-            }
-
-            if (!string.IsNullOrWhiteSpace(request.Bio) && request.Bio.Length > 500)
-            {
-                return BadRequestProblem("Bio cannot exceed 500 characters");
-            }
-
-            var response = await _profileRepository.UpdateProfileAsync(userIdGuid, request, cancellationToken);
-            if (response == null)
-            {
-                _logger.LogWarning("User {UserId} not found", UserId);
-                return NotFoundProblem("User not found");
-            }
-
-            _logger.LogInformation("Profile updated successfully for user {UserId}", UserId);
-            return OkEnvelope(response);
-        }
-        catch (InvalidOperationException ex) when (ex.Message == "Username is already taken")
-        {
-            _logger.LogWarning("Username already taken for user {UserId}: {Username}", UserId, request.Username);
-            return BadRequestProblem("Username is already taken");
         }
         catch (Exception ex)
         {
@@ -154,15 +130,11 @@ public sealed class ProfileController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
             }
 
-            var currentSession = await GetCurrentSessionAsync(userIdGuid, cancellationToken);
-            var signedInViaGoogle = currentSession != null &&
-                string.Equals(currentSession.AuthMethod, "google", StringComparison.OrdinalIgnoreCase);
-
-            var result = await _profileRepository.ChangePasswordAsync(
+            var sessionContext = BuildSessionRequest();
+            var result = await _profileService.ChangePasswordAsync(
                 userIdGuid,
-                request.CurrentPassword,
-                request.NewPassword,
-                signedInViaGoogle,
+                request,
+                sessionContext,
                 cancellationToken);
 
             return result.Status switch
@@ -206,8 +178,8 @@ public sealed class ProfileController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
             }
 
-            var currentSession = await GetCurrentSessionAsync(userIdGuid, cancellationToken);
-            var sessions = await _profileRepository.GetSessionsAsync(userIdGuid, currentSession?.Id, cancellationToken);
+            var sessionContext = BuildSessionRequest();
+            var sessions = await _profileService.GetSessionsAsync(userIdGuid, sessionContext, cancellationToken);
             return OkEnvelope(sessions);
         }
         catch (Exception ex)
@@ -240,7 +212,7 @@ public sealed class ProfileController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
             }
 
-            var result = await _profileRepository.LogoutFromSessionAsync(userIdGuid, sessionId, cancellationToken);
+            var result = await _profileService.LogoutFromSessionAsync(userIdGuid, sessionId, cancellationToken);
 
             return result.Status switch
             {
@@ -281,8 +253,8 @@ public sealed class ProfileController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
             }
 
-            var currentSession = await GetCurrentSessionAsync(userIdGuid, cancellationToken);
-            var response = await _profileRepository.LogoutFromAllOtherSessionsAsync(userIdGuid, currentSession?.Id, cancellationToken);
+            var sessionContext = BuildSessionRequest();
+            var response = await _profileService.LogoutFromAllOtherSessionsAsync(userIdGuid, sessionContext, cancellationToken);
 
             _logger.LogInformation("Logged out from other sessions for user {UserId}", UserId);
             return OkEnvelope(response);
@@ -318,23 +290,26 @@ public sealed class ProfileController : BaseApiController
                 return UnauthorizedProblem("Invalid user context");
             }
 
-            if (request.ConfirmationText != "DELETE MY ACCOUNT")
-            {
-                return BadRequestProblem("Confirmation text must be exactly: DELETE MY ACCOUNT");
-            }
+            var result = await _profileService.DeleteAccountAsync(userIdGuid, request, cancellationToken);
 
-            var result = await _profileRepository.DeleteAccountAsync(userIdGuid, request.Password, cancellationToken);
-
-            if (result.Status == AccountDeleteStatus.UserNotFound)
+            switch (result.Status)
             {
-                _logger.LogWarning("User {UserId} not found for deletion", UserId);
-                return NotFoundProblem("User not found");
-            }
-
-            if (result.Status == AccountDeleteStatus.InvalidPassword)
-            {
-                _logger.LogWarning("Invalid password provided for account deletion by user {UserId}", UserId);
-                return BadRequestProblem("Password is incorrect");
+                case AccountDeleteServiceStatus.InvalidConfirmation:
+                    return BadRequestProblem(result.ErrorMessage ?? "Invalid confirmation text");
+                case AccountDeleteServiceStatus.UserNotFound:
+                    _logger.LogWarning("User {UserId} not found for deletion", UserId);
+                    return NotFoundProblem("User not found");
+                case AccountDeleteServiceStatus.InvalidPassword:
+                    _logger.LogWarning("Invalid password provided for account deletion by user {UserId}", UserId);
+                    return BadRequestProblem(result.ErrorMessage ?? "Password is incorrect");
+                case AccountDeleteServiceStatus.Success:
+                    break;
+                default:
+                    _logger.LogError("Unexpected account delete status {Status} for user {UserId}", result.Status, UserId);
+                    return Problem(
+                        statusCode: StatusCodes.Status500InternalServerError,
+                        title: "Internal Server Error",
+                        detail: "An error occurred while deleting your account");
             }
 
             Response.Cookies.Delete("refreshToken", new CookieOptions
@@ -358,32 +333,24 @@ public sealed class ProfileController : BaseApiController
         }
     }
 
-    private async Task<SessionContext?> GetCurrentSessionAsync(Guid userId, CancellationToken cancellationToken)
+    private ProfileSessionRequest BuildSessionRequest()
     {
         var sessionIdValue = User.FindFirst("sessionId")?.Value ?? User.FindFirst("sid")?.Value;
         Guid? sessionId = Guid.TryParse(sessionIdValue, out var parsedSessionId) ? parsedSessionId : null;
 
-        string? refreshTokenHash = null;
+        string? refreshToken = null;
         if (Request.Cookies.TryGetValue("refreshToken", out var refreshTokenValue) && !string.IsNullOrEmpty(refreshTokenValue))
         {
-            refreshTokenHash = HashToken(refreshTokenValue);
+            refreshToken = refreshTokenValue;
         }
 
         var ipAddress = HttpContext.Connection.RemoteIpAddress?.ToString();
         var userAgent = Request.Headers.UserAgent.ToString();
 
-        return await _profileRepository.ResolveCurrentSessionAsync(
-            userId,
+        return new ProfileSessionRequest(
             sessionId,
-            refreshTokenHash,
+            refreshToken,
             ipAddress,
-            userAgent,
-            cancellationToken);
-    }
-    private static string HashToken(string token)
-    {
-        using var sha256 = SHA256.Create();
-        var hashedBytes = sha256.ComputeHash(Encoding.UTF8.GetBytes(token));
-        return Convert.ToBase64String(hashedBytes);
+            userAgent);
     }
 }
