@@ -11,6 +11,7 @@ using Linqyard.Entities.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Net.Http.Headers;
 using System.Net.Mail;
@@ -32,7 +33,9 @@ public sealed class AuthController : BaseApiController
     private readonly HttpClient _httpClient;
     private readonly Linqyard.Infra.IEmailService _emailService;
     private readonly IRateLimiterService _rateLimiter;
+    private readonly IAzureBlobStorageService _blobStorageService;
     private const string GitHubUserAgent = "LinqyardApp/1.0";
+    private const string ExternalAvatarUserAgent = "LinqyardAvatarFetcher/1.0";
 
     public AuthController(
         ILogger<AuthController> logger,
@@ -41,7 +44,8 @@ public sealed class AuthController : BaseApiController
         IJwtService jwtService,
         IRateLimiterService rateLimiter,
         HttpClient httpClient,
-        Linqyard.Infra.IEmailService emailService)
+        Linqyard.Infra.IEmailService emailService,
+        IAzureBlobStorageService blobStorageService)
     {
         _logger = logger;
         _context = context;
@@ -50,6 +54,7 @@ public sealed class AuthController : BaseApiController
         _rateLimiter = rateLimiter;
         _httpClient = httpClient;
         _emailService = emailService;
+        _blobStorageService = blobStorageService;
     }
 
     /// <summary>
@@ -1729,10 +1734,22 @@ public sealed class AuthController : BaseApiController
         if (existingExternalLogin != null)
         {
             _logger.LogInformation("Found existing GitHub user {UserId}", existingExternalLogin.User.Id);
+            var saveRequired = false;
+
             if (!existingExternalLogin.User.EmailVerified && githubUser.EmailVerified)
             {
                 existingExternalLogin.User.EmailVerified = true;
                 existingExternalLogin.User.UpdatedAt = DateTimeOffset.UtcNow;
+                saveRequired = true;
+            }
+
+            if (await TryUpdateAvatarFromProviderAsync(existingExternalLogin.User, githubUser.AvatarUrl, "github", cancellationToken))
+            {
+                saveRequired = true;
+            }
+
+            if (saveRequired)
+            {
                 await _context.SaveChangesAsync(cancellationToken);
             }
 
@@ -1765,6 +1782,8 @@ public sealed class AuthController : BaseApiController
                 existingUser.EmailVerified = true;
                 existingUser.UpdatedAt = DateTimeOffset.UtcNow;
             }
+
+            await TryUpdateAvatarFromProviderAsync(existingUser, githubUser.AvatarUrl, "github", cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
 
@@ -1830,6 +1849,12 @@ public sealed class AuthController : BaseApiController
             CreatedAt = now,
             UpdatedAt = now
         };
+
+        var cachedAvatar = await CacheExternalAvatarAsync(newUser.Id, "github", githubUser.AvatarUrl, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(cachedAvatar))
+        {
+            newUser.AvatarUrl = cachedAvatar;
+        }
 
         var newUserTier = new UserTier
         {
@@ -1961,11 +1986,23 @@ public sealed class AuthController : BaseApiController
         if (existingExternalLogin != null)
         {
             _logger.LogInformation("Found existing Google user {UserId}", existingExternalLogin.User.Id);
+            var saveRequired = false;
+
             // Ensure user's email is marked verified when they sign in via Google
             if (!existingExternalLogin.User.EmailVerified)
             {
                 existingExternalLogin.User.EmailVerified = true;
                 existingExternalLogin.User.UpdatedAt = DateTimeOffset.UtcNow;
+                saveRequired = true;
+            }
+
+            if (await TryUpdateAvatarFromProviderAsync(existingExternalLogin.User, googleUser.Picture, "google", cancellationToken))
+            {
+                saveRequired = true;
+            }
+
+            if (saveRequired)
+            {
                 await _context.SaveChangesAsync(cancellationToken);
             }
 
@@ -2000,6 +2037,8 @@ public sealed class AuthController : BaseApiController
                 existingUser.EmailVerified = true;
                 existingUser.UpdatedAt = DateTimeOffset.UtcNow;
             }
+
+            await TryUpdateAvatarFromProviderAsync(existingUser, googleUser.Picture, "google", cancellationToken);
 
             await _context.SaveChangesAsync(cancellationToken);
 
@@ -2055,6 +2094,12 @@ public sealed class AuthController : BaseApiController
             CreatedAt = now,
             UpdatedAt = now
         };
+
+        var cachedAvatar = await CacheExternalAvatarAsync(newUser.Id, "google", googleUser.Picture, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(cachedAvatar))
+        {
+            newUser.AvatarUrl = cachedAvatar;
+        }
 
         var newUserTier = new UserTier
         {
@@ -2118,6 +2163,150 @@ public sealed class AuthController : BaseApiController
         }
 
         return newUser;
+    }
+
+    private async Task<bool> TryUpdateAvatarFromProviderAsync(
+        User user,
+        string? externalUrl,
+        string provider,
+        CancellationToken cancellationToken)
+    {
+        if (!ShouldReplaceAvatar(user.AvatarUrl, provider) || string.IsNullOrWhiteSpace(externalUrl))
+        {
+            return false;
+        }
+
+        var cachedUrl = await CacheExternalAvatarAsync(user.Id, provider, externalUrl, cancellationToken);
+        if (string.IsNullOrWhiteSpace(cachedUrl) ||
+            string.Equals(user.AvatarUrl, cachedUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        user.AvatarUrl = cachedUrl;
+        user.UpdatedAt = DateTimeOffset.UtcNow;
+        return true;
+    }
+
+    private async Task<string?> CacheExternalAvatarAsync(
+        Guid userId,
+        string provider,
+        string? externalUrl,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(externalUrl))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, externalUrl);
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/*"));
+            request.Headers.UserAgent.ParseAdd(ExternalAvatarUserAgent);
+
+            using var response = await _httpClient.SendAsync(
+                request,
+                HttpCompletionOption.ResponseHeadersRead,
+                cancellationToken);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                _logger.LogWarning(
+                    "Failed to download {Provider} avatar for user {UserId}. StatusCode {StatusCode}",
+                    provider,
+                    userId,
+                    response.StatusCode);
+                return null;
+            }
+
+            var headerContentType = response.Content.Headers.ContentType?.MediaType;
+            var resolvedContentType = ResolveContentType(headerContentType, externalUrl);
+
+            await using var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken);
+
+            var uploadResult = await _blobStorageService.UploadImageAsync(
+                sourceStream,
+                $"{provider}-avatar{GetExtensionFromContentType(resolvedContentType)}",
+                resolvedContentType,
+                $"{userId:N}-avatar",
+                cancellationToken);
+
+            return uploadResult.Url;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(
+                ex,
+                "Failed to cache {Provider} avatar for user {UserId}",
+                provider,
+                userId);
+            return null;
+        }
+    }
+
+    private static bool ShouldReplaceAvatar(string? currentAvatarUrl, string provider)
+    {
+        if (string.IsNullOrWhiteSpace(currentAvatarUrl))
+        {
+            return true;
+        }
+
+        return provider.ToLowerInvariant() switch
+        {
+            "google" => currentAvatarUrl.Contains("googleusercontent.com", StringComparison.OrdinalIgnoreCase),
+            "github" => currentAvatarUrl.Contains("githubusercontent.com", StringComparison.OrdinalIgnoreCase),
+            _ => false
+        };
+    }
+
+    private static string ResolveContentType(string? headerContentType, string sourceUrl)
+    {
+        if (!string.IsNullOrWhiteSpace(headerContentType))
+        {
+            return headerContentType;
+        }
+
+        var extension = ExtractExtension(sourceUrl);
+        return extension switch
+        {
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".bmp" => "image/bmp",
+            ".tiff" => "image/tiff",
+            ".svg" => "image/svg+xml",
+            _ => "image/jpeg"
+        };
+    }
+
+    private static string GetExtensionFromContentType(string contentType)
+    {
+        return contentType.ToLowerInvariant() switch
+        {
+            "image/jpeg" or "image/jpg" => ".jpg",
+            "image/png" => ".png",
+            "image/gif" => ".gif",
+            "image/webp" => ".webp",
+            "image/bmp" => ".bmp",
+            "image/tiff" => ".tiff",
+            "image/svg+xml" => ".svg",
+            _ => ".jpg"
+        };
+    }
+
+    private static string ExtractExtension(string sourceUrl)
+    {
+        if (Uri.TryCreate(sourceUrl, UriKind.Absolute, out var uri))
+        {
+            var ext = Path.GetExtension(uri.AbsolutePath);
+            if (!string.IsNullOrWhiteSpace(ext))
+            {
+                return ext.ToLowerInvariant();
+            }
+        }
+
+        return string.Empty;
     }
 
     private async Task<AuthResponse> GenerateAuthResponse(User user, string authMethod, CancellationToken cancellationToken)
