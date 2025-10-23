@@ -1,5 +1,7 @@
 # Linqyard
 
+![Linqyard header image](https://linqyard.com/images/blogs/introducing-linqyard.jpg)
+
 This repository contains a small monorepo for the Linqyard project: a .NET 9 API, a FastAPI (Python) companion service, and a Next.js frontend. This README explains how to get the project running locally for development and production-style Docker runs.
 
 ## What's in this repo
