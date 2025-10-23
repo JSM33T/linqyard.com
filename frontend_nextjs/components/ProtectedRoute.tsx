@@ -4,6 +4,7 @@ import { ReactNode, useEffect, useState } from 'react';
 import { useUser } from '@/contexts/UserContext';
 import { useApi } from '@/hooks/useApi';
 import AccessDenied from './AccessDenied';
+import { applyCacheBustingParam } from '@/lib/cacheBust';
 
 interface ProtectedRouteProps {
   children: ReactNode;
@@ -39,13 +40,21 @@ export default function ProtectedRoute({ children, fallback }: ProtectedRoutePro
           const userData = await attemptSessionRestore();
           
           if (userData) {
+            const avatarUrl =
+              applyCacheBustingParam(userData.avatarUrl ?? undefined, userData.updatedAt) ??
+              userData.avatarUrl ?? undefined;
+            const coverUrl =
+              applyCacheBustingParam(userData.coverUrl ?? undefined, userData.updatedAt) ??
+              userData.coverUrl ?? undefined;
+
             const restoredUser = {
               id: userData.id,
               firstName: userData.firstName || '',
               lastName: userData.lastName || '',
               username: userData.username || '',
               email: userData.email || '',
-              avatarUrl: userData.avatarUrl,
+              avatarUrl,
+              coverUrl,
               login: true,
               expiry: userData.expiry ? new Date(userData.expiry) : undefined,
               role: userData.role,

@@ -16,6 +16,7 @@ import { useUser } from "@/contexts/UserContext";
 import { useGet, usePost } from "@/hooks/useApi";
 import { GetProfileResponse, UpdateProfileRequest, UpdateProfileResponse } from "@/hooks/types";
 import AvatarCropDialog from "@/components/profile/AvatarCropDialog";
+import { applyCacheBustingParam } from "@/lib/cacheBust";
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "https://api.linqyard.com").replace(/\/$/, "");
 
@@ -82,8 +83,37 @@ export default function ProfilePage() {
       });
       setAvatarPreview(null);
       setCoverPreview(null);
+
+      if (user && profile.id === user.id) {
+        const avatarUrlWithVersion =
+          applyCacheBustingParam(profile.avatarUrl ?? undefined, profile.updatedAt) ??
+          profile.avatarUrl ?? undefined;
+        const coverUrlWithVersion =
+          applyCacheBustingParam(profile.coverUrl ?? undefined, profile.updatedAt) ??
+          profile.coverUrl ?? undefined;
+
+        const nextUser = {
+          ...user,
+          username: profile.username ?? user.username,
+          firstName: profile.firstName ?? user.firstName,
+          lastName: profile.lastName ?? user.lastName,
+          avatarUrl: avatarUrlWithVersion ?? user.avatarUrl,
+          coverUrl: coverUrlWithVersion ?? user.coverUrl,
+        };
+
+        const hasChanged =
+          nextUser.username !== user.username ||
+          nextUser.firstName !== user.firstName ||
+          nextUser.lastName !== user.lastName ||
+          nextUser.avatarUrl !== user.avatarUrl ||
+          nextUser.coverUrl !== user.coverUrl;
+
+        if (hasChanged) {
+          setUser(nextUser);
+        }
+      }
     }
-  }, [profileData]);
+  }, [profileData, setUser, user]);
 
   useEffect(() => {
     return () => {
@@ -156,9 +186,12 @@ export default function ProfilePage() {
       return;
     }
 
+    const version = profileData?.data?.updatedAt;
+    const endpoint = applyCacheBustingParam(`${API_BASE_URL}/media/profile/${profileId}/avatar`, version) ?? `${API_BASE_URL}/media/profile/${profileId}/avatar`;
+
     const fetchAvatar = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/media/profile/${profileId}/avatar`, {
+        const response = await fetch(endpoint, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -199,7 +232,7 @@ export default function ProfilePage() {
       cancelled = true;
       controller.abort();
     };
-  }, [avatarPreview, profileData?.data?.avatarUrl, profileData?.data?.id, user?.avatarUrl, user?.id]);
+  }, [avatarPreview, profileData?.data?.avatarUrl, profileData?.data?.updatedAt, profileData?.data?.id, user?.avatarUrl, user?.id]);
 
   useEffect(() => {
     if (coverPreview) {
@@ -240,9 +273,12 @@ export default function ProfilePage() {
       return;
     }
 
+    const version = profileData?.data?.updatedAt;
+    const endpoint = applyCacheBustingParam(`${API_BASE_URL}/media/profile/${profileId}/cover`, version) ?? `${API_BASE_URL}/media/profile/${profileId}/cover`;
+
     const fetchCover = async () => {
       try {
-        const response = await fetch(`${API_BASE_URL}/media/profile/${profileId}/cover`, {
+        const response = await fetch(endpoint, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -283,7 +319,7 @@ export default function ProfilePage() {
       cancelled = true;
       controller.abort();
     };
-  }, [coverPreview, profileData?.data?.coverUrl, profileData?.data?.id, user?.coverUrl, user?.id]);
+  }, [coverPreview, profileData?.data?.coverUrl, profileData?.data?.updatedAt, profileData?.data?.id, user?.coverUrl, user?.id]);
 
   useEffect(() => {
     return () => {
@@ -364,12 +400,19 @@ export default function ProfilePage() {
 
         const updatedProfile = response.data.data.profile;
         if (user) {
+          const avatarUrlWithVersion =
+            applyCacheBustingParam(updatedProfile.avatarUrl ?? undefined, updatedProfile.updatedAt) ??
+            updatedProfile.avatarUrl ?? undefined;
+          const coverUrlWithVersion =
+            applyCacheBustingParam(updatedProfile.coverUrl ?? undefined, updatedProfile.updatedAt) ??
+            updatedProfile.coverUrl ?? undefined;
+
           setUser({
             ...user,
             firstName: updatedProfile.firstName,
             lastName: updatedProfile.lastName,
-            avatarUrl: updatedProfile.avatarUrl ?? undefined,
-            coverUrl: updatedProfile.coverUrl ?? undefined,
+            avatarUrl: avatarUrlWithVersion ?? user.avatarUrl,
+            coverUrl: coverUrlWithVersion ?? user.coverUrl,
           });
         }
 
@@ -447,12 +490,19 @@ export default function ProfilePage() {
 
         const updatedProfile = response.data.data.profile;
         if (user) {
+          const avatarUrlWithVersion =
+            applyCacheBustingParam(updatedProfile.avatarUrl ?? undefined, updatedProfile.updatedAt) ??
+            updatedProfile.avatarUrl ?? undefined;
+          const coverUrlWithVersion =
+            applyCacheBustingParam(updatedProfile.coverUrl ?? undefined, updatedProfile.updatedAt) ??
+            updatedProfile.coverUrl ?? undefined;
+
           setUser({
             ...user,
             firstName: updatedProfile.firstName,
             lastName: updatedProfile.lastName,
-            avatarUrl: updatedProfile.avatarUrl ?? undefined,
-            coverUrl: updatedProfile.coverUrl ?? undefined,
+            avatarUrl: avatarUrlWithVersion ?? user.avatarUrl,
+            coverUrl: coverUrlWithVersion ?? user.coverUrl,
           });
         }
 
@@ -531,13 +581,20 @@ export default function ProfilePage() {
         // Update the user context with new data
         const updatedProfile = response.data.data.profile;
         if (user) {
+          const avatarUrlWithVersion =
+            applyCacheBustingParam(updatedProfile.avatarUrl ?? undefined, updatedProfile.updatedAt) ??
+            updatedProfile.avatarUrl ?? undefined;
+          const coverUrlWithVersion =
+            applyCacheBustingParam(updatedProfile.coverUrl ?? undefined, updatedProfile.updatedAt) ??
+            updatedProfile.coverUrl ?? undefined;
+
           setUser({
             ...user,
             username: updatedProfile.username ?? user.username,
             firstName: updatedProfile.firstName,
             lastName: updatedProfile.lastName,
-            avatarUrl: updatedProfile.avatarUrl ?? user.avatarUrl,
-            coverUrl: updatedProfile.coverUrl ?? user.coverUrl,
+            avatarUrl: avatarUrlWithVersion ?? user.avatarUrl,
+            coverUrl: coverUrlWithVersion ?? user.coverUrl,
             // Note: email cannot be changed via profile update
           });
         }

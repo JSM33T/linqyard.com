@@ -2,6 +2,7 @@
 
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from "react";
 import type { UserTierInfo } from "@/hooks/types";
+import { applyCacheBustingParam } from "@/lib/cacheBust";
 
 // User interface definition
 export interface User {
@@ -137,14 +138,21 @@ export function UserProvider({ children }: UserProviderProps) {
           const userData = await apiService.attemptSessionRestore();
 
           if (userData) {
+            const avatarUrl =
+              applyCacheBustingParam(userData.avatarUrl ?? undefined, userData.updatedAt) ??
+              userData.avatarUrl ?? undefined;
+            const coverUrl =
+              applyCacheBustingParam(userData.coverUrl ?? undefined, userData.updatedAt) ??
+              userData.coverUrl ?? undefined;
+
             const restoredUser = {
               id: userData.id,
               firstName: userData.firstName || '',
               lastName: userData.lastName || '',
               username: userData.username || '',
               email: userData.email || '',
-              avatarUrl: userData.avatarUrl,
-              coverUrl: userData.coverUrl,
+              avatarUrl,
+              coverUrl,
               login: true,
               expiry: undefined, // Will be set from token expiry
               tierId: userData.tierId ?? userData.activeTier?.tierId,
