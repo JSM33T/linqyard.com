@@ -65,6 +65,8 @@ const cardVariants = {
 
 const PRIMARY_COLOR_FALLBACK = "#5c558b";
 
+type UrlProtocol = "https://" | "http://";
+
 /* ---------- Sortable row (single Link chip) ---------- */
 function SortableLinkRow({ item, onEdit, onDelete }: { item: LinkItem; onEdit: (l: LinkItem) => void; onDelete: (l: LinkItem) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -320,6 +322,9 @@ export default function LinksPage() {
     sequence: 0,
     isActive: true,
   });
+  const [urlProtocol, setUrlProtocol] = useState<UrlProtocol>("https://");
+  const [urlRemainder, setUrlRemainder] = useState("");
+  const [isCustomUrl, setIsCustomUrl] = useState(false);
 
   // group create modal
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
@@ -701,6 +706,194 @@ export default function LinksPage() {
     if (shareUrl) {
       window.open(shareUrl, '_blank', 'noopener,noreferrer');
     }
+  };
+
+  const resetUrlState = () => {
+    setUrlProtocol("https://");
+    setUrlRemainder("");
+    setIsCustomUrl(false);
+  };
+
+  const applyUrlState = (protocol: UrlProtocol, remainder: string) => {
+    setUrlProtocol(protocol);
+    setUrlRemainder(remainder);
+    setIsCustomUrl(false);
+    setForm((prev) => ({
+      ...prev,
+      url: remainder ? `${protocol}${remainder}` : "",
+    }));
+  };
+
+  const applyCustomUrl = (value: string) => {
+    setIsCustomUrl(true);
+    setUrlRemainder("");
+    setForm((prev) => ({
+      ...prev,
+      url: value,
+    }));
+  };
+
+  const syncUrlStateFromFull = (full: string) => {
+    if (!full) {
+      resetUrlState();
+      return;
+    }
+
+    const trimmed = full.trim();
+    const lower = trimmed.toLowerCase();
+
+    if (lower.startsWith("https://")) {
+      setUrlProtocol("https://");
+      setUrlRemainder(trimmed.slice("https://".length));
+      setIsCustomUrl(false);
+      return;
+    }
+
+    if (lower.startsWith("http://")) {
+      setUrlProtocol("http://");
+      setUrlRemainder(trimmed.slice("http://".length));
+      setIsCustomUrl(false);
+      return;
+    }
+
+    if (/^[a-z][a-z\d+\-.]*:/i.test(trimmed)) {
+      applyCustomUrl(trimmed);
+      return;
+    }
+
+    applyUrlState("https://", trimmed);
+  };
+
+  const handleUrlRemainderChange = (value: string) => {
+    const raw = value.trim();
+
+    if (!raw) {
+      applyUrlState(urlProtocol, "");
+      return;
+    }
+
+    const lower = raw.toLowerCase();
+
+    if (lower.startsWith("https://")) {
+      applyUrlState("https://", raw.slice("https://".length));
+      return;
+    }
+
+    if (lower.startsWith("http://")) {
+      applyUrlState("http://", raw.slice("http://".length));
+      return;
+    }
+
+    if (/^[a-z][a-z\d+\-.]*:/i.test(raw)) {
+      applyCustomUrl(raw);
+      return;
+    }
+
+    applyUrlState(urlProtocol, raw);
+  };
+
+  const handleUrlPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = event.clipboardData.getData("text");
+    if (!pasted) {
+      return;
+    }
+
+    const trimmed = pasted.trim();
+    event.preventDefault();
+
+    if (!trimmed) {
+      applyUrlState(urlProtocol, "");
+      return;
+    }
+
+    const lower = trimmed.toLowerCase();
+
+    if (lower.startsWith("https://")) {
+      applyUrlState("https://", trimmed.slice("https://".length));
+      return;
+    }
+
+    if (lower.startsWith("http://")) {
+      applyUrlState("http://", trimmed.slice("http://".length));
+      return;
+    }
+
+    if (/^[a-z][a-z\d+\-.]*:/i.test(trimmed)) {
+      applyCustomUrl(trimmed);
+      return;
+    }
+
+    applyUrlState(urlProtocol, trimmed);
+  };
+
+  const handleCustomUrlChange = (value: string) => {
+    const raw = value.trim();
+
+    if (!raw) {
+      resetUrlState();
+      setForm((prev) => ({
+        ...prev,
+        url: "",
+      }));
+      return;
+    }
+
+    const lower = raw.toLowerCase();
+
+    if (lower.startsWith("https://")) {
+      applyUrlState("https://", raw.slice("https://".length));
+      return;
+    }
+
+    if (lower.startsWith("http://")) {
+      applyUrlState("http://", raw.slice("http://".length));
+      return;
+    }
+
+    if (/^[a-z][a-z\d+\-.]*:/i.test(raw)) {
+      applyCustomUrl(raw);
+      return;
+    }
+
+    applyUrlState("https://", raw);
+  };
+
+  const handleCustomUrlPaste = (event: React.ClipboardEvent<HTMLInputElement>) => {
+    const pasted = event.clipboardData.getData("text");
+    if (!pasted) {
+      return;
+    }
+
+    const trimmed = pasted.trim();
+    event.preventDefault();
+
+    if (!trimmed) {
+      resetUrlState();
+      setForm((prev) => ({
+        ...prev,
+        url: "",
+      }));
+      return;
+    }
+
+    const lower = trimmed.toLowerCase();
+
+    if (lower.startsWith("https://")) {
+      applyUrlState("https://", trimmed.slice("https://".length));
+      return;
+    }
+
+    if (lower.startsWith("http://")) {
+      applyUrlState("http://", trimmed.slice("http://".length));
+      return;
+    }
+
+    if (/^[a-z][a-z\d+\-.]*:/i.test(trimmed)) {
+      applyCustomUrl(trimmed);
+      return;
+    }
+
+    applyUrlState("https://", trimmed);
   };
 
   const loadImage = (src: string) =>
@@ -1167,11 +1360,27 @@ export default function LinksPage() {
                                 </div>
                                 <div>
                                   <label className="text-sm font-medium mb-2 block">URL</label>
-                                  <Input
-                                    placeholder="https://..."
-                                    value={form.url}
-                                    onChange={(e) => setForm((f) => ({ ...f, url: e.target.value }))}
-                                  />
+                                  {isCustomUrl ? (
+                                    <Input
+                                      placeholder="https://..."
+                                      value={form.url}
+                                      onChange={(e) => handleCustomUrlChange(e.target.value)}
+                                      onPaste={handleCustomUrlPaste}
+                                    />
+                                  ) : (
+                                    <div className="flex h-9 w-full items-center rounded-md border border-input bg-background shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
+                                      <span className="flex h-full items-center border-r border-input bg-muted/50 px-3 text-sm text-muted-foreground select-none">
+                                        {urlProtocol}
+                                      </span>
+                                      <Input
+                                        placeholder="yourlink.com"
+                                        value={urlRemainder}
+                                        onChange={(e) => handleUrlRemainderChange(e.target.value)}
+                                        onPaste={handleUrlPaste}
+                                        className="flex-1 h-full rounded-l-none border-0 bg-transparent px-3 shadow-none focus-visible:border-0 focus-visible:ring-0"
+                                      />
+                                    </div>
+                                  )}
                                 </div>
                               </div>
                               <div>
@@ -1494,12 +1703,13 @@ export default function LinksPage() {
     setForm({
       id: link.id,
       name: link.name,
-      url: link.url,
+      url: link.url || "",
       description: link.description || "",
       groupId: link.groupId,
       sequence: link.sequence,
       isActive: link.isActive,
     });
+    syncUrlStateFromFull(link.url || "");
     setIsCreating(false);
   }
 
@@ -1519,12 +1729,14 @@ export default function LinksPage() {
     setIsCreating(true);
     setEditingLinkId(null);
     setForm({ name: "", url: "", description: "", groupId, sequence: 0, isActive: true });
+    resetUrlState();
   }
 
   function cancel() {
     setIsCreating(false);
     setEditingLinkId(null);
     setForm({ name: "", url: "", description: "", groupId: null, sequence: 0, isActive: true });
+    resetUrlState();
   }
 
   async function saveLink() {
