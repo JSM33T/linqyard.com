@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Azure;
@@ -193,6 +194,22 @@ namespace Linqyard.Infra
             }
         }
 
+        public Task<CachedImageResult?> GetImageByUrlAsync(string blobUrl, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(blobUrl))
+            {
+                return Task.FromResult<CachedImageResult?>(null);
+            }
+
+            if (!TryResolveBlobNameFromUrl(blobUrl, out var blobName))
+            {
+                _logger.LogWarning("Unable to resolve blob name from URL {BlobUrl}", blobUrl);
+                return Task.FromResult<CachedImageResult?>(null);
+            }
+
+            return GetImageAsync(blobName, cancellationToken);
+        }
+
         private void ClearCachedFiles(string blobName)
         {
             if (!_settings.UseLocalCache)
@@ -251,6 +268,80 @@ namespace Linqyard.Infra
             var safeName = SanitizeBlobName(blobName);
             var normalizedExtension = NormalizeExtension(extension);
             return Path.Combine(_cacheDirectory, $"{safeName}.{normalizedExtension}");
+        }
+
+        private bool TryResolveBlobNameFromUrl(string blobUrl, out string blobName)
+        {
+            blobName = string.Empty;
+
+            if (!Uri.TryCreate(blobUrl, UriKind.Absolute, out var uri))
+            {
+                _logger.LogWarning("Invalid blob URL format: {BlobUrl}", blobUrl);
+                return false;
+            }
+
+            var pathSegments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (pathSegments.Length == 0)
+            {
+                _logger.LogWarning("Blob URL {BlobUrl} does not contain a path segment", blobUrl);
+                return false;
+            }
+
+            var containerName = _settings.ContainerName?.Trim('/') ?? string.Empty;
+            var blobStartIndex = 0;
+            var containerFound = false;
+
+            if (!string.IsNullOrWhiteSpace(containerName))
+            {
+                for (var i = 0; i < pathSegments.Length; i++)
+                {
+                    if (string.Equals(pathSegments[i], containerName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        blobStartIndex = i + 1;
+                        containerFound = true;
+                        break;
+                    }
+                }
+            }
+
+            if (containerFound && blobStartIndex >= pathSegments.Length)
+            {
+                _logger.LogWarning(
+                    "Blob URL {BlobUrl} matches container {ContainerName} but has no blob path",
+                    blobUrl,
+                    containerName);
+                return false;
+            }
+
+            if (!containerFound && !string.IsNullOrWhiteSpace(containerName))
+            {
+                _logger.LogWarning(
+                    "Blob URL {BlobUrl} does not contain configured container {ContainerName}",
+                    blobUrl,
+                    containerName);
+                blobStartIndex = pathSegments.Length > 1 ? pathSegments.Length - 1 : 0;
+            }
+
+            var builder = new StringBuilder();
+            for (var i = blobStartIndex; i < pathSegments.Length; i++)
+            {
+                if (builder.Length > 0)
+                {
+                    builder.Append('/');
+                }
+
+                builder.Append(Uri.UnescapeDataString(pathSegments[i]));
+            }
+
+            var candidate = builder.ToString();
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                _logger.LogWarning("Blob URL {BlobUrl} resolved to an empty blob name", blobUrl);
+                return false;
+            }
+
+            blobName = candidate;
+            return true;
         }
 
         private static string SanitizeBlobName(string blobName)

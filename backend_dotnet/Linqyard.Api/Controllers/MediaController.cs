@@ -168,6 +168,34 @@ public sealed class MediaController : BaseApiController
     }
 
     /// <summary>
+    /// Retrieves the avatar image for a profile, using the local Azure Blob cache.
+    /// </summary>
+    [HttpGet("profile/{userId:guid}/avatar")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProfileAvatar(Guid userId, CancellationToken cancellationToken = default)
+        => await GetProfileMediaAsync(
+            userId,
+            profile => profile.AvatarUrl,
+            "Avatar",
+            "avatar",
+            cancellationToken);
+
+    /// <summary>
+    /// Retrieves the cover image for a profile, using the local Azure Blob cache.
+    /// </summary>
+    [HttpGet("profile/{userId:guid}/cover")]
+    [ProducesResponseType(typeof(FileContentResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<IActionResult> GetProfileCover(Guid userId, CancellationToken cancellationToken = default)
+        => await GetProfileMediaAsync(
+            userId,
+            profile => profile.CoverUrl,
+            "Cover",
+            "cover image",
+            cancellationToken);
+
+    /// <summary>
     /// Retrieves an image by its blob name. Uses the local cache when possible.
     /// </summary>
     [HttpGet("{blobName}")]
@@ -186,6 +214,73 @@ public sealed class MediaController : BaseApiController
             return NotFoundProblem("Image not found", $"No image found for blob name '{blobName}'.");
         }
 
+        return StreamCachedImage(
+            resourceType: "blob image",
+            cacheIdentifier: blobName,
+            cachedImage,
+            notFoundTitle: "Image not found",
+            notFoundDetail: $"No cached file available for blob name '{blobName}'.",
+            errorTitle: "Failed to read image");
+    }
+
+    private async Task<IActionResult> GetProfileMediaAsync(
+        Guid userId,
+        Func<ProfileDetailsResponse, string?> mediaSelector,
+        string mediaTitle,
+        string mediaDescription,
+        CancellationToken cancellationToken)
+    {
+        var profile = await _profileRepository.GetProfileDetailsAsync(userId, cancellationToken);
+        if (profile is null)
+        {
+            return NotFoundProblem("User not found", $"No profile found for user '{userId}'.");
+        }
+
+        var mediaReference = mediaSelector(profile);
+        if (string.IsNullOrWhiteSpace(mediaReference))
+        {
+            return NotFoundProblem($"{mediaTitle} not found", $"The user '{userId}' has not set a {mediaDescription}.");
+        }
+
+        var cachedImage = await ResolveCachedImageAsync(mediaReference!, cancellationToken);
+        if (cachedImage is null)
+        {
+            return NotFoundProblem(
+                $"{mediaTitle} not found",
+                $"No cached {mediaDescription} available for user '{userId}'.");
+        }
+
+        return StreamCachedImage(
+            resourceType: $"{mediaDescription}",
+            cacheIdentifier: mediaReference,
+            cachedImage,
+            notFoundTitle: $"{mediaTitle} not found",
+            notFoundDetail: $"No cached {mediaDescription} available for user '{userId}'.",
+            errorTitle: $"Failed to read {mediaDescription}");
+    }
+
+    private async Task<CachedImageResult?> ResolveCachedImageAsync(string mediaReference, CancellationToken cancellationToken)
+    {
+        if (Uri.TryCreate(mediaReference, UriKind.Absolute, out _))
+        {
+            var cachedFromUrl = await _blobStorageService.GetImageByUrlAsync(mediaReference, cancellationToken);
+            if (cachedFromUrl is not null)
+            {
+                return cachedFromUrl;
+            }
+        }
+
+        return await _blobStorageService.GetImageAsync(mediaReference, cancellationToken);
+    }
+
+    private IActionResult StreamCachedImage(
+        string resourceType,
+        string cacheIdentifier,
+        CachedImageResult cachedImage,
+        string notFoundTitle,
+        string notFoundDetail,
+        string errorTitle)
+    {
         try
         {
             var stream = new FileStream(
@@ -200,17 +295,16 @@ public sealed class MediaController : BaseApiController
         }
         catch (FileNotFoundException)
         {
-            _logger.LogWarning("Cached file missing for blob name {BlobName} despite cache entry", blobName);
-            return NotFoundProblem("Image not found", $"No cached file available for blob name '{blobName}'.");
+            _logger.LogWarning("Cached file missing for {ResourceType} identifier {CacheIdentifier}", resourceType, cacheIdentifier);
+            return NotFoundProblem(notFoundTitle, notFoundDetail);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read cached image for blob name {BlobName}", blobName);
+            _logger.LogError(ex, "Failed to read cached {ResourceType} for identifier {CacheIdentifier}", resourceType, cacheIdentifier);
             return Problem(
                 StatusCodes.Status500InternalServerError,
-                "Failed to read image",
+                errorTitle,
                 "An unexpected error occurred while reading the cached image.");
         }
     }
 }
-

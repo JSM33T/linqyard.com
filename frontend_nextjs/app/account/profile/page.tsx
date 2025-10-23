@@ -17,6 +17,8 @@ import { useGet, usePost } from "@/hooks/useApi";
 import { GetProfileResponse, UpdateProfileRequest, UpdateProfileResponse } from "@/hooks/types";
 import AvatarCropDialog from "@/components/profile/AvatarCropDialog";
 
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "https://api.linqyard.com").replace(/\/$/, "");
+
 const containerVariants = {
   hidden: { opacity: 0, y: 20 },
   visible: {
@@ -54,6 +56,8 @@ export default function ProfilePage() {
   const [isCoverCropOpen, setIsCoverCropOpen] = useState(false);
   const [coverCropSrc, setCoverCropSrc] = useState<string | null>(null);
   const [pendingCoverName, setPendingCoverName] = useState<string | null>(null);
+  const [avatarObjectUrl, setAvatarObjectUrl] = useState<string | null>(null);
+  const [coverObjectUrl, setCoverObjectUrl] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const coverInputRef = useRef<HTMLInputElement>(null);
 
@@ -112,6 +116,190 @@ export default function ProfilePage() {
       }
     };
   }, [coverCropSrc]);
+
+  useEffect(() => {
+    if (avatarPreview) {
+      setAvatarObjectUrl(prev => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      return;
+    }
+
+    const profileId = profileData?.data?.id ?? user?.id;
+    const hasAvatar = profileData?.data?.avatarUrl ?? user?.avatarUrl;
+
+    if (!profileId || !hasAvatar) {
+      setAvatarObjectUrl(prev => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const token = typeof window !== "undefined" ? localStorage.getItem("userToken") : null;
+
+    if (!token) {
+      setAvatarObjectUrl(prev => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      return;
+    }
+
+    const fetchAvatar = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/media/profile/${profileId}/avatar`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load avatar (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        if (cancelled) return;
+
+        const objectUrl = URL.createObjectURL(blob);
+        setAvatarObjectUrl(prev => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return objectUrl;
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to fetch avatar media:", error);
+        setAvatarObjectUrl(prev => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return null;
+        });
+      }
+    };
+
+    fetchAvatar();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [avatarPreview, profileData?.data?.avatarUrl, profileData?.data?.id, user?.avatarUrl, user?.id]);
+
+  useEffect(() => {
+    if (coverPreview) {
+      setCoverObjectUrl(prev => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      return;
+    }
+
+    const profileId = profileData?.data?.id ?? user?.id;
+    const hasCover = profileData?.data?.coverUrl ?? user?.coverUrl;
+
+    if (!profileId || !hasCover) {
+      setCoverObjectUrl(prev => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const token = typeof window !== "undefined" ? localStorage.getItem("userToken") : null;
+
+    if (!token) {
+      setCoverObjectUrl(prev => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      return;
+    }
+
+    const fetchCover = async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/media/profile/${profileId}/cover`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          credentials: "include",
+          signal: controller.signal,
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to load cover (${response.status})`);
+        }
+
+        const blob = await response.blob();
+        if (cancelled) return;
+
+        const objectUrl = URL.createObjectURL(blob);
+        setCoverObjectUrl(prev => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return objectUrl;
+        });
+      } catch (error) {
+        if (cancelled) return;
+        console.error("Failed to fetch cover media:", error);
+        setCoverObjectUrl(prev => {
+          if (prev) {
+            URL.revokeObjectURL(prev);
+          }
+          return null;
+        });
+      }
+    };
+
+    fetchCover();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [coverPreview, profileData?.data?.coverUrl, profileData?.data?.id, user?.coverUrl, user?.id]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarObjectUrl) {
+        URL.revokeObjectURL(avatarObjectUrl);
+      }
+    };
+  }, [avatarObjectUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (coverObjectUrl) {
+        URL.revokeObjectURL(coverObjectUrl);
+      }
+    };
+  }, [coverObjectUrl]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData(prev => ({
@@ -395,7 +583,7 @@ export default function ProfilePage() {
     roles: user.role ? [user.role] : ["user"]
   };
 
-  const coverImage = coverPreview || displayProfile.coverUrl;
+  const coverImage = coverPreview || coverObjectUrl;
 
   // Only show loading when we don't have any data yet
   if (profileLoading && !profileData && !profileError) {
@@ -577,8 +765,8 @@ export default function ProfilePage() {
                 {/* Avatar Section */}
                 <div className="flex items-center space-x-4">
                   <div className="relative">
-                    <Avatar className="h-20 w-20">
-                      <AvatarImage src={avatarPreview || displayProfile.avatarUrl || "/placeholder-avatar.jpg"} alt="Profile" />
+                      <Avatar className="h-20 w-20">
+                        <AvatarImage src={avatarPreview || avatarObjectUrl || "/placeholder-avatar.jpg"} alt="Profile" />
                       <AvatarFallback className="text-lg">
                         {displayProfile.firstName?.[0]}{displayProfile.lastName?.[0]}
                       </AvatarFallback>
