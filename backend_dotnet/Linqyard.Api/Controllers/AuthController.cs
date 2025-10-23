@@ -1,8 +1,10 @@
 ﻿using BCrypt.Net;
 using Linqyard.Api.Configuration;
+using Linqyard.Api.RateLimiting;
 using Linqyard.Data;
 using Linqyard.Api.Services;
 using Linqyard.Contracts;
+using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Entities;
@@ -28,6 +30,7 @@ public sealed class AuthController : BaseApiController
     private readonly IJwtService _jwtService;
     private readonly HttpClient _httpClient;
     private readonly Linqyard.Infra.IEmailService _emailService;
+    private readonly IRateLimiterService _rateLimiter;
     private const string GitHubUserAgent = "LinqyardApp/1.0";
 
     public AuthController(
@@ -35,6 +38,7 @@ public sealed class AuthController : BaseApiController
         LinqyardDbContext context,
         IConfiguration configuration,
         IJwtService jwtService,
+        IRateLimiterService rateLimiter,
         HttpClient httpClient,
         Linqyard.Infra.IEmailService emailService)
     {
@@ -42,6 +46,7 @@ public sealed class AuthController : BaseApiController
         _context = context;
         _configuration = configuration;
         _jwtService = jwtService;
+        _rateLimiter = rateLimiter;
         _httpClient = httpClient;
         _emailService = emailService;
     }
@@ -50,6 +55,7 @@ public sealed class AuthController : BaseApiController
     /// Authenticate user with email or username and create a new session
     /// </summary>
     [HttpPost("login")]
+    [RateLimit("auth-login", Partition = RateLimitPartitionStrategy.IpAddress)]
     [ProducesResponseType(typeof(ApiResponse<AuthResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
@@ -353,6 +359,7 @@ public sealed class AuthController : BaseApiController
     /// Register a new user account with mandatory username
     /// </summary>
     [HttpPost("register")]
+    [RateLimit("auth-register", Partition = RateLimitPartitionStrategy.IpAddress)]
     [ProducesResponseType(typeof(ApiResponse<UserInfo>), StatusCodes.Status201Created)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
@@ -1049,6 +1056,22 @@ public sealed class AuthController : BaseApiController
 
         try
         {
+            var throttleKey = request.Email?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(throttleKey))
+            {
+                return BadRequestProblem("A valid email is required to resend verification.");
+            }
+
+            var rateDecision = await _rateLimiter.ShouldAllowAsync("auth-verification-resend", throttleKey, cancellationToken);
+            ApplyRateLimitHeaders(rateDecision);
+            if (!rateDecision.IsAllowed)
+            {
+                return TooManyRequestsProblem(
+                    "Too many verification requests",
+                    "Please wait before requesting another verification email.",
+                    rateDecision);
+            }
+
             var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
             if (user == null)
@@ -1116,6 +1139,22 @@ public sealed class AuthController : BaseApiController
 
         try
         {
+            var throttleKey = request.Email?.Trim().ToLowerInvariant();
+            if (string.IsNullOrWhiteSpace(throttleKey))
+            {
+                return BadRequestProblem("A valid email is required to reset a password.");
+            }
+
+            var rateDecision = await _rateLimiter.ShouldAllowAsync("auth-forgot-password", throttleKey, cancellationToken);
+            ApplyRateLimitHeaders(rateDecision);
+            if (!rateDecision.IsAllowed)
+            {
+                return TooManyRequestsProblem(
+                    "Too many password reset requests",
+                    "Please wait before requesting another password reset email.",
+                    rateDecision);
+            }
+
             var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
             if (user == null)

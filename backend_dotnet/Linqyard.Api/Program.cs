@@ -6,6 +6,7 @@ using Linqyard.Contracts.Interfaces;
 using Linqyard.Repositories;
 using Linqyard.Repositories.Configuration;
 using Linqyard.Services;
+using Linqyard.Services.RateLimiting;
 using Serilog;
 using Serilog.Exceptions;
 
@@ -40,6 +41,12 @@ builder.Services.AddJwtAuthentication(builder.Configuration, builder.Environment
 
 // --- CORS Configuration ---
 builder.Services.AddCustomCors();
+
+// --- Rate limiting ---
+builder.Services.AddMemoryCache();
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection("RateLimiting"));
+builder.Services.AddScoped<IRateLimiterService, RateLimiterService>();
 
 // Register services
 builder.Services.AddScoped<IJwtService, JwtService>();

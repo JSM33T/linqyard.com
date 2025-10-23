@@ -1,4 +1,6 @@
 ﻿using Linqyard.Contracts;
+using Linqyard.Api.RateLimiting;
+using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 using Microsoft.Net.Http.Headers;
@@ -106,6 +108,44 @@ public abstract class BaseApiController : ControllerBase
         => Problem(StatusCodes.Status401Unauthorized, title, detail);
 
     /// <summary>
+    /// Returns a <see cref="ProblemDetails"/> response with 429 Too Many Requests (RFC 6585).
+    /// Applies standard rate-limit headers when a decision is provided.
+    /// </summary>
+    protected IActionResult TooManyRequestsProblem(
+        string title = "Too many requests",
+        string? detail = null,
+        RateLimitDecision? decision = null)
+    {
+        if (decision is not null)
+        {
+            ApplyRateLimitHeaders(decision);
+        }
+
+        IDictionary<string, object?>? extensions = null;
+        if (decision is not null)
+        {
+            extensions = new Dictionary<string, object?>
+            {
+                ["policy"] = decision.PolicyName,
+                ["limit"] = decision.Limit,
+                ["windowStart"] = decision.WindowStart,
+                ["windowEnd"] = decision.WindowEnd,
+                ["retryAfterUtc"] = decision.RetryAfterUtc
+            };
+        }
+
+        var message = detail ?? decision?.Reason ?? "Rate limit exceeded. Please try again later.";
+
+        return Problem(
+            statusCode: StatusCodes.Status429TooManyRequests,
+            title: title,
+            detail: message,
+            type: "https://datatracker.ietf.org/doc/html/rfc6585#section-4",
+            instance: null,
+            extensions: extensions);
+    }
+
+    /// <summary>
     /// Creates a <see cref="ProblemDetails"/> response with extensions.
     /// </summary>
     /// <param name="statusCode">HTTP status code.</param>
@@ -146,6 +186,15 @@ public abstract class BaseApiController : ControllerBase
             StatusCode = statusCode,
             ContentTypes = { "application/problem+json" }
         };
+    }
+
+    /// <summary>
+    /// Applies standardized rate-limit headers to the current response.
+    /// </summary>
+    /// <param name="decision">Rate-limit evaluation result.</param>
+    protected void ApplyRateLimitHeaders(RateLimitDecision decision)
+    {
+        RateLimitResponseExtensions.ApplyRateLimitHeaders(Response, decision);
     }
 
     // -------- Optional success envelope helpers --------

@@ -9,6 +9,7 @@ public class RateLimitBucket
     public Guid Id { get; set; }
 
     [Required]
+    [MaxLength(256)]
     public string Key { get; set; } = null!; // e.g., "otp:email@example.com", "login:203.0.113.5"
 
     [Column(TypeName = "timestamptz")]

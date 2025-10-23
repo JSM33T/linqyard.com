@@ -343,8 +343,13 @@ public class LinqyardDbContext : DbContext
         // Primary key
         entity.HasKey(e => e.Id);
 
-        // Indexes
-        entity.HasIndex(e => new { e.Key, e.WindowStart });
+        // Limit cardinality per window + policy bucket
+        entity.Property(e => e.Key)
+            .HasMaxLength(256);
+
+        // Prevent duplicate buckets for the same key/window
+        entity.HasIndex(e => new { e.Key, e.WindowStart })
+              .IsUnique();
     }
 
     private void ConfigureAnalyticsEntity(ModelBuilder modelBuilder)

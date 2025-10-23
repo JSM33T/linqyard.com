@@ -1,6 +1,4 @@
-﻿using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
+﻿using Linqyard.Api.RateLimiting;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
@@ -9,6 +7,9 @@ using Linqyard.Infra;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace Linqyard.Api.Controllers;
 
@@ -63,6 +64,7 @@ public sealed class MediaController : BaseApiController
     /// Uploads an avatar image, updates the current user's profile, and returns the updated profile.
     /// </summary>
     [HttpPost("avatar")]
+    [RateLimit("profile-avatar-update", Partition = RateLimitPartitionStrategy.UserId)]
     [ProducesResponseType(typeof(ApiResponse<ProfileUpdateResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]

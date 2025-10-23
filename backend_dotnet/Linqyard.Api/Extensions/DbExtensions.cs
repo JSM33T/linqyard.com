@@ -61,7 +61,7 @@ namespace Linqyard.Api.Extensions
                     "Ensure it is defined in the environment configuration.");
             }
 
-            services.AddDbContext<LinqyardDbContext>(options =>
+            void Configure(DbContextOptionsBuilder options)
             {
                 options.UseNpgsql(connectionString, npgsqlOptions =>
                 {
@@ -86,7 +86,10 @@ namespace Linqyard.Api.Extensions
                 }
 
                 options.LogTo(Console.WriteLine, LogLevel.Warning);
-            });
+            }
+
+            services.AddDbContext<LinqyardDbContext>(Configure, ServiceLifetime.Scoped, ServiceLifetime.Singleton);
+            services.AddDbContextFactory<LinqyardDbContext>(Configure, ServiceLifetime.Singleton);
 
             return services;
         }
