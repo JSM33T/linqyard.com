@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Loader2, CheckCircle, XCircle, Chrome, Home } from "lucide-react";
 import { toast } from "sonner";
 import { useApi } from "@/hooks/useApi";
-import { GoogleCallbackResponse } from "@/hooks/types";
+import { GoogleCallbackResponse, UserTierInfo } from "@/hooks/types";
 import { useUser } from "@/contexts/UserContext";
 import Link from "next/link";
 
@@ -73,17 +73,19 @@ export default function OAuthCallbackPage() {
                 firstName: string;
                 lastName: string;
                 avatarUrl: string | null;
+                coverUrl: string | null;
                 createdAt: string;
                 roles: string[];
                 tierId?: number | null;
                 tierName?: string | null;
-                activeTier?: any | null; // typed as any here to match API shape
+                activeTier?: UserTierInfo | null;
               };
               meta: any | null;
             }>("/auth/me");
 
             if (userResponse.data?.data) {
               const userData = userResponse.data.data;
+              const activeTier = userData.activeTier ?? null;
               
               // Update user context with user data including tier information
               setUser({
@@ -93,10 +95,19 @@ export default function OAuthCallbackPage() {
                 username: userData.username,
                 email: userData.email,
                 avatarUrl: userData.avatarUrl || undefined,
+                coverUrl: userData.coverUrl || undefined,
                 login: true,
                 expiry: expiresAt,
-                tierId: userData.tierId ?? undefined,
-                tierName: userData.tierName ?? undefined,
+                tierId: userData.tierId ?? activeTier?.tierId ?? undefined,
+                tierName: userData.tierName ?? activeTier?.name ?? undefined,
+                activeTier: activeTier
+                  ? {
+                      tierId: activeTier.tierId,
+                      name: activeTier.name,
+                      activeFrom: activeTier.activeFrom,
+                      activeUntil: activeTier.activeUntil,
+                    }
+                  : null,
                 role: userData.roles[0] || 'user'
               });
             }
