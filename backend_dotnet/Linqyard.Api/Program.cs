@@ -3,10 +3,11 @@ using Linqyard.Api.Extensions; // Custom CORS
 using Linqyard.Api.Middleware; // CorrelationIdMiddleware
 using Linqyard.Api.Services;
 using Linqyard.Contracts.Interfaces;
+using Linqyard.Infra;
+using Linqyard.Infra.Configuration;
 using Linqyard.Repositories;
 using Linqyard.Repositories.Configuration;
 using Linqyard.Services;
-using Linqyard.Services.RateLimiting;
 using Serilog;
 using Serilog.Exceptions;
 
@@ -94,10 +95,10 @@ app.UseSerilogRequestLogging(opts =>
 {
     opts.EnrichDiagnosticContext = (diag, http) =>
     {
-        diag.Set("RequestHost", http.Request.Host.Value);
+        diag.Set("RequestHost", http.Request.Host.Value!);
         diag.Set("RequestScheme", http.Request.Scheme);
-        diag.Set("ClientIP", http.Connection.RemoteIpAddress?.ToString());
-        diag.Set("UserId", http.User?.FindFirst("oid")?.Value ?? http.User?.Identity?.Name);
+        diag.Set("ClientIP", http.Connection.RemoteIpAddress?.ToString()!);
+        diag.Set("UserId", http.User?.FindFirst("oid")?.Value ?? http.User?.Identity?.Name!);
         diag.Set("CorrelationId", http.Request.Headers["X-Correlation-Id"].ToString());
     };
 });

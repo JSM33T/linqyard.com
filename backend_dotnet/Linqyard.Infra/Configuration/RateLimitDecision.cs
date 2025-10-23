@@ -1,4 +1,4 @@
-namespace Linqyard.Contracts.Responses;
+namespace Linqyard.Infra;
 
 public sealed class RateLimitDecision
 {

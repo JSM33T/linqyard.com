@@ -2,10 +2,11 @@ using System.Globalization;
 using System.Security.Claims;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Responses;
+using Linqyard.Infra;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Filters;
 
-namespace Linqyard.Api.RateLimiting;
+namespace Linqyard.Api.Extensions;
 
 [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
 public sealed class RateLimitAttribute : Attribute, IAsyncActionFilter

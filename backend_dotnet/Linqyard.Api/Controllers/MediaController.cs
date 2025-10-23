@@ -1,4 +1,4 @@
-﻿using Linqyard.Api.RateLimiting;
+﻿using Linqyard.Api.Extensions;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;

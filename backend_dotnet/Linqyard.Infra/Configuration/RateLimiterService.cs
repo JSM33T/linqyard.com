@@ -3,7 +3,6 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using Linqyard.Contracts.Interfaces;
-using Linqyard.Contracts.Responses;
 using Linqyard.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -11,7 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Npgsql;
 
-namespace Linqyard.Services.RateLimiting;
+namespace Linqyard.Infra.Configuration;
 
 public sealed class RateLimiterService : IRateLimiterService
 {
@@ -214,7 +213,7 @@ public sealed class RateLimiterService : IRateLimiterService
         DateTimeOffset windowEnd,
         CancellationToken cancellationToken)
     {
-        if (_memoryCache.TryGetValue(cacheKey, out BucketState cached) && cached.WindowStart == windowStart)
+        if (_memoryCache.TryGetValue(cacheKey, out BucketState? cached) && cached?.WindowStart == windowStart)
         {
             return cached;
         }

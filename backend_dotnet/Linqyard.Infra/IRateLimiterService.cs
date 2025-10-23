@@ -1,6 +1,4 @@
-using Linqyard.Contracts.Responses;
-
-namespace Linqyard.Contracts.Interfaces;
+namespace Linqyard.Infra;
 
 public interface IRateLimiterService
 {

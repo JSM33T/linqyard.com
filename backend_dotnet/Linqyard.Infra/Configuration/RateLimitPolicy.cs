@@ -1,4 +1,4 @@
-namespace Linqyard.Services.RateLimiting;
+namespace Linqyard.Infra.Configuration;
 
 public sealed class RateLimitPolicy
 {

@@ -1,6 +1,5 @@
 ﻿using BCrypt.Net;
 using Linqyard.Api.Configuration;
-using Linqyard.Api.RateLimiting;
 using Linqyard.Data;
 using Linqyard.Api.Services;
 using Linqyard.Contracts;
@@ -18,6 +17,8 @@ using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Linqyard.Api.Extensions;
+using Linqyard.Infra;
 
 namespace Linqyard.Api.Controllers;
 

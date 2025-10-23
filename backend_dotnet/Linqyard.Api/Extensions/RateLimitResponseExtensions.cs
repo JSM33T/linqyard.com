@@ -1,8 +1,9 @@
 using System.Globalization;
 using Linqyard.Contracts.Responses;
+using Linqyard.Infra;
 using Microsoft.AspNetCore.Http;
 
-namespace Linqyard.Api.RateLimiting;
+namespace Linqyard.Api.Extensions;
 
 internal static class RateLimitResponseExtensions
 {
