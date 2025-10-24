@@ -67,6 +67,8 @@ const PRIMARY_COLOR_FALLBACK = "#5c558b";
 
 type UrlProtocol = "https://" | "http://";
 
+const MAX_AUTO_DESCRIPTION_LENGTH = 220;
+
 /* ---------- Sortable row (single Link chip) ---------- */
 function SortableLinkRow({ item, onEdit, onDelete }: { item: LinkItem; onEdit: (l: LinkItem) => void; onDelete: (l: LinkItem) => void }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: item.id });
@@ -374,6 +376,7 @@ export default function LinksPage() {
   // drag state
   const [, setActiveId] = useState<string | null>(null);
   const activeItemRef = useRef<LinkItem | null>(null);
+  const metadataAttemptedUrlsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     if (linksError) {
@@ -399,6 +402,72 @@ export default function LinksPage() {
     // Initialize accordion with all items open by default
     setOpenAccordionItems([...groups.map((g) => g.id), "__ungrouped__"]);
   }, [groupedData]);
+
+  useEffect(() => {
+    if (!isCreating || editingLinkId) return;
+
+    const urlValue = form.url?.trim();
+    if (!urlValue) return;
+
+    let parsedUrl: URL;
+    try {
+      parsedUrl = new URL(urlValue);
+    } catch {
+      return;
+    }
+
+    if (!["http:", "https:"].includes(parsedUrl.protocol)) return;
+    if (!parsedUrl.hostname || !parsedUrl.hostname.includes(".")) return;
+    if (form.description?.trim()) return;
+
+    const normalizedUrl = parsedUrl.toString();
+    if (metadataAttemptedUrlsRef.current.has(normalizedUrl)) return;
+
+    metadataAttemptedUrlsRef.current.add(normalizedUrl);
+
+    const controller = new AbortController();
+    let cancelled = false;
+
+    const fetchMetadata = async () => {
+      try {
+        const response = await fetch("/api/link-metadata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: normalizedUrl }),
+          signal: controller.signal,
+        });
+
+        if (!response.ok) return;
+
+        const data = (await response.json()) as { description?: string | null };
+        const fetchedDescription = typeof data?.description === "string" ? data.description.trim() : "";
+        if (!fetchedDescription || cancelled) return;
+
+        const limitedDescription =
+          fetchedDescription.length > MAX_AUTO_DESCRIPTION_LENGTH
+            ? `${fetchedDescription.slice(0, MAX_AUTO_DESCRIPTION_LENGTH).trim()}`
+            : fetchedDescription;
+
+        setForm((prev) => {
+          if (prev.description?.trim()) {
+            return prev;
+          }
+          return { ...prev, description: limitedDescription };
+        });
+      } catch (error) {
+        if ((error as Error).name !== "AbortError") {
+          console.warn("Failed to fetch link metadata description", error);
+        }
+      }
+    };
+
+    fetchMetadata();
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
+  }, [editingLinkId, form.description, form.url, isCreating]);
 
   // Calculate tier limits
   const totalLinks = useMemo(() => {
@@ -1700,6 +1769,7 @@ export default function LinksPage() {
   // --- helpers ---
   function startEdit(link: LinkItem) {
     setEditingLinkId(link.id);
+    metadataAttemptedUrlsRef.current.clear();
     setForm({
       id: link.id,
       name: link.name,
@@ -1726,6 +1796,7 @@ export default function LinksPage() {
       return;
     }
     
+    metadataAttemptedUrlsRef.current.clear();
     setIsCreating(true);
     setEditingLinkId(null);
     setForm({ name: "", url: "", description: "", groupId, sequence: 0, isActive: true });
@@ -1735,6 +1806,7 @@ export default function LinksPage() {
   function cancel() {
     setIsCreating(false);
     setEditingLinkId(null);
+    metadataAttemptedUrlsRef.current.clear();
     setForm({ name: "", url: "", description: "", groupId: null, sequence: 0, isActive: true });
     resetUrlState();
   }
