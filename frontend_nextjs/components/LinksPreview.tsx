@@ -98,7 +98,7 @@ export default function LinksPreview({ groups, ungrouped, header, user }: { grou
           </div>
 
           {/* Scrollable content area */}
-          <div className="p-3 overflow-y-auto flex-1 bg-background links-preview-scroll">
+          <div className="p-3 overflow-y-auto flex-1 bg-links-pattern links-preview-scroll">
             {/* Optional header injected from parent - renders inside the mock above the links */}
             {header ? (
               <div className="mb-3">{header}</div>

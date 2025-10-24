@@ -1,0 +1,19 @@
+.bg-links-pattern {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.94), rgba(255, 255, 255, 0.94)),
+    url("/bg.svg");
+  background-repeat: no-repeat, space;
+  background-size: auto, 120px 120px;
+  background-position: center, center;
+}
+
+.dark .bg-links-pattern {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(rgba(9, 9, 12, 0.96), rgba(9, 9, 12, 0.96)),
+    url("/bg.svg");
+  background-repeat: no-repeat, space;
+  background-size: auto, 120px 120px;
+  background-position: center, center;
+}
