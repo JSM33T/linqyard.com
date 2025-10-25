@@ -8,7 +8,7 @@ using Linqyard.Contracts.Responses;
 namespace Linqyard.Contracts.Interfaces
 {
     /// <summary>
-    /// Defines methods for recording and retrieving analytics data related to link interactions.
+    /// Defines methods for recording and retrieving analytics data related to link interactis.
     /// </summary>
     public interface IAnalyticsRepository
     {
