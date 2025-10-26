@@ -1,96 +1,106 @@
 ---
 title: "Inside Linqyard: Building a Fast, Secure Link Management Platform"
-description: "A technical walkthrough of Linqyard's architecture — from Next.js front-end and .NET Core APIs to AI microservices, caching strategies, and deployment best practices."
+description: "A technical walkthrough of how we're building Linqyard — from its Next.js front-end and .NET Core APIs to AI microservices, caching strategies, and deployment pipelines."
 readMinutes: 6
 author:
   name: "Jasmeet Singh"
   url: "https://jsm33t.com"
 tags:
   - Product
-  - Announcement
+  - Engineering
+  - Architecture
+  - DevOps
 datePublished: "2025-09-28T09:00:00.000Z"
-isActive: false
+isActive: true
 ---
 
-# Behind the Scenes: How We Built a Modern Link Management Platform
+# Behind the Scenes: Building a Modern Link Management Platform
 
 ## Introduction
 
-The idea for Linqyard came up when I noticed a friend struggling to manage all his links — portfolio, socials, resume, and small projects — across different platforms.  
-Not everyone has the time or resources to build and maintain a custom website, yet everyone needs a simple, organized way to present their online identity.  
-That gap — between having “just a bunch of links” and owning a clean, personalized profile — led to the creation of Linqyard: a lightweight, customizable, and analytics-ready link management platform.
+Linqyard began with a simple observation — most people struggle to manage their online presence across platforms.
+A portfolio here, a resume there, a handful of socials somewhere else.
+
+Not everyone has time to build a website, but everyone deserves a clean, unified space to represent who they are.
+That’s the idea behind **Linqyard** — and while we’ve released its foundation, we’re still actively shaping its systems, refining its architecture, and expanding the features that power it.
+
+This post dives into **how we’re building Linqyard** — the stack, the decisions, and the evolving ideas behind its design.
 
 ---
 
-##  Frontend Architecture
+## Frontend Architecture
 
-The client is built with **Next.js**, leveraging **hybrid rendering** — a mix of **Server-Side Rendering (SSR)** for SEO-sensitive pages and **Client-Side Rendering (CSR)** for user dashboards.  
-This hybrid setup ensures:
+The front-end is built with **Next.js**, where we’re adopting a **hybrid rendering** approach — combining **Server-Side Rendering (SSR)** for public profile pages and **Client-Side Rendering (CSR)** for dynamic user dashboards.
+This mix lets us balance performance, SEO, and interactivity as the app scales.
 
-- **Faster initial load** for public bio pages.  
-- **Smoother navigation** and caching for logged-in dashboards.  
-- **Improved SEO** for profile links shared across social platforms.
+We’re continuously optimizing for:
+- **Instant load times** on public bio pages.
+- **Seamless navigation** for authenticated dashboards.
+- **SEO consistency** across custom subdomains.
 
-**State management** is handled by **Zustand**, chosen for its minimal boilerplate and predictable reactivity compared to heavier solutions like Redux.
+For **state management**, we use **Zustand**, keeping the app lightweight and predictable while avoiding unnecessary boilerplate.
 
-**UI layer**:  
-- **TailwindCSS** powers the core styling with utility classes for speed and consistency.  
-- **shadcn/ui** provides accessible, reusable components with a polished, modern aesthetic.  
+**UI layer highlights:**
+- **TailwindCSS** for a fast, responsive design system.
+- **shadcn/ui** for elegant, accessible components.
+- **Framer Motion** for subtle interactions and motion effects that make the experience feel alive.
 
-This combination allows the UI to stay consistent while maintaining developer agility.
-
----
-
-##  Backend Architecture
-
-The backend runs on **.NET Core Web API**, structured with clear separation between controllers, repositories, and services.  
-- **ORM:** Entity Framework Core provides strong typing and safe database access while keeping migrations controlled.  
-- **Database:** **PostgreSQL** serves as the primary relational database, ensuring ACID compliance and high reliability.  
-- **Caching:**  
-  - **Redis** handles high-speed ephemeral caching (e.g., link stats, session lookups).  
-  - **MongoDB** is used for multi-tiered or warm-cache persistence where structured + semi-structured data co-exist.  
-- **Logging:** **Serilog** tracks performance metrics, exceptions, and structured logs for detailed observability.  
-- **Security:** Passwords are hashed and salted before storage, and all user operations are validated through secure middleware layers.
-
-This design provides a **high-throughput**, **low-latency** backend suitable for thousands of lightweight requests per second.
+The focus is on creating a **maintainable design system** — one that can grow as we introduce themes, editor tools, and user customization features.
 
 ---
 
-##  AI and Automation Layer
+## Backend Architecture
 
-Alongside the primary API runs an **AI microservice** built in **FastAPI**, specialized for chatbot and workflow automation features.  
-- **LangChain** powers contextual understanding, summarization, and intelligent suggestions.  
-- The API communicates asynchronously with the .NET Core backend using HTTP and message-based triggers.  
-- This separation keeps AI computation isolated, avoiding load on the main application.
+We’re building the backend on **.NET Core Web API**, structured for clarity and long-term scalability.
 
-This layer lays the foundation for **smart link recommendations**, **content summaries**, and future **AI-driven automation**.
+- **ORM:** **Entity Framework Core** — giving us strong typing and easy migrations.
+- **Database:** **PostgreSQL**, our main data backbone.
+- **Caching layers:**
+  - **Redis** for high-speed lookups, link stats, and temporary sessions.
+  - **MongoDB** for “warm” caching and semi-structured data (like analytics events or AI responses).
+- **Logging:** **Serilog** for structured logs and observability.
+- **Security:** Enforced HTTPS, hashed passwords, and layered middleware validation.
+
+We’re also experimenting with **rate limiting**, **request tracking**, and **async caching strategies** to make every user request both secure and fast.
+
+As Linqyard scales, the goal is to keep the backend **stateless, modular, and cloud-ready** — able to handle bursts of lightweight API calls without performance trade-offs.
+
+---
+
+## AI and Automation Layer
+
+We’re currently building an **AI microservice** with **FastAPI**, designed to power smarter automation within Linqyard — things like link categorization, auto-generated summaries, and contextual recommendations.
+
+- **LangChain** will provide structured reasoning and contextual embedding pipelines.
+- The service communicates asynchronously with the main API via HTTP and event triggers.
+- It’s isolated by design — ensuring that AI tasks never overload the core API.
+
+This layer is in active development, forming the base for upcoming **smart link suggestions**, **content summaries**, and **AI-assisted user flows**.
 
 ---
 
 ## Infrastructure & Deployment
 
-Linqyard’s services are containerized using **Docker** and orchestrated with **Docker Compose**.  
-Each service — Web API, FastAPI, Redis, PostgreSQL, and the front-end — runs in its own container for modular updates and clean rollbacks.
+Linqyard’s infrastructure is containerized using **Docker** and orchestrated through **Docker Compose** (with an eye toward future **Kubernetes migration**).
+Each service — Web API, FastAPI, Redis, PostgreSQL, and the front-end — runs in its own isolated container.
 
-- **Storage:** Media assets (avatars, images, icons) are stored in **Azure Blob Storage**, benefiting from soft-delete, region redundancy, and predictable performance.  
-- **Scaling:** Stateless service containers enable horizontal scaling with minimal overhead.  
-- **Environment configuration:** Secrets, keys, and environment variables are injected securely through compose files and environment scopes.
+- **Storage:** Assets such as profile images and cover photos are hosted on **Azure Blob Storage** for reliability and CDN-level performance.
+- **Scaling:** Stateless containers allow us to spin up additional instances easily during spikes.
+- **Configuration:** Secrets and environment variables are securely injected during builds and deployments.
 
-This ensures **consistent builds**, **reproducible deployments**, and **minimal downtime** during updates.
-
----
-
-##  Design Philosophy
-
-Every component of Linqyard adheres to a few simple engineering principles:
-
-- **Separation of responsibility:** Each layer (UI, API, AI, Infra) serves a specific role.  
-- **Cache before compute:** Minimize redundant operations through layered caching.  
-- **Observability by default:** Logging and metrics are integrated into every service.  
-- **Secure by design:** No plaintext secrets, enforced HTTPS, and isolated access roles.
-
-The result is a lightweight, developer-friendly system that scales cleanly as new features and analytics layers evolve.
+As we continue iterating, we’re refining our **CI/CD pipelines**, improving **build caching**, and setting up **monitoring and alerting** for better release visibility.
 
 ---
 
-*Next up:* Part 3 — *From Clicks to Insights: Understanding Link Analytics for Creators*
+## Design Philosophy
+
+Everything we build in Linqyard follows a few core principles:
+
+- **Build modular, scale modular:** Each layer (UI, API, AI, Infra) can evolve independently.
+- **Cache first, compute second:** Optimize before scaling up.
+- **Security and observability by default:** Encryption, logging, and metrics are built in, not added later.
+- **Iterate transparently:** Build in public, share learnings, and improve continuously.
+
+We’re not just building a link manager — we’re engineering a **scalable digital identity platform** that feels modern, fast, and creator-friendly from day one.
+
+---
