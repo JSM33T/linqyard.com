@@ -256,16 +256,13 @@ curl -X POST "https://localhost:7001/link/resequence" \
   ```json
   {
     "linkId": "33333333-3333-3333-3333-333333333333",
-    "fp": "user-fingerprint-from-localstorage",
-    "location": {
-      "coords": { "latitude": 12.3456, "longitude": -98.7654, "accuracy": 30 }
-    }
+    "fp": "user-fingerprint-from-localstorage"
   }
   ```
 
   Notes:
   - The client will include a fingerprint stored in localStorage under the key `fp` when available.
-  - `location` and `coords` are optional and only sent if the client can obtain geolocation permission.
+  - Browser sensors are not required; IP-based geolocation is resolved server-side.
   - No Authorization header is required for this analytics endpoint (it's fire-and-forget).
 
   cURL example:

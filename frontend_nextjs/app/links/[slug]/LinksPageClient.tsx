@@ -37,49 +37,13 @@ function LinkRow({ item }: { item: LinkItem }) {
     // Ensure fingerprint is initialized and get it
     initializeFingerprint();
     const fp = getFingerprint();
-    
-    // Continue even if no fingerprint (will be null in payload)
-    const basePayload: Record<string, any> = { linkId: item.id, fp: fp || null };
 
-    const sendPayload = (payloadObj: Record<string, any>) => {
-      const payload = JSON.stringify(payloadObj);
-      // Use shared apiService (fire-and-forget) so analytics go through the app API layer.
-      try {
-        console.debug('analytics: posting via apiService', item.id, payloadObj);
-        // fire-and-forget; apiService.post will stringify the payload
-        apiService.post(`/link/${item.id}/click`, payloadObj).catch((err) => console.warn('Analytics post failed', err));
-      } catch (err) {
-        console.warn('Analytics post failed', err);
-      }
-    };
+    const payload: Record<string, any> = { linkId: item.id, fp: fp || null };
 
-    // Send base payload immediately so it's recorded even if the page unloads quickly
     try {
-      sendPayload(basePayload);
+      apiService.post(`/link/${item.id}/click`, payload).catch((err) => console.warn('Analytics post failed', err));
     } catch (err) {
       console.warn("Initial analytics send failed", err);
-    }
-
-    // Attempt to get geolocation asynchronously; if available, send an additional payload with coords.
-    if (typeof navigator !== "undefined" && "geolocation" in navigator) {
-      try {
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            try {
-              const coords = { latitude: pos.coords.latitude, longitude: pos.coords.longitude, accuracy: pos.coords.accuracy };
-              sendPayload({ ...basePayload, location: { coords } });
-            } catch (err) {
-              console.warn("Sending analytics with location failed", err);
-            }
-          },
-          () => {
-            // permission denied or timeout - nothing more to do
-          },
-          { maximumAge: 60000, timeout: 2000, enableHighAccuracy: false }
-        );
-      } catch (err) {
-        // geolocation threw - nothing else to do
-      }
     }
   };
 
@@ -307,39 +271,8 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
           utm
         };
 
-        // Try to get geolocation (non-blocking)
-        if (typeof navigator !== 'undefined' && 'geolocation' in navigator) {
-          navigator.geolocation.getCurrentPosition(
-            (position) => {
-              payload.location = {
-                coords: {
-                  latitude: position.coords.latitude,
-                  longitude: position.coords.longitude,
-                  accuracy: position.coords.accuracy
-                }
-              };
-              
-              console.log('Sending profile view with location:', payload);
-              // Send with location
-              apiService.post(`/profile/${encodeURIComponent(username)}/view`, payload)
-                .then(() => console.log('Profile view tracked successfully (with location)'))
-                .catch(err => console.warn('Profile view tracking failed:', err));
-            },
-            () => {
-              console.log('Geolocation denied, sending without location:', payload);
-              // Permission denied or error - send without location
-              apiService.post(`/profile/${encodeURIComponent(username)}/view`, payload)
-                .then(() => console.log('Profile view tracked successfully (without location)'))
-                .catch(err => console.warn('Profile view tracking failed:', err));
-            },
-            { maximumAge: 60000, timeout: 3000, enableHighAccuracy: false }
-          );
-        } else {
-          console.log('No geolocation support, sending without location:', payload);
-          // No geolocation support - send without location
-          await apiService.post(`/profile/${encodeURIComponent(username)}/view`, payload);
-          console.log('Profile view tracked successfully (no geolocation)');
-        }
+        await apiService.post(`/profile/${encodeURIComponent(username)}/view`, payload);
+        console.log('Profile view tracked successfully');
       } catch (error) {
         console.error('Profile view tracking error:', error);
       }

@@ -1,17 +1,16 @@
-using Microsoft.AspNetCore.Mvc;
+using System.Net;
+using Linqyard.Api.Services;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
-using System.Net;
-using Microsoft.Extensions.Primitives;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Primitives;
 
 namespace Linqyard.Api.Controllers;
 
-public record ClickPayload(string? fp, LocationDto? location);
-public record LocationDto(CoordsDto? coords);
-public record CoordsDto(double latitude, double longitude, double accuracy);
+public record ClickPayload(string? fp);
 
 [Route("analytics")]
 public sealed class AnalyticsController : BaseApiController
@@ -19,15 +18,21 @@ public sealed class AnalyticsController : BaseApiController
     private readonly ILogger<AnalyticsController> _logger;
     private readonly IUserRepository _userRepository;
     private readonly IAnalyticsRepository _analyticsRepository;
+    private readonly IClientIpResolver _clientIpResolver;
+    private readonly IIpGeolocationService _ipGeolocationService;
 
     public AnalyticsController(
         ILogger<AnalyticsController> logger,
         IUserRepository userRepository,
-        IAnalyticsRepository analyticsRepository)
+        IAnalyticsRepository analyticsRepository,
+        IClientIpResolver clientIpResolver,
+        IIpGeolocationService ipGeolocationService)
     {
         _logger = logger;
         _userRepository = userRepository;
         _analyticsRepository = analyticsRepository;
+        _clientIpResolver = clientIpResolver;
+        _ipGeolocationService = ipGeolocationService;
     }
 
     /// <summary>
@@ -53,25 +58,21 @@ public sealed class AnalyticsController : BaseApiController
                 userAgent = ua.ToString();
             }
 
+            IPAddress? ipAddress = _clientIpResolver.GetClientIp(HttpContext);
+
             double? latitude = null;
             double? longitude = null;
             double? accuracy = null;
 
-            if (body?.location?.coords is not null)
+            if (ipAddress is not null)
             {
-                latitude = body.location.coords.latitude;
-                longitude = body.location.coords.longitude;
-                accuracy = body.location.coords.accuracy;
-            }
-
-            IPAddress? ipAddress = null;
-            try
-            {
-                ipAddress = HttpContext.Connection.RemoteIpAddress;
-            }
-            catch
-            {
-                // ignored - IP address is optional
+                var geo = await _ipGeolocationService.ResolveAsync(ipAddress, cancellationToken);
+                if (geo is not null)
+                {
+                    latitude = geo.Latitude;
+                    longitude = geo.Longitude;
+                    accuracy = geo.AccuracyMeters;
+                }
             }
 
             var request = new RecordLinkClickRequest(

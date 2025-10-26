@@ -1,4 +1,5 @@
-﻿using Linkyard.Repositories;
+using Linkyard.Repositories;
+using Linqyard.Api.Configuration;
 using Linqyard.Api.Extensions; // Custom CORS
 using Linqyard.Api.Middleware; // CorrelationIdMiddleware
 using Linqyard.Api.Services;
@@ -8,6 +9,7 @@ using Linqyard.Infra.Configuration;
 using Linqyard.Repositories;
 using Linqyard.Repositories.Configuration;
 using Linqyard.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 using Serilog;
 using Serilog.Exceptions;
 
@@ -48,6 +50,12 @@ builder.Services.AddMemoryCache();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection("RateLimiting"));
 builder.Services.AddScoped<IRateLimiterService, RateLimiterService>();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // Register services
 builder.Services.AddScoped<IJwtService, JwtService>();
@@ -78,6 +86,9 @@ builder.Services.AddScoped<IGroupService, GroupService>();
 builder.Services.AddScoped<ITierRepository, TierRepository>();
 builder.Services.AddScoped<ITierService, TierService>();
 builder.Services.AddScoped<IProfileService, ProfileService>();
+builder.Services.Configure<IpGeolocationOptions>(builder.Configuration.GetSection("IpGeolocation"));
+builder.Services.AddSingleton<IClientIpResolver, ClientIpResolver>();
+builder.Services.AddSingleton<IIpGeolocationService, IpGeolocationService>();
 
 // Add custom app services (example)
 // builder.Services.AddSingleton<ILoggingService, LoggingService>();
@@ -89,6 +100,8 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+
+app.UseForwardedHeaders();
 
 // Serilog request logging (logs HTTP requests with correlation info)
 app.UseSerilogRequestLogging(opts =>

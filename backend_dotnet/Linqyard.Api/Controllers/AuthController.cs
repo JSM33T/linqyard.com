@@ -1343,12 +1343,10 @@ public sealed class AuthController : BaseApiController
                 return BadRequestProblem("User not found");
             }
 
-            // Determine if user is Google-only (has an external login for google)
-            var hasGoogleLogin = user.ExternalLogins.Any(el => el.Provider == "google");
+            var hasExistingPassword = HasUsablePassword(user.PasswordHash);
 
-            if (!hasGoogleLogin)
+            if (hasExistingPassword)
             {
-                // Non-Google accounts must provide current password
                 if (string.IsNullOrEmpty(request.CurrentPassword))
                 {
                     return BadRequestProblem("Current password is required");
@@ -2377,6 +2375,10 @@ public sealed class AuthController : BaseApiController
         rng.GetBytes(randomBytes);
         return Convert.ToBase64String(randomBytes);
     }
+
+    private static bool HasUsablePassword(string? passwordHash)
+        => !string.IsNullOrEmpty(passwordHash) &&
+           passwordHash.StartsWith("$2", StringComparison.Ordinal);
 
     // Helper to build a UserInfo response with safe fallbacks for username and names
     private async Task<UserInfo> BuildUserInfoAsync(

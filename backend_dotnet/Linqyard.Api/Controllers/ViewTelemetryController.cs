@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
+using System.Net;
+using Linqyard.Api.Services;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
-using System.Net;
 using Microsoft.Extensions.Primitives;
 
 namespace Linqyard.Api.Controllers;
@@ -14,7 +15,6 @@ public record ProfileViewPayload(
     string? source,
     string? referrer,
     UtmParametersDto? utm,
-    LocationDto? location,
     string? sessionId
 );
 
@@ -24,15 +24,21 @@ public sealed class ViewTelemetryController : BaseApiController
     private readonly ILogger<ViewTelemetryController> _logger;
     private readonly IViewTelemetryRepository _viewTelemetryRepository;
     private readonly IUserRepository _userRepository;
+    private readonly IClientIpResolver _clientIpResolver;
+    private readonly IIpGeolocationService _ipGeolocationService;
 
     public ViewTelemetryController(
         ILogger<ViewTelemetryController> logger,
         IViewTelemetryRepository viewTelemetryRepository,
-        IUserRepository userRepository)
+        IUserRepository userRepository,
+        IClientIpResolver clientIpResolver,
+        IIpGeolocationService ipGeolocationService)
     {
         _logger = logger;
         _viewTelemetryRepository = viewTelemetryRepository;
         _userRepository = userRepository;
+        _clientIpResolver = clientIpResolver;
+        _ipGeolocationService = ipGeolocationService;
     }
 
     /// <summary>
@@ -81,27 +87,27 @@ public sealed class ViewTelemetryController : BaseApiController
                 (deviceType, os, browser) = ParseUserAgent(userAgent);
             }
 
-            // Get location data
+            // Get IP address
+            IPAddress? ipAddress = _clientIpResolver.GetClientIp(HttpContext);
+
+            // Get location data from IP
             double? latitude = null;
             double? longitude = null;
             double? accuracy = null;
+            string? city = null;
+            string? country = null;
 
-            if (body?.location?.coords is not null)
+            if (ipAddress is not null)
             {
-                latitude = body.location.coords.latitude;
-                longitude = body.location.coords.longitude;
-                accuracy = body.location.coords.accuracy;
-            }
-
-            // Get IP address
-            IPAddress? ipAddress = null;
-            try
-            {
-                ipAddress = HttpContext.Connection.RemoteIpAddress;
-            }
-            catch
-            {
-                // ignored - IP address is optional
+                var geo = await _ipGeolocationService.ResolveAsync(ipAddress, cancellationToken);
+                if (geo is not null)
+                {
+                    latitude = geo.Latitude;
+                    longitude = geo.Longitude;
+                    accuracy = geo.AccuracyMeters;
+                    city = geo.City ?? geo.Region;
+                    country = geo.Country;
+                }
             }
 
             var request = new RecordProfileViewRequest(
@@ -115,8 +121,8 @@ public sealed class ViewTelemetryController : BaseApiController
                 Latitude: latitude,
                 Longitude: longitude,
                 Accuracy: accuracy,
-                City: null, // Could be enhanced with IP geolocation service
-                Country: null, // Could be enhanced with IP geolocation service
+                City: city,
+                Country: country,
                 UserAgent: userAgent,
                 DeviceType: deviceType,
                 Os: os,
