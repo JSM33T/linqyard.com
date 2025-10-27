@@ -221,7 +221,7 @@ export default function HomeClient() {
         initial="hidden"
         animate="visible"
       >
-        <div className="grid lg:grid-cols-2 gap-10 items-center">
+  <div className="mx-auto grid max-w-5xl items-center gap-10 lg:max-w-6xl lg:grid-cols-2 lg:gap-16">
           <motion.div className="space-y-6" variants={item}>
             {isAuthenticated ? (
               <>
@@ -299,8 +299,8 @@ export default function HomeClient() {
           "Custom domain or yourname.linqyard.com",
         ]}
         image={
-          <div className="relative mx-auto aspect-[4/3] w-full max-w-2xl overflow-hidden rounded-3xl border shadow-xl">
-            <Image src="/hero/click.png" alt="Devices" fill className="object-cover" />
+          <div className="relative mx-auto aspect-[4/3] w-full max-w-2xl overflow-hidden rounded-3xl border shadow-xl bg-background">
+            <Image src="/hero/click.png" alt="Devices" fill className="object-contain" />
           </div>
         }
         flip
@@ -316,8 +316,8 @@ export default function HomeClient() {
           "Export when you need to go deeper",
         ]}
         image={
-          <div className="relative mx-auto aspect-[16/10] w-full max-w-3xl overflow-hidden rounded-3xl border shadow-xl">
-            <Image src="/hero/analytics.png" alt="Analytics" fill className="object-cover" />
+          <div className="relative mx-auto aspect-[16/10] w-full max-w-3xl overflow-hidden rounded-3xl border shadow-xl bg-background">
+            <Image src="/hero/analytics.png" alt="Analytics" fill className="object-contain" />
           </div>
         }
       />
