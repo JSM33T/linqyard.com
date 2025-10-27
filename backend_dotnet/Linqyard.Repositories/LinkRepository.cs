@@ -10,13 +10,19 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace Linqyard.Repositories;
 
 public sealed class LinkRepository : ILinkRepository
 {
+    private const int MaxTags = 8;
+    private const int MaxTagLength = 32;
+
+    private static readonly Regex InvalidTagCharactersRegex = new("[^a-zA-Z0-9\\s-]", RegexOptions.Compiled);
+    private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled);
+
     private readonly LinqyardDbContext _db;
     private readonly ILogger<LinkRepository> _logger;
 
@@ -138,12 +144,14 @@ public sealed class LinkRepository : ILinkRepository
         }
 
         var now = DateTimeOffset.UtcNow;
+        var tags = NormalizeTags(request.Tags);
         var link = new Link
         {
             Id = Guid.NewGuid(),
             Name = request.Name.Trim(),
             Url = request.Url.Trim(),
             Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim(),
+            Tags = tags,
             UserId = userId,
             GroupId = groupId,
             Sequence = request.Sequence ?? 0,
@@ -184,6 +192,9 @@ public sealed class LinkRepository : ILinkRepository
 
         if (request.Description is not null)
             link.Description = string.IsNullOrWhiteSpace(request.Description) ? null : request.Description.Trim();
+
+        if (request.Tags is not null)
+            link.Tags = NormalizeTags(request.Tags);
 
         if (request is { GroupId: { } })
         {
@@ -325,6 +336,7 @@ public sealed class LinkRepository : ILinkRepository
         Name: l.Name,
         Url: l.Url,
         Description: l.Description,
+        Tags: l.Tags is { Count: > 0 } tags ? tags.ToArray() : Array.Empty<string>(),
         IsActive: l.IsActive,
         Sequence: l.Sequence,
         GroupId: l.GroupId,
@@ -337,6 +349,36 @@ public sealed class LinkRepository : ILinkRepository
         if (!groupId.HasValue) return null;
         if (groupId.Value == Guid.Empty) return null;
         return groupId;
+    }
+
+    private static List<string>? NormalizeTags(IReadOnlyCollection<string>? tags)
+    {
+        if (tags is null || tags.Count == 0) return null;
+
+        var normalized = new List<string>(Math.Min(tags.Count, MaxTags));
+        foreach (var raw in tags)
+        {
+            if (string.IsNullOrWhiteSpace(raw)) continue;
+
+            var trimmed = raw.Trim().TrimStart('#');
+            if (trimmed.Length == 0) continue;
+
+            var sanitized = InvalidTagCharactersRegex.Replace(trimmed, string.Empty);
+            sanitized = WhitespaceRegex.Replace(sanitized, "-");
+            sanitized = sanitized.Trim('-');
+            if (sanitized.Length == 0) continue;
+
+            if (sanitized.Length > MaxTagLength)
+                sanitized = sanitized.Substring(0, MaxTagLength);
+
+            var exists = normalized.Any(t => string.Equals(t, sanitized, StringComparison.OrdinalIgnoreCase));
+            if (exists) continue;
+
+            normalized.Add(sanitized);
+            if (normalized.Count >= MaxTags) break;
+        }
+
+        return normalized.Count > 0 ? normalized : null;
     }
 
     private static bool IsValidAbsoluteUrl(string url)

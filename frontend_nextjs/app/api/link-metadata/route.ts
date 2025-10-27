@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 
 type MetadataResponse = {
+  title: string | null;
   description: string | null;
 };
 
@@ -10,6 +11,12 @@ const META_TAG_PATTERNS = [
   /<meta\s[^>]*name=["']description["'][^>]*>/i,
   /<meta\s[^>]*property=["']og:description["'][^>]*>/i,
   /<meta\s[^>]*name=["']twitter:description["'][^>]*>/i,
+];
+
+const TITLE_META_PATTERNS = [
+  /<meta\s[^>]*property=["']og:title["'][^>]*>/i,
+  /<meta\s[^>]*name=["']twitter:title["'][^>]*>/i,
+  /<meta\s[^>]*name=["']title["'][^>]*>/i,
 ];
 
 const ENTITY_MAP: Record<string, string> = {
@@ -75,6 +82,26 @@ function extractDescription(html: string): string | null {
   return null;
 }
 
+function extractTitle(html: string): string | null {
+  for (const pattern of TITLE_META_PATTERNS) {
+    const match = html.match(pattern);
+    if (match?.[0]) {
+      const content = extractMetaContent(match[0]);
+      if (content) {
+        return content;
+      }
+    }
+  }
+
+  const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
+  if (titleMatch?.[1]) {
+    const content = decodeHtmlEntities(titleMatch[1].trim());
+    return content || null;
+  }
+
+  return null;
+}
+
 function sanitizeUrl(rawUrl: string): URL | null {
   try {
     const parsed = new URL(rawUrl);
@@ -123,7 +150,7 @@ export async function POST(request: NextRequest) {
     try {
       body = await request.json();
     } catch {
-      return NextResponse.json<MetadataResponse>({ description: null }, { status: 400 });
+      return NextResponse.json<MetadataResponse>({ title: null, description: null }, { status: 400 });
     }
 
     const urlInput = typeof body?.url === "string" ? body.url.trim() : "";
@@ -131,7 +158,7 @@ export async function POST(request: NextRequest) {
     const parsedUrl = sanitizeUrl(urlInput);
     if (!parsedUrl) {
       return NextResponse.json<MetadataResponse>(
-        { description: null },
+        { title: null, description: null },
         { status: 400 },
       );
     }
@@ -143,27 +170,31 @@ export async function POST(request: NextRequest) {
       response = await fetchWithTimeout(parsedUrl.toString(), requestSignal);
     } catch (error) {
       if ((error as Error).name === "AbortError") {
-        return NextResponse.json<MetadataResponse>({ description: null }, { status: 504 });
+        return NextResponse.json<MetadataResponse>({ title: null, description: null }, { status: 504 });
       }
       console.warn("Failed to fetch metadata:", error);
-      return NextResponse.json<MetadataResponse>({ description: null }, { status: 200 });
+      return NextResponse.json<MetadataResponse>({ title: null, description: null }, { status: 200 });
     }
 
     if (!response.ok) {
-      return NextResponse.json<MetadataResponse>({ description: null }, { status: 200 });
+      return NextResponse.json<MetadataResponse>({ title: null, description: null }, { status: 200 });
     }
 
     const contentType = response.headers.get("content-type") ?? "";
     if (!contentType.toLowerCase().includes("text/html")) {
-      return NextResponse.json<MetadataResponse>({ description: null }, { status: 200 });
+      return NextResponse.json<MetadataResponse>({ title: null, description: null }, { status: 200 });
     }
 
     const html = (await response.text()).slice(0, 20000);
     const description = extractDescription(html);
+    const title = extractTitle(html);
 
-    return NextResponse.json<MetadataResponse>({ description: description ?? null });
+    return NextResponse.json<MetadataResponse>({
+      title: title ?? null,
+      description: description ?? null,
+    });
   } catch (error) {
     console.error("link-metadata route error:", error);
-    return NextResponse.json<MetadataResponse>({ description: null }, { status: 500 });
+    return NextResponse.json<MetadataResponse>({ title: null, description: null }, { status: 500 });
   }
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
@@ -17,6 +18,9 @@ public class Link
     public string Url { get; set; } = null!;
 
     public string? Description { get; set; }
+
+    [Column(TypeName = "text[]")]
+    public List<string>? Tags { get; set; }
     // Sequence used for ordering links within a group or per user
     public int Sequence { get; set; } = 0;
 

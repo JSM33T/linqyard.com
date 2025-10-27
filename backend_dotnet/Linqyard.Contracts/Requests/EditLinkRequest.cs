@@ -11,6 +11,7 @@ namespace Linqyard.Contracts.Requests
         string? Name = null,
         string? Url = null,
         string? Description = null,
+        IReadOnlyList<string>? Tags = null,
         Guid? GroupId = null,   // null => ungroup, Guid.Empty => ungroup (treated the same)
         int? Sequence = null,
         bool? IsActive = null

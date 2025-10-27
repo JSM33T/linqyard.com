@@ -1,3 +1,5 @@
+using System.Collections.Generic;
+
 namespace Linqyard.Contracts.Responses;
 
 public sealed record LinkSummary(
@@ -5,6 +7,7 @@ public sealed record LinkSummary(
     string Name,
     string Url,
     string? Description,
+    IReadOnlyList<string> Tags,
     bool IsActive,
     int Sequence,
     Guid? GroupId,

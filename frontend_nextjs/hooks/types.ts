@@ -517,6 +517,7 @@ export interface LinkItem {
   name: string;
   url: string;
   description?: string | null;
+  tags?: string[] | null;
   isActive: boolean;
   sequence: number;
   groupId: string | null;
@@ -546,6 +547,7 @@ export interface CreateOrEditLinkRequest {
   name: string;
   url: string;
   description?: string | null;
+  tags?: string[] | null;
   groupId?: string | null;
   sequence?: number;
   isActive?: boolean;

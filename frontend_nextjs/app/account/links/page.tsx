@@ -44,7 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { ArrowLeft, Globe, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown, Share2, Copy, Check } from "lucide-react";
+import { ArrowLeft, Globe, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown, Share2, Copy, Check, Loader2, AlertCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 
@@ -67,7 +67,16 @@ const PRIMARY_COLOR_FALLBACK = "#5c558b";
 
 type UrlProtocol = "https://" | "http://";
 
+const METADATA_FETCH_DEBOUNCE_MS = 700;
+const MAX_AUTO_TITLE_LENGTH = 80;
 const MAX_AUTO_DESCRIPTION_LENGTH = 220;
+const MAX_TAGS = 8;
+const MAX_TAG_LENGTH = 32;
+
+type MetadataState = {
+  status: "idle" | "loading" | "success" | "error";
+  message?: string;
+};
 
 /* ---------- Sortable row (single Link chip) ---------- */
 function SortableLinkRow({ item, onEdit, onDelete }: { item: LinkItem; onEdit: (l: LinkItem) => void; onDelete: (l: LinkItem) => void }) {
@@ -320,6 +329,7 @@ export default function LinksPage() {
     name: "",
     url: "",
     description: "",
+    tags: [],
     groupId: null,
     sequence: 0,
     isActive: true,
@@ -327,6 +337,8 @@ export default function LinksPage() {
   const [urlProtocol, setUrlProtocol] = useState<UrlProtocol>("https://");
   const [urlRemainder, setUrlRemainder] = useState("");
   const [isCustomUrl, setIsCustomUrl] = useState(false);
+  const [metadataState, setMetadataState] = useState<MetadataState>({ status: "idle" });
+  const [tagInputValue, setTagInputValue] = useState("");
 
   // group create modal
   const [isCreatingGroup, setIsCreatingGroup] = useState(false);
@@ -377,6 +389,7 @@ export default function LinksPage() {
   const [, setActiveId] = useState<string | null>(null);
   const activeItemRef = useRef<LinkItem | null>(null);
   const metadataAttemptedUrlsRef = useRef<Set<string>>(new Set());
+  const metadataDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (linksError) {
@@ -404,31 +417,62 @@ export default function LinksPage() {
   }, [groupedData]);
 
   useEffect(() => {
-    if (!isCreating || editingLinkId) return;
+    const clearPendingTimer = () => {
+      if (metadataDebounceRef.current) {
+        clearTimeout(metadataDebounceRef.current);
+        metadataDebounceRef.current = null;
+      }
+    };
+
+    if (!isCreating || editingLinkId) {
+      clearPendingTimer();
+      return;
+    }
 
     const urlValue = form.url?.trim();
-    if (!urlValue) return;
+    if (!urlValue) {
+      clearPendingTimer();
+      setMetadataState((prev) => (prev.status === "idle" ? prev : { status: "idle" }));
+      return;
+    }
 
     let parsedUrl: URL;
     try {
       parsedUrl = new URL(urlValue);
     } catch {
+      clearPendingTimer();
+      setMetadataState((prev) => (prev.status === "idle" ? prev : { status: "idle" }));
       return;
     }
 
-    if (!["http:", "https:"].includes(parsedUrl.protocol)) return;
-    if (!parsedUrl.hostname || !parsedUrl.hostname.includes(".")) return;
-    if (form.description?.trim()) return;
+    if (!["http:", "https:"].includes(parsedUrl.protocol) || !parsedUrl.hostname || !parsedUrl.hostname.includes(".")) {
+      clearPendingTimer();
+      setMetadataState((prev) => (prev.status === "idle" ? prev : { status: "idle" }));
+      return;
+    }
+
+    const needsTitle = !form.name?.trim();
+    const needsDescription = !form.description?.trim();
+    if (!needsTitle && !needsDescription) {
+      clearPendingTimer();
+      return;
+    }
 
     const normalizedUrl = parsedUrl.toString();
     if (metadataAttemptedUrlsRef.current.has(normalizedUrl)) return;
 
-    metadataAttemptedUrlsRef.current.add(normalizedUrl);
+    clearPendingTimer();
 
     const controller = new AbortController();
     let cancelled = false;
 
-    const fetchMetadata = async () => {
+    metadataDebounceRef.current = setTimeout(async () => {
+      metadataDebounceRef.current = null;
+      if (cancelled) return;
+
+      metadataAttemptedUrlsRef.current.add(normalizedUrl);
+      setMetadataState({ status: "loading", message: "Fetching site preview..." });
+
       try {
         const response = await fetch("/api/link-metadata", {
           method: "POST",
@@ -437,37 +481,77 @@ export default function LinksPage() {
           signal: controller.signal,
         });
 
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (!cancelled) {
+            setMetadataState({ status: "error", message: "Site blocked metadata" });
+          }
+          return;
+        }
 
-        const data = (await response.json()) as { description?: string | null };
+        const data = (await response.json()) as { title?: string | null; description?: string | null };
+        if (cancelled) return;
+
+        const fetchedTitle = typeof data?.title === "string" ? data.title.trim() : "";
         const fetchedDescription = typeof data?.description === "string" ? data.description.trim() : "";
-        if (!fetchedDescription || cancelled) return;
+
+        if (!fetchedTitle && !fetchedDescription) {
+          setMetadataState({ status: "error", message: "No metadata found" });
+          return;
+        }
+
+        const limitedTitle =
+          fetchedTitle.length > MAX_AUTO_TITLE_LENGTH
+            ? `${fetchedTitle.slice(0, MAX_AUTO_TITLE_LENGTH).trim()}`
+            : fetchedTitle;
 
         const limitedDescription =
           fetchedDescription.length > MAX_AUTO_DESCRIPTION_LENGTH
             ? `${fetchedDescription.slice(0, MAX_AUTO_DESCRIPTION_LENGTH).trim()}`
             : fetchedDescription;
 
+        let applied = false;
+
         setForm((prev) => {
-          if (prev.description?.trim()) {
-            return prev;
+          let updated = false;
+          const next: CreateOrEditLinkRequest = { ...prev };
+
+          if (!prev.name?.trim() && limitedTitle) {
+            next.name = limitedTitle;
+            updated = true;
           }
-          return { ...prev, description: limitedDescription };
+
+          if (!prev.description?.trim() && limitedDescription) {
+            next.description = limitedDescription;
+            updated = true;
+          }
+
+          applied = updated;
+          return updated ? next : prev;
         });
+
+        if (!cancelled) {
+          setMetadataState({
+            status: "success",
+            message: applied ? "Site details imported" : "Metadata already filled",
+          });
+        }
       } catch (error) {
-        if ((error as Error).name !== "AbortError") {
-          console.warn("Failed to fetch link metadata description", error);
+        if ((error as Error).name === "AbortError") {
+          return;
+        }
+        console.warn("Failed to fetch link metadata", error);
+        if (!cancelled) {
+          setMetadataState({ status: "error", message: "Failed to fetch preview" });
         }
       }
-    };
-
-    fetchMetadata();
+    }, METADATA_FETCH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;
+      clearPendingTimer();
       controller.abort();
     };
-  }, [editingLinkId, form.description, form.url, isCreating]);
+  }, [editingLinkId, form.description, form.name, form.url, isCreating]);
 
   // Calculate tier limits
   const totalLinks = useMemo(() => {
@@ -507,6 +591,26 @@ export default function LinksPage() {
     if (!meta) return null;
     return meta.groupId ?? "__ungrouped__";
   };
+
+  const metadataIsLoading = metadataState.status === "loading";
+  const metadataStatusMessage =
+    metadataState.message ??
+    (metadataState.status === "loading"
+      ? "Fetching link preview..."
+      : metadataState.status === "success"
+      ? "Metadata imported"
+      : metadataState.status === "error"
+      ? "Unable to fetch metadata"
+      : "");
+  const metadataStatusTone =
+    metadataState.status === "error"
+      ? "text-destructive"
+      : metadataState.status === "success"
+      ? "text-emerald-600 dark:text-emerald-400"
+      : "text-muted-foreground";
+
+  const tags = form.tags ?? [];
+  const hasMaxTags = tags.length >= MAX_TAGS;
 
   const onDragStart = (event: DragStartEvent) => {
     const id = String(event.active.id);
@@ -777,10 +881,72 @@ export default function LinksPage() {
     }
   };
 
+  const addTagFromValue = (rawValue?: string) => {
+    const baseValue = (rawValue ?? tagInputValue).replace(/^#+/, "").trim();
+    if (!baseValue) {
+      setTagInputValue("");
+      return;
+    }
+
+    const sanitized = baseValue.replace(/[^a-zA-Z0-9\s-]/g, "").replace(/\s+/g, "-");
+    if (!sanitized) {
+      setTagInputValue("");
+      return;
+    }
+
+    if (sanitized.length > MAX_TAG_LENGTH) {
+      toast.error(`Tags must be under ${MAX_TAG_LENGTH} characters`);
+      return;
+    }
+
+    if (hasMaxTags) {
+      toast.error(`Maximum ${MAX_TAGS} tags allowed`);
+      return;
+    }
+
+    if (tags.some((tag) => tag.toLowerCase() === sanitized.toLowerCase())) {
+      toast.info("Tag already added");
+      setTagInputValue("");
+      return;
+    }
+
+    setForm((prev) => ({
+      ...prev,
+      tags: [...(prev.tags ?? []), sanitized],
+    }));
+    setTagInputValue("");
+  };
+
+  const handleTagRemove = (tag: string) => {
+    setForm((prev) => ({
+      ...prev,
+      tags: (prev.tags ?? []).filter((value) => value !== tag),
+    }));
+  };
+
+  const handleTagInputKeyDown = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === "Enter" || event.key === "," || event.key === "Tab") {
+      event.preventDefault();
+      addTagFromValue();
+      return;
+    }
+
+    if (event.key === "Backspace" && !tagInputValue && tags.length) {
+      handleTagRemove(tags[tags.length - 1]);
+    }
+  };
+
+  const handleTagInputBlur = () => {
+    if (tagInputValue.trim()) {
+      addTagFromValue();
+    }
+  };
+
   const resetUrlState = () => {
     setUrlProtocol("https://");
     setUrlRemainder("");
     setIsCustomUrl(false);
+    setMetadataState({ status: "idle" });
   };
 
   const applyUrlState = (protocol: UrlProtocol, remainder: string) => {
@@ -1417,48 +1583,97 @@ export default function LinksPage() {
                               <CardDescription>Add a new link to your collection</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                              <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                  <label className="text-sm font-medium mb-2 block">Link Name</label>
+                              <div>
+                                <label className="text-sm font-medium mb-2 block">Link URL</label>
+                                {isCustomUrl ? (
                                   <Input
-                                    placeholder="e.g. Google"
-                                    value={form.name}
-                                    onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                                    placeholder="https://..."
+                                    value={form.url}
+                                    onChange={(e) => handleCustomUrlChange(e.target.value)}
+                                    onPaste={handleCustomUrlPaste}
                                     autoFocus
                                   />
-                                </div>
-                                <div>
-                                  <label className="text-sm font-medium mb-2 block">URL</label>
-                                  {isCustomUrl ? (
+                                ) : (
+                                  <div className="flex h-9 w-full items-center rounded-md border border-input bg-background shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
+                                    <span className="flex h-full items-center border-r border-input bg-muted/50 px-3 text-sm text-muted-foreground select-none">
+                                      {urlProtocol}
+                                    </span>
                                     <Input
-                                      placeholder="https://..."
-                                      value={form.url}
-                                      onChange={(e) => handleCustomUrlChange(e.target.value)}
-                                      onPaste={handleCustomUrlPaste}
+                                      placeholder="yourlink.com"
+                                      value={urlRemainder}
+                                      onChange={(e) => handleUrlRemainderChange(e.target.value)}
+                                      onPaste={handleUrlPaste}
+                                      autoFocus
+                                      className="flex-1 h-full rounded-l-none border-0 bg-transparent px-3 shadow-none focus-visible:border-0 focus-visible:ring-0"
                                     />
-                                  ) : (
-                                    <div className="flex h-9 w-full items-center rounded-md border border-input bg-background shadow-xs transition-[color,box-shadow] focus-within:border-ring focus-within:ring-ring/50 focus-within:ring-[3px]">
-                                      <span className="flex h-full items-center border-r border-input bg-muted/50 px-3 text-sm text-muted-foreground select-none">
-                                        {urlProtocol}
-                                      </span>
-                                      <Input
-                                        placeholder="yourlink.com"
-                                        value={urlRemainder}
-                                        onChange={(e) => handleUrlRemainderChange(e.target.value)}
-                                        onPaste={handleUrlPaste}
-                                        className="flex-1 h-full rounded-l-none border-0 bg-transparent px-3 shadow-none focus-visible:border-0 focus-visible:ring-0"
-                                      />
-                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                              <div className={`space-y-2 transition-opacity ${metadataIsLoading ? "opacity-70" : ""}`}>
+                                <div className="flex items-center justify-between gap-2">
+                                  <label className="text-sm font-medium block">Link Title</label>
+                                  {metadataState.status !== "idle" && (
+                                    <span className={`flex items-center gap-1 text-xs ${metadataStatusTone}`}>
+                                      {metadataState.status === "loading" && <Loader2 className="h-3 w-3 animate-spin" />}
+                                      {metadataState.status === "success" && <Check className="h-3 w-3" />}
+                                      {metadataState.status === "error" && <AlertCircle className="h-3 w-3" />}
+                                      {metadataStatusMessage && <span>{metadataStatusMessage}</span>}
+                                    </span>
                                   )}
                                 </div>
+                                <Input
+                                  placeholder="e.g. Google"
+                                  value={form.name}
+                                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                                />
                               </div>
-                              <div>
+                              <div className={`transition-opacity ${metadataIsLoading ? "opacity-70" : ""}`}>
                                 <label className="text-sm font-medium mb-2 block">Description (Optional)</label>
                                 <Input
                                   placeholder="What is this link for?"
                                   value={form.description ?? ""}
                                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                                 />
+                              </div>
+                              <div>
+                                <label className="text-sm font-medium mb-2 block">Tags</label>
+                                <div className="rounded-md border border-dashed border-input/70 px-3 py-2 focus-within:border-ring focus-within:ring-ring/30 focus-within:ring-[3px]">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    {tags.map((tag) => (
+                                      <span
+                                        key={tag}
+                                        className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground"
+                                      >
+                                        <span>#{tag}</span>
+                                        <button
+                                          type="button"
+                                          className="text-muted-foreground/70 hover:text-foreground transition-colors"
+                                          onClick={() => handleTagRemove(tag)}
+                                          aria-label={`Remove tag ${tag}`}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </span>
+                                    ))}
+                                    {!hasMaxTags && (
+                                      <input
+                                        type="text"
+                                        value={tagInputValue}
+                                        onChange={(e) => setTagInputValue(e.target.value)}
+                                        onKeyDown={handleTagInputKeyDown}
+                                        onBlur={handleTagInputBlur}
+                                        placeholder={tags.length ? "Add more" : "Add tags"}
+                                        className="min-w-[120px] flex-1 bg-transparent text-sm text-foreground placeholder:text-muted-foreground focus:outline-none"
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="mt-1 flex items-center justify-between text-xs text-muted-foreground">
+                                  <span>Press Enter to add new #tags</span>
+                                  <span>
+                                    {tags.length}/{MAX_TAGS}
+                                  </span>
+                                </div>
                               </div>
                               <div>
                                 <label className="text-sm font-medium mb-2 block">Group</label>
@@ -1770,11 +1985,14 @@ export default function LinksPage() {
   function startEdit(link: LinkItem) {
     setEditingLinkId(link.id);
     metadataAttemptedUrlsRef.current.clear();
+    setMetadataState({ status: "idle" });
+    setTagInputValue("");
     setForm({
       id: link.id,
       name: link.name,
       url: link.url || "",
       description: link.description || "",
+      tags: link.tags ?? [],
       groupId: link.groupId,
       sequence: link.sequence,
       isActive: link.isActive,
@@ -1799,7 +2017,8 @@ export default function LinksPage() {
     metadataAttemptedUrlsRef.current.clear();
     setIsCreating(true);
     setEditingLinkId(null);
-    setForm({ name: "", url: "", description: "", groupId, sequence: 0, isActive: true });
+    setTagInputValue("");
+    setForm({ name: "", url: "", description: "", tags: [], groupId, sequence: 0, isActive: true });
     resetUrlState();
   }
 
@@ -1807,7 +2026,8 @@ export default function LinksPage() {
     setIsCreating(false);
     setEditingLinkId(null);
     metadataAttemptedUrlsRef.current.clear();
-    setForm({ name: "", url: "", description: "", groupId: null, sequence: 0, isActive: true });
+    setTagInputValue("");
+    setForm({ name: "", url: "", description: "", tags: [], groupId: null, sequence: 0, isActive: true });
     resetUrlState();
   }
 
