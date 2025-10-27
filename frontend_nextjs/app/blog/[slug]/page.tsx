@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { compileMDX } from "next-mdx-remote/rsc"
 import remarkGfm from "remark-gfm"
 
+import { TableOfContents, type TocHeading } from "@/components/blog/table-of-contents"
 import { mdxComponents } from "@/components/mdx/mdx-components"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
@@ -86,13 +87,91 @@ export default async function BlogViewPage({ params }: BlogPageParams) {
   const awaitedParams = (await params) as BlogPageParams["params"]
   const post = await loadPostOr404(awaitedParams.slug)
 
+  const headings: TocHeading[] = []
+
+  const headingPlugin = () => {
+    const slugCounts = new Map<string, number>()
+
+    const getTextContent = (node: any): string => {
+      if (!node) {
+        return ""
+      }
+
+      if (typeof node.value === "string") {
+        return node.value
+      }
+
+      if (Array.isArray(node.children)) {
+        return node.children.map((child: unknown) => getTextContent(child)).join("")
+      }
+
+      return ""
+    }
+
+    const slugify = (value: string) => {
+      const normalized = value
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .replace(/\s+/g, "-")
+
+      const base = normalized.length > 0 ? normalized : `section-${headings.length + 1}`
+      const occurrence = slugCounts.get(base) ?? 0
+      slugCounts.set(base, occurrence + 1)
+
+      return occurrence === 0 ? base : `${base}-${occurrence}`
+    }
+
+    const visitTree = (node: any) => {
+      if (!node || typeof node !== "object") {
+        return
+      }
+
+      if (node.type === "heading" && typeof node.depth === "number" && node.depth >= 2 && node.depth <= 4) {
+        const title = getTextContent(node).trim()
+
+        if (title.length > 0) {
+          const id = slugify(title)
+          const data =
+            typeof node.data === "object" && node.data !== null ? node.data : {}
+          const dataRecord = data as Record<string, unknown>
+
+          const properties =
+            typeof dataRecord.hProperties === "object" && dataRecord.hProperties !== null
+              ? (dataRecord.hProperties as Record<string, unknown>)
+              : {}
+
+          dataRecord.id = id
+          properties.id = id
+
+          dataRecord.hProperties = properties
+          node.data = dataRecord
+
+          headings.push({
+            id,
+            title,
+            depth: node.depth,
+          })
+        }
+      }
+
+      if (Array.isArray(node.children)) {
+        node.children.forEach((child: unknown) => visitTree(child))
+      }
+    }
+
+    return (tree: any) => {
+      visitTree(tree)
+    }
+  }
+
   const { content } = await compileMDX({
     source: post.body,
     components: mdxComponents,
     options: {
       parseFrontmatter: false,
       mdxOptions: {
-        remarkPlugins: [remarkGfm],
+        remarkPlugins: [remarkGfm, headingPlugin],
       },
     },
   })
@@ -107,9 +186,10 @@ export default async function BlogViewPage({ params }: BlogPageParams) {
   }
 
   return (
-    <section className="container mx-auto max-w-3xl px-4 sm:px-6 py-16 lg:py-24">
-      <article className="space-y-10">
-        <header className="space-y-6">
+    <section className="container mx-auto max-w-6xl px-4 sm:px-6 py-16 lg:py-24">
+      <div className="lg:flex lg:items-start lg:gap-12">
+        <article className="flex-1 space-y-10 lg:max-w-3xl">
+          <header className="space-y-6">
           <div>
             <Link
               href="/blog"
@@ -177,12 +257,25 @@ export default async function BlogViewPage({ params }: BlogPageParams) {
               </>
             )}
           </div>
-        </header>
+          </header>
 
-        <Separator className="bg-border/70" />
+          <Separator className="bg-border/70" />
 
-        <div className="space-y-6 text-foreground">{content}</div>
-      </article>
+          {headings.length > 0 && (
+            <div className="lg:hidden">
+              <TableOfContents headings={headings} className="mt-6" />
+            </div>
+          )}
+
+          <div className="space-y-6 text-foreground">{content}</div>
+        </article>
+
+        {headings.length > 0 && (
+          <aside className="sticky top-28 mt-10 hidden w-[260px] flex-shrink-0 lg:block">
+            <TableOfContents headings={headings} />
+          </aside>
+        )}
+      </div>
     </section>
   )
 }
