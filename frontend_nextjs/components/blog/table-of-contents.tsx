@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { ReactNode, useEffect, useMemo, useState } from "react"
 
 import { cn } from "@/lib/utils"
 
@@ -8,6 +8,7 @@ export type TocHeading = {
   id: string
   title: string
   depth: number
+  label?: ReactNode
 }
 
 type TableOfContentsProps = {
@@ -15,7 +16,7 @@ type TableOfContentsProps = {
   className?: string
 }
 
-// Renders a scroll-spy aware table of contents for blog posts.
+// Renders a scroll-spy aware table of contents for content-heavy pages.
 export function TableOfContents({ headings, className }: TableOfContentsProps) {
   const [activeId, setActiveId] = useState<string | null>(() => headings[0]?.id ?? null)
 
@@ -104,7 +105,7 @@ export function TableOfContents({ headings, className }: TableOfContentsProps) {
                 )}
                 onClick={() => setActiveId(heading.id)}
               >
-                {heading.title}
+                {heading.label ?? heading.title}
               </a>
             </li>
           )

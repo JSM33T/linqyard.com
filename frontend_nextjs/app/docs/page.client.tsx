@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { TableOfContents, type TocHeading } from "@/components/blog/table-of-contents";
 import {
   Card,
   CardContent,
@@ -40,18 +41,6 @@ const headerVariants = {
   visible: { y: 0, opacity: 1, transition: { duration: 0.45 } },
 };
 
-const sidebarList = {
-  hidden: {},
-  visible: {
-    transition: { staggerChildren: 0.08, delayChildren: 0.12 },
-  },
-};
-
-const sidebarItem = {
-  hidden: { x: -12, opacity: 0 },
-  visible: { x: 0, opacity: 1, transition: { type: "spring", stiffness: 300, damping: 24 } },
-};
-
 const sectionVariants = {
   hidden: { y: 20, opacity: 0 },
   visible: { y: 0, opacity: 1, transition: { duration: 0.45 } },
@@ -63,28 +52,31 @@ const footerVariants = {
 };
 
 function SidebarNav() {
+  const tocHeadings: TocHeading[] = sections.map((section) => ({
+    id: section.id,
+    title: section.title,
+    depth: 2,
+    label: (
+      <span className="flex items-center gap-2">
+        {section.icon}
+        <span>{section.title}</span>
+      </span>
+    ),
+  }));
+
   return (
-    <div className="h-full flex flex-col">
+    <div className="flex h-full flex-col rounded-md border border-primary/40 bg-background/80">
       <div className="px-3 py-3">
         <Badge variant="secondary" className="px-2">Docs</Badge>
         <h2 className="mt-2 text-lg font-semibold">LinqYard</h2>
         <p className="text-sm text-muted-foreground">Product documentation</p>
       </div>
       <Separator />
-      <div className="flex-1 overflow-auto">
-        <motion.nav className="p-2" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sidebarList}>
-          {sections.map((s) => (
-            <motion.a
-              key={s.id}
-              href={`#${s.id}`}
-              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm hover:bg-muted transition-colors"
-              variants={sidebarItem as any}
-            >
-              <span className="text-muted-foreground">{s.icon}</span>
-              <span>{s.title}</span>
-            </motion.a>
-          ))}
-        </motion.nav>
+      <div className="flex-1 overflow-auto p-3">
+        <TableOfContents
+          headings={tocHeadings}
+          className="border-0 bg-transparent p-0 text-sm [&_p]:hidden [&_ul]:mt-2"
+        />
       </div>
       <Separator />
       <div className="p-3 text-xs text-muted-foreground">
@@ -119,14 +111,14 @@ export default function DocsPageClient() {
       {/* Body */}
       <div className="container mx-auto grid lg:grid-cols-[260px_1fr] gap-6 px-4 py-8">
         {/* Desktop sidebar */}
-        <aside className="hidden lg:block sticky top-[68px] h-[calc(100vh-76px)] border rounded-md">
+        <aside className="hidden lg:block sticky top-[68px] h-[calc(100vh-76px)]">
           <SidebarNav />
         </aside>
 
         {/* Content */}
         <main className="min-w-0">
           {/* Mobile sidebar substitute */}
-          <div className="lg:hidden mb-6 border rounded-md">
+          <div className="lg:hidden mb-6">
             <SidebarNav />
           </div>
 
