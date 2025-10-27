@@ -612,6 +612,28 @@ export default function LinksPage() {
   const tags = form.tags ?? [];
   const hasMaxTags = tags.length >= MAX_TAGS;
 
+  const cloneGroupState = (groups: typeof localGroups) =>
+    groups.map((group) => ({
+      ...group,
+      links: [...group.links],
+    }));
+
+  const buildLinkResequencePayload = (
+    groupsState: typeof localGroups,
+    ungroupedState: LinkItem[]
+  ) => {
+    const payload: { id: string; groupId: string | null; sequence: number }[] = [];
+    groupsState.forEach((group) => {
+      group.links.forEach((link, index) => {
+        payload.push({ id: link.id, groupId: group.id, sequence: index });
+      });
+    });
+    ungroupedState.forEach((link, index) => {
+      payload.push({ id: link.id, groupId: null, sequence: index });
+    });
+    return payload;
+  };
+
   const onDragStart = (event: DragStartEvent) => {
     const id = String(event.active.id);
     setActiveId(id);
@@ -655,21 +677,24 @@ export default function LinksPage() {
       const newIndex = localGroups.findIndex(g => g.id === overGroupId);
       
       if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-      
+      const previousGroups = cloneGroupState(localGroups);
+
       // Calculate final group order
-      const finalGroupOrder = arrayMove(localGroups, oldIndex, newIndex);
-      
+      const finalGroupOrder = arrayMove(cloneGroupState(localGroups), oldIndex, newIndex);
+
+      setLocalGroups(finalGroupOrder);
+
       // Build group resequence payload
       const groupResequencePayload: GroupResequenceItemRequest[] = finalGroupOrder.map((group, index) => ({
         id: group.id,
-        sequence: index
+        sequence: index,
       }));
 
       try {
         await post("/group/resequence", groupResequencePayload);
-        await refetchLinks(); // Refresh data from server
         toast.success("Groups reordered");
       } catch (e: any) {
+        setLocalGroups(previousGroups);
         toast.error(e?.data?.title || "Failed to reorder groups");
       }
       return;
@@ -682,106 +707,103 @@ export default function LinksPage() {
 
     if (!activeContainer || !overContainer) return;
 
-    // BUILD PAYLOAD FROM INTENDED FINAL STATE - DON'T USE OPTIMISTIC UPDATES
-    const resequencePayload: { id: string; groupId: string | null; sequence: number }[] = [];
-
     // Cross-container move
     if (activeContainer !== overContainer) {
+      const previousGroups = cloneGroupState(localGroups);
+      const previousUngrouped = [...localUngrouped];
+
+      const nextGroups = cloneGroupState(localGroups);
+      let nextUngrouped = [...localUngrouped];
+
       let moved: LinkItem | null = null;
 
       // Find the moved item
       if (activeContainer === "__ungrouped__") {
-        const idx = localUngrouped.findIndex((l) => l.id === activeIdStr);
-        if (idx > -1) moved = localUngrouped[idx];
+        const idx = nextUngrouped.findIndex((l) => l.id === activeIdStr);
+        if (idx > -1) {
+          moved = nextUngrouped.splice(idx, 1)[0];
+        }
       } else {
-        const group = localGroups.find((g) => g.id === activeContainer);
-        if (group) {
-          const idx = group.links.findIndex((l) => l.id === activeIdStr);
-          if (idx > -1) moved = group.links[idx];
+        const sourceGroup = nextGroups.find((g) => g.id === activeContainer);
+        if (sourceGroup) {
+          const idx = sourceGroup.links.findIndex((l) => l.id === activeIdStr);
+          if (idx > -1) {
+            moved = sourceGroup.links.splice(idx, 1)[0];
+          }
         }
       }
 
       if (!moved) return;
 
-      // Build payload for cross-container move
-      // 1. Add moved item to target container at position 0
-      const targetGroupId = overContainer === "__ungrouped__" ? null : overContainer;
-      resequencePayload.push({ id: moved.id, groupId: targetGroupId, sequence: 0 });
-
-      // 2. Add existing items in target container, shifted by 1
+      // Insert optimistically at the start of the target container as before
       if (overContainer === "__ungrouped__") {
-        localUngrouped.forEach((link, i) => {
-          resequencePayload.push({ id: link.id, groupId: null, sequence: i + 1 });
-        });
+        nextUngrouped = [moved, ...nextUngrouped];
       } else {
-        const targetGroup = localGroups.find((g) => g.id === overContainer);
-        if (targetGroup) {
-          targetGroup.links.forEach((link, i) => {
-            resequencePayload.push({ id: link.id, groupId: overContainer, sequence: i + 1 });
-          });
-        }
+        const targetGroup = nextGroups.find((g) => g.id === overContainer);
+        if (!targetGroup) return;
+        targetGroup.links = [moved, ...targetGroup.links];
       }
 
-      // 3. Resequence source container (excluding moved item)
-      if (activeContainer === "__ungrouped__") {
-        localUngrouped
-          .filter((l) => l.id !== activeIdStr)
-          .forEach((link, i) => {
-            resequencePayload.push({ id: link.id, groupId: null, sequence: i });
-          });
-      } else {
-        const sourceGroup = localGroups.find((g) => g.id === activeContainer);
-        if (sourceGroup) {
-          sourceGroup.links
-            .filter((l) => l.id !== activeIdStr)
-            .forEach((link, i) => {
-              resequencePayload.push({ id: link.id, groupId: activeContainer, sequence: i });
-            });
-        }
-      }
+      setLocalGroups(nextGroups);
+      setLocalUngrouped(nextUngrouped);
+
+      const resequencePayload = buildLinkResequencePayload(nextGroups, nextUngrouped);
 
       try {
         await post("/link/resequence", resequencePayload);
-        await refetchLinks(); // Refresh data from server
         toast.success("Link moved");
       } catch (e: any) {
+        setLocalGroups(previousGroups);
+        setLocalUngrouped(previousUngrouped);
         toast.error(e?.data?.title || "Failed to move link");
       }
       return;
     }
 
     // Same container reorder - calculate final order
-    let finalOrder: LinkItem[] = [];
     if (activeContainer === "__ungrouped__") {
       const oldIndex = localUngrouped.findIndex((i) => i.id === activeIdStr);
       const newIndex = localUngrouped.findIndex((i) => i.id === overIdStr);
       if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-      finalOrder = arrayMove(localUngrouped, oldIndex, newIndex);
-      
-      // Build payload from final order
-      finalOrder.forEach((link, i) => {
-        resequencePayload.push({ id: link.id, groupId: null, sequence: i });
-      });
-    } else {
-      const group = localGroups.find((g) => g.id === activeContainer);
-      if (!group) return;
-      
-      const oldIndex = group.links.findIndex((i) => i.id === activeIdStr);
-      const newIndex = group.links.findIndex((i) => i.id === overIdStr);
-      if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
-      finalOrder = arrayMove(group.links, oldIndex, newIndex);
-      
-      // Build payload from final order
-      finalOrder.forEach((link, i) => {
-        resequencePayload.push({ id: link.id, groupId: activeContainer, sequence: i });
-      });
+
+      const previousUngrouped = [...localUngrouped];
+      const nextUngrouped = arrayMove([...localUngrouped], oldIndex, newIndex);
+
+      setLocalUngrouped(nextUngrouped);
+
+      const resequencePayload = buildLinkResequencePayload(cloneGroupState(localGroups), nextUngrouped);
+
+      try {
+        await post("/link/resequence", resequencePayload);
+      } catch (e: any) {
+        setLocalUngrouped(previousUngrouped);
+        toast.error(e?.data?.title || "Failed to save order");
+      }
+      return;
     }
 
-    // Persist resequence
+    const group = localGroups.find((g) => g.id === activeContainer);
+    if (!group) return;
+
+    const oldIndex = group.links.findIndex((i) => i.id === activeIdStr);
+    const newIndex = group.links.findIndex((i) => i.id === overIdStr);
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+    const previousGroups = cloneGroupState(localGroups);
+    const nextGroups = cloneGroupState(localGroups);
+    const targetGroup = nextGroups.find((g) => g.id === activeContainer);
+    if (!targetGroup) return;
+
+    targetGroup.links = arrayMove(targetGroup.links, oldIndex, newIndex);
+
+    setLocalGroups(nextGroups);
+
+    const resequencePayload = buildLinkResequencePayload(nextGroups, localUngrouped);
+
     try {
       await post("/link/resequence", resequencePayload);
-      await refetchLinks(); // Refresh data from server
     } catch (e: any) {
+      setLocalGroups(previousGroups);
       toast.error(e?.data?.title || "Failed to save order");
     }
   };
