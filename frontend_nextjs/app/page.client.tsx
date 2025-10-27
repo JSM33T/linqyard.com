@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import Link from "next/link";
 import Image from "next/image";
 import { Badge } from "@/components/ui/badge";
@@ -29,14 +29,49 @@ const item = { hidden: { y: 16, opacity: 0 }, visible: { y: 0, opacity: 1 } };
 
 // ---- Mobile Mockup (re‑used as section image) ----
 function DeviceMockup() {
+  const mouseX = useMotionValue(0);
+  const mouseY = useMotionValue(0);
+
+  const springConfig = { damping: 25, stiffness: 150 };
+  const smoothX = useSpring(mouseX, springConfig);
+  const smoothY = useSpring(mouseY, springConfig);
+
+  const rotateX = useTransform(smoothY, [-300, 300], [15, -15]);
+  const rotateY = useTransform(smoothX, [-300, 300], [-15, 15]);
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    mouseX.set(e.clientX - centerX);
+    mouseY.set(e.clientY - centerY);
+  };
+
+  const handleMouseLeave = () => {
+    mouseX.set(0);
+    mouseY.set(0);
+  };
+
   return (
-    <motion.div
-      className="relative mx-auto w-full max-w-[320px] md:max-w-[360px]"
-      initial={{ y: 10, opacity: 0 }}
-      whileInView={{ y: 0, opacity: 1 }}
-      viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.8, ease: "easeOut" }}
+    <div 
+      onMouseMove={handleMouseMove}
+      onMouseLeave={handleMouseLeave}
+      className="relative"
+      style={{ perspective: "1200px" }}
     >
+      <motion.div
+        className="relative mx-auto w-full max-w-[320px] md:max-w-[360px]"
+        initial={{ y: 10, opacity: 0 }}
+        whileInView={{ y: 0, opacity: 1 }}
+        viewport={{ once: true, amount: 0.3 }}
+        transition={{ duration: 0.8, ease: "easeOut" }}
+        style={{
+          rotateX,
+          rotateY,
+          transformStyle: "preserve-3d",
+        }}
+      >
       {/* phone frame */}
       <div className="relative rounded-[3rem] border bg-gradient-to-b from-background/40 to-background/70 shadow-2xl backdrop-blur supports-[backdrop-filter]:bg-background/60">
         {/* top bar / notch */}
@@ -73,9 +108,11 @@ function DeviceMockup() {
                       { label: "Latest project", icon: <ExternalLink className="h-4 w-4" /> },
                       { label: "Speaking", icon: <ExternalLink className="h-4 w-4" /> },
                     ].map((l, i) => (
-                      <button
+                      <motion.button
                         key={i}
                         className="group w-full rounded-xl border bg-background px-4 py-3 text-left shadow-sm transition-all hover:shadow-md focus-visible:outline-none"
+                        whileHover={{ scale: 1.05, y: -8 }}
+                        transition={{ type: "spring", stiffness: 400, damping: 17 }}
                       >
                         <div className="flex items-center justify-between">
                           <span className="inline-flex items-center gap-2 font-medium">
@@ -86,7 +123,7 @@ function DeviceMockup() {
                             {l.icon}
                           </span>
                         </div>
-                      </button>
+                      </motion.button>
                     ))}
                   </div>
                 </ScrollArea>
@@ -114,6 +151,7 @@ function DeviceMockup() {
         }}
       />
     </motion.div>
+    </div>
   );
 }
 
@@ -138,7 +176,7 @@ function AltSection({
   return (
     <section className="container mx-auto px-4 py-14 md:py-20">
       <div
-        className={`grid items-center gap-10 md:gap-12 lg:gap-16 lg:grid-cols-2 ${flip ? "lg:[&>div:nth-child(1)]:order-2" : ""
+        className={`mx-auto grid max-w-5xl items-center gap-10 md:gap-12 lg:max-w-6xl lg:grid-cols-2 lg:gap-16 ${flip ? "lg:[&>div:nth-child(1)]:order-2" : ""
           }`}
       >
         {/* text */}
@@ -309,7 +347,7 @@ export default function HomeClient() {
           "Custom domain or yourname.linqyard.com",
         ]}
         image={
-          <div className="relative mx-auto aspect-square w-full overflow-hidden rounded-3xl border shadow-xl bg-background">
+          <div className="relative mx-auto w-full max-w-[480px] aspect-square overflow-hidden rounded-3xl border shadow-xl bg-background">
             <Image src="/hero/click.png" alt="Devices" fill className="object-contain p-6 md:p-8" />
           </div>
         }
@@ -326,7 +364,7 @@ export default function HomeClient() {
           "Export when you need to go deeper",
         ]}
         image={
-          <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-3xl border shadow-xl bg-background">
+          <div className="relative mx-auto w-full max-w-[480px] aspect-square overflow-hidden rounded-3xl border shadow-xl bg-background">
             <Image src="/hero/analytics.png" alt="Analytics" fill className="object-contain p-6 md:p-8" />
           </div>
         }
