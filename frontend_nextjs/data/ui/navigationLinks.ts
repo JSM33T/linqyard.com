@@ -35,11 +35,5 @@ export const resourcesLinks = [
     href: "/status",
     description: "Check real-time system health",
     icon: "activity",
-  },
-  {
-    name: "Team",
-    href: "/team",
-    description: "Meet our team members",
-    icon: "people",
-  },
+  }
 ];

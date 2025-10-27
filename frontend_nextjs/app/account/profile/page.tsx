@@ -986,7 +986,7 @@ export default function ProfilePage() {
                 </div>
 
                 {/* Action Buttons - Only show when not editing */}
-                {!isEditing && (
+                {/* {!isEditing && (
                   <div className="flex flex-wrap gap-3 pt-4">
                     <Link href="/account/insights">
                       <Button variant="default">
@@ -996,13 +996,8 @@ export default function ProfilePage() {
                     <Button variant="outline">
                       Change Password
                     </Button>
-                    <Link href="/account/settings">
-                      <Button variant="ghost">
-                        Account Settings
-                      </Button>
-                    </Link>
                   </div>
-                )}
+                )} */}
               </CardContent>
             </Card>
           </motion.div>

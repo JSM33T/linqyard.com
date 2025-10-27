@@ -43,6 +43,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      {/* <head><script
+          async
+          crossOrigin="anonymous"
+          src="https://tweakcn.com/live-preview.min.js"
+        /></head> */}
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased flex flex-col min-h-screen`}
       >

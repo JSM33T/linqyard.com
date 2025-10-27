@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import Link from "next/link";
+import { useState, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -87,7 +88,41 @@ const roadmap = [
   },
 ];
 
+interface GitHubContributor {
+  login: string;
+  avatar_url: string;
+  html_url: string;
+  contributions: number;
+}
+
 export default function AboutClient() {
+  const [contributors, setContributors] = useState<GitHubContributor[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchContributors = async () => {
+      try {
+        const response = await fetch(
+          'https://api.github.com/repos/jsm33t/linqyard.com/contributors'
+        );
+        if (response.ok) {
+          const data = await response.json();
+          // Filter out bots and take first 8 contributors
+          const filtered = data
+            .filter((c: GitHubContributor) => !c.login.includes('[bot]'))
+            .slice(0, 8);
+          setContributors(filtered);
+        }
+      } catch (error) {
+        console.error('Failed to fetch contributors:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchContributors();
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header / Intro */}
@@ -143,45 +178,6 @@ export default function AboutClient() {
           </motion.div>
         </motion.div>
       </motion.section>
-
-      {/* Principles */}
-      <motion.section
-        className="container mx-auto px-4 py-14"
-        variants={containerVariants}
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true }}
-      >
-        <motion.div className="text-center mb-12" variants={itemVariants}>
-          <h2 className="text-3xl md:text-5xl font-bold">Why Choose Linqyard</h2>
-          <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
-            Built on principles that put your success and privacy first.
-          </p>
-        </motion.div>
-
-        <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {principles.map((p, i) => (
-            <motion.div
-              key={i}
-              initial={{ opacity: 0, y: 30 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: i * 0.08 }}
-              viewport={{ once: true }}
-            >
-              <Card className="h-full">
-                <CardHeader>
-                  <div className="text-primary mb-2">{p.icon}</div>
-                  <CardTitle className="leading-tight">{p.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <CardDescription>{p.desc}</CardDescription>
-                </CardContent>
-              </Card>
-            </motion.div>
-          ))}
-        </div>
-      </motion.section>
-
       {/* How it works */}
       <motion.section
         className="container mx-auto px-4 py-14"
@@ -269,6 +265,107 @@ export default function AboutClient() {
           ))}
         </div>
       </motion.section>
+
+      {/* Team Section */}
+      <motion.section
+        className="container mx-auto px-4 py-14"
+        initial={{ opacity: 0 }}
+        whileInView={{ opacity: 1 }}
+        transition={{ duration: 0.6 }}
+        viewport={{ once: true }}
+      >
+        <div className="text-center mb-10">
+          <h2 className="text-3xl md:text-5xl font-bold">Meet Our Team</h2>
+          <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
+            The people building and supporting Linqyard.
+          </p>
+        </div>
+
+        {/* Desktop Layout: Founder Left, Contributors Right */}
+        <div className="grid lg:grid-cols-[400px_1fr] gap-8 items-start">
+          {/* Founder Card */}
+          <div>
+            <h3 className="text-xl font-semibold mb-6">Founder</h3>
+            <Card className="relative overflow-hidden">
+              <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
+              <CardHeader className="flex-row items-start gap-4">
+                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold shrink-0">
+                  JS
+                </div>
+                <div className="flex-1">
+                  <CardTitle className="text-lg">Jasmeet Singh</CardTitle>
+                  <CardDescription>Founder</CardDescription>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Badge variant="secondary">C#</Badge>
+                    <Badge variant="secondary">DevOps</Badge>
+                    <Badge variant="secondary">AI</Badge>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground mb-4">Product-first founder.</p>
+                <div className="flex gap-2">
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href="mailto:mail@jsm33t.com">
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href="https://github.com/jsm33t" target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                  <Button asChild size="sm" variant="ghost">
+                    <Link href="https://jsm33t.com" target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4" />
+                    </Link>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+        {/* Contributors */}
+        <div>
+          <h3 className="text-xl font-semibold mb-6">Contributors</h3>
+          {loading ? (
+            <div className="text-center py-8 text-muted-foreground">Loading contributors...</div>
+          ) : contributors.length > 0 ? (
+            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {contributors.map((contributor) => (
+                <Card key={contributor.login} className="relative overflow-hidden hover:shadow-md transition-shadow">
+                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-muted" />
+                  <div className="flex items-center justify-between gap-3 py-3 px-4">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <div 
+                        className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
+                        style={{ 
+                          backgroundImage: `url(${contributor.avatar_url})`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center'
+                        }}
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-semibold truncate">{contributor.login}</div>
+                        <div className="text-xs text-muted-foreground truncate">{contributor.contributions} contributions</div>
+                      </div>
+                    </div>
+                    <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0">
+                      <Link href={contributor.html_url} target="_blank" rel="noopener noreferrer">
+                        <ExternalLink className="h-4 w-4" />
+                      </Link>
+                    </Button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">No contributors found.</div>
+          )}
+        </div>
+        </div>
+      </motion.section>
+
     </div>
   );
 }

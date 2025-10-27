@@ -450,12 +450,12 @@ const getIcon = (iconName: string) => {
                       Insights
                     </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
+                  {/* <DropdownMenuItem asChild>
                     <Link href="/account/preferences" className="cursor-pointer">
                       <Settings className="mr-2 h-4 w-4" />
                       Preferences
                     </Link>
-                  </DropdownMenuItem>
+                  </DropdownMenuItem> */}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem disabled className="cursor-not-allowed opacity-60">
                     <Layout className="mr-2 h-4 w-4" />
