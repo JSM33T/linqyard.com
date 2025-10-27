@@ -80,7 +80,7 @@ export function TableOfContents({ headings, className }: TableOfContentsProps) {
     <nav
       aria-label="Table of contents"
       className={cn(
-        "rounded-lg border border-border/60 bg-muted/20 p-5 text-sm text-muted-foreground",
+        "rounded-lg border border-primary/60 bg-muted/20 p-5 text-sm text-muted-foreground",
         className
       )}
     >
