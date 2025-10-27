@@ -159,7 +159,7 @@ function AltSection({
           {bullets && bullets.length > 0 && (
             <ul className="mt-2 space-y-2">
               {bullets.map((b, i) => (
-                <li key={i} className="inline-flex items-start gap-2 text-base">
+                <li key={i} className="flex items-start gap-2 text-base">
                   <CheckCircle className="mt-0.5 h-4 w-4 text-green-600 dark:text-green-400" />
                   <span className="text-muted-foreground">{b}</span>
                 </li>
@@ -178,7 +178,7 @@ function AltSection({
         </motion.div>
 
         {/* image */}
-        <div className="relative">
+        <div className="relative pt-6 md:mt-10">
           {image}
         </div>
       </div>
@@ -264,11 +264,21 @@ export default function HomeClient() {
                     <Link href="/about" className="inline-flex items-center">Learn more</Link>
                   </Button>
                 </motion.div>
-                <motion.div variants={item} className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground pt-2">
-                  <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> No credit card for demo</span>
-                  <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> Email support</span>
-                  <span className="inline-flex items-center gap-2"><CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" /> Sensible defaults</span>
-                </motion.div>
+                <motion.ul
+                  variants={item}
+                  className="pt-2 space-y-2 text-sm text-muted-foreground"
+                >
+                  {[
+                    "No credit card for demo",
+                    "Email support",
+                    "Sensible defaults",
+                  ].map((feature) => (
+                    <li key={feature} className="flex items-center gap-2">
+                      <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </motion.ul>
               </>
             )}
           </motion.div>
@@ -299,8 +309,8 @@ export default function HomeClient() {
           "Custom domain or yourname.linqyard.com",
         ]}
         image={
-          <div className="relative mx-auto aspect-[4/3] w-full max-w-2xl overflow-hidden rounded-3xl border shadow-xl bg-background">
-            <Image src="/hero/click.png" alt="Devices" fill className="object-contain" />
+          <div className="relative mx-auto aspect-square w-full overflow-hidden rounded-3xl border shadow-xl bg-background">
+            <Image src="/hero/click.png" alt="Devices" fill className="object-contain p-6 md:p-8" />
           </div>
         }
         flip
@@ -308,16 +318,16 @@ export default function HomeClient() {
 
       <AltSection
         eyebrow="Lightweight Insights"
-        title="Understand what people click"
-        text="Optional, privacy‑respecting counters help you see what’s working—no creepy tracking."
+        title="Understand what people click and alll "
+        text="Optional, privacy‑respecting counters help you see what's working—no creepy tracking."
         bullets={[
           "Per‑link click counts",
           "Top links at a glance",
           "Export when you need to go deeper",
         ]}
         image={
-          <div className="relative mx-auto aspect-[16/10] w-full max-w-3xl overflow-hidden rounded-3xl border shadow-xl bg-background">
-            <Image src="/hero/analytics.png" alt="Analytics" fill className="object-contain" />
+          <div className="relative mx-auto aspect-square w-full max-w-md overflow-hidden rounded-3xl border shadow-xl bg-background">
+            <Image src="/hero/analytics.png" alt="Analytics" fill className="object-contain p-6 md:p-8" />
           </div>
         }
       />
