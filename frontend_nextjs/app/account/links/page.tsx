@@ -244,8 +244,8 @@ function GroupSection({
   const { setNodeRef, isOver } = useDroppable({ id: containerId });
 
   return (
-    <AccordionItem value={containerId} className="rounded-xl border bg-card">
-  <AccordionTrigger className="px-4 no-underline hover:no-underline">
+    <AccordionItem value={containerId} className="rounded-xl border border-border bg-card last:border-b">
+      <AccordionTrigger className="px-4 no-underline hover:no-underline">
         {id ? (
           <SortableGroupHeader 
             id={id}
