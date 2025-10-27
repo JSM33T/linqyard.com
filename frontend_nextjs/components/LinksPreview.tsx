@@ -163,7 +163,7 @@ export default function LinksPreview({ groups, ungrouped, header, user }: { grou
               <div className="flex flex-col items-center justify-center gap-2 text-center">
                 <div className="flex items-center gap-2">
                   <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center">
-                    <Globe className="h-3 w-3 text-primary" />
+                    <Image src="/logo.svg" alt="Linqyard" width={12} height={12} className="h-3 w-3 object-contain" />
                   </div>
                   <span className="font-semibold text-sm">Linqyard</span>
                 </div>

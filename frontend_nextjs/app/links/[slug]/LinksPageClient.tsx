@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { Globe, Sun, Moon } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { toast } from "sonner";
 
 // no user guard in public profile view
@@ -332,8 +332,8 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
 
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-              <Globe className="h-4 w-4 text-primary" />
-            </div>
+                <Image src="/logo.svg" alt="Linqyard" width={20} height={20} className="h-4 w-4 object-contain" />
+              </div>
             <div>
               <h1 className="text-3xl font-bold">Links</h1>
               <p className="text-muted-foreground text-sm">View links by group.</p>

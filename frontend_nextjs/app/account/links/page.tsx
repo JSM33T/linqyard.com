@@ -44,7 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { ArrowLeft, Globe, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown, Share2, Copy, Check, Loader2, AlertCircle, X } from "lucide-react";
+import { ArrowLeft, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown, Share2, Copy, Check, Loader2, AlertCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 
@@ -1284,7 +1284,7 @@ export default function LinksPage() {
 
               <div className="flex flex-col sm:flex-row sm:items-center gap-4 pb-6">
                 <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                  <Globe className="h-4 w-4 text-primary" />
+                  <NextImage src="/logo.svg" alt="Linqyard" width={20} height={20} className="h-4 w-4 object-contain" />
                 </div>
                 <div>
                   <h1 className="text-3xl font-bold">Links</h1>
@@ -1314,7 +1314,7 @@ export default function LinksPage() {
                       className="rounded-none border-r h-9 sm:hidden"
                       onClick={() => setIsPreviewModalOpen(true)}
                     >
-                      <Globe className="h-4 w-4" />
+                      <NextImage src="/logo.svg" alt="Linqyard" width={16} height={16} className="h-4 w-4 object-contain" />
                     </Button>
                     
                     <Button 
@@ -1387,7 +1387,7 @@ export default function LinksPage() {
                 ) : !groupedData ? (
                   <motion.div variants={cardVariants} className="py-16 text-center">
                     <div className="h-16 w-16 rounded-full bg-muted/20 flex items-center justify-center mx-auto mb-6">
-                      <Globe className="h-8 w-8 text-muted-foreground" />
+                      <NextImage src="/logo.svg" alt="Linqyard" width={48} height={48} className="h-8 w-8 object-contain text-muted-foreground" />
                     </div>
                     <h3 className="text-lg font-semibold mb-2">No links yet</h3>
                     <p className="text-muted-foreground mb-6">Start by creating your first link or group</p>
