@@ -63,7 +63,7 @@ const cardVariants = {
   visible: { opacity: 1, scale: 1, transition: { duration: 0.25 } },
 };
 
-const PRIMARY_COLOR_FALLBACK = "#5c558b";
+const PRIMARY_COLOR_FALLBACK = "#e78a53";
 
 type UrlProtocol = "https://" | "http://";
 
@@ -367,9 +367,10 @@ export default function LinksPage() {
   const [isGeneratingQrCode, setIsGeneratingQrCode] = useState(false);
   const [isDownloadingQrCard, setIsDownloadingQrCard] = useState(false);
   const [qrCodeError, setQrCodeError] = useState<string | null>(null);
+  const [qrCodeColor, setQrCodeColor] = useState<string>(PRIMARY_COLOR_FALLBACK);
 
   const getPrimaryColorHex = () => {
-    return PRIMARY_COLOR_FALLBACK;
+    return qrCodeColor;
   };
 
   // delete confirmation modal
@@ -867,7 +868,7 @@ export default function LinksPage() {
     return () => {
       cancelled = true;
     };
-  }, [isShareModalOpen, user?.username]);
+  }, [isShareModalOpen, user?.username, qrCodeColor]);
 
   const copyToClipboard = async (platform: string) => {
     const url = getShareUrl(platform);
@@ -1843,6 +1844,28 @@ export default function LinksPage() {
                         QR code unavailable.
                       </p>
                     )}
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <label htmlFor="qr-color" className="text-sm font-medium">
+                        QR Color:
+                      </label>
+                      <Input
+                        id="qr-color"
+                        type="color"
+                        value={qrCodeColor}
+                        onChange={(e) => setQrCodeColor(e.target.value)}
+                        className="w-20 h-10 cursor-pointer"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setQrCodeColor(PRIMARY_COLOR_FALLBACK)}
+                        className="text-xs"
+                      >
+                        Reset
+                      </Button>
+                    </div>
                   </div>
                   <div className="flex flex-col gap-2">
                     <Button
