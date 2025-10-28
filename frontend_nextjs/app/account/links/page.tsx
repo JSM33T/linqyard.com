@@ -65,6 +65,13 @@ const cardVariants = {
 
 const PRIMARY_COLOR_FALLBACK = "#e78a53";
 
+const QR_COLOR_PRESETS = [
+  { color: "#e78a53", name: "Orange (Default)" },
+  { color: "#5f8787", name: "Purple" },
+  { color: "#764747", name: "Blue" },
+  { color: "#222222", name: "Black" },
+];
+
 type UrlProtocol = "https://" | "http://";
 
 const METADATA_FETCH_DEBOUNCE_MS = 700;
@@ -1805,7 +1812,7 @@ export default function LinksPage() {
                 Share your Linqyard profile across different platforms
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-5 max-h-[65vh] overflow-y-auto pr-1">
+            <div className="space-y-5 max-h-[65vh] overflow-y-auto scrollbar-hide">
               {/* QR share */}
               <div className="rounded-xl border bg-card/80 p-4">
                 <div className="space-y-4">
@@ -1845,26 +1852,50 @@ export default function LinksPage() {
                       </p>
                     )}
                   </div>
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <label htmlFor="qr-color" className="text-sm font-medium">
-                        QR Color:
-                      </label>
-                      <Input
-                        id="qr-color"
-                        type="color"
-                        value={qrCodeColor}
-                        onChange={(e) => setQrCodeColor(e.target.value)}
-                        className="w-20 h-10 cursor-pointer"
-                      />
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setQrCodeColor(PRIMARY_COLOR_FALLBACK)}
-                        className="text-xs"
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">QR Code Color</label>
+                    <div className="flex items-center gap-2 w-full">
+                      {/* Preset colors */}
+                      {QR_COLOR_PRESETS.map((preset) => (
+                        <button
+                          key={preset.color}
+                          onClick={() => setQrCodeColor(preset.color)}
+                          className={`h-12 flex-1 rounded-lg border-2 transition-all hover:scale-105 ${
+                            qrCodeColor === preset.color ? "border-primary ring-2 ring-primary/20" : "border-border"
+                          }`}
+                          style={{ backgroundColor: preset.color }}
+                          title={preset.name}
+                        />
+                      ))}
+                      {/* Custom color picker with dropper icon */}
+                      <label
+                        className={`h-12 flex-1 rounded-lg border-2 transition-all hover:scale-105 cursor-pointer flex items-center justify-center ${
+                          !QR_COLOR_PRESETS.some((p) => p.color === qrCodeColor) ? "border-primary ring-2 ring-primary/20" : "border-border"
+                        }`}
+                        style={{ backgroundColor: qrCodeColor }}
+                        title="Custom Color"
                       >
-                        Reset
-                      </Button>
+                        <svg
+                          xmlns="http://www.w3.org/2000/svg"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="h-5 w-5 text-white drop-shadow-md"
+                        >
+                          <path d="m12 15 8.385-8.415a2.1 2.1 0 0 0-2.97-2.97L9 12" />
+                          <path d="M12 15v6" />
+                          <path d="m8 8-4.9 4.9a2.1 2.1 0 0 0 0 2.97L9 21.85" />
+                        </svg>
+                        <Input
+                          type="color"
+                          value={qrCodeColor}
+                          onChange={(e) => setQrCodeColor(e.target.value)}
+                          className="sr-only"
+                        />
+                      </label>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
