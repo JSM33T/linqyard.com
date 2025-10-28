@@ -1,31 +1,17 @@
-using System;
-using System.Threading;
-using System.Threading.Tasks;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Exceptions;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
 
 namespace Linqyard.Api.Controllers;
 
-[Route("admin/coupons")]
+[Route($"admin/coupons")]
 [Authorize(Roles = "admin")]
-public sealed class AdminCouponsController : BaseApiController
+public sealed class AdminCouponsController(ITierService tierService, ILogger<AdminCouponsController> logger) : BaseApiController
 {
-    private readonly ITierService _tierService;
-    private readonly ILogger<AdminCouponsController> _logger;
-
-    public AdminCouponsController(ITierService tierService, ILogger<AdminCouponsController> logger)
-    {
-        _tierService = tierService;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Lists coupons for administrative management.
     /// </summary>
@@ -33,7 +19,7 @@ public sealed class AdminCouponsController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<CouponAdminResponse>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> ListCoupons(CancellationToken cancellationToken = default)
     {
-        var coupons = await _tierService.GetAdminCouponsAsync(cancellationToken);
+        var coupons = await tierService.GetAdminCouponsAsync(cancellationToken);
         return OkEnvelope(coupons);
     }
 
@@ -44,33 +30,29 @@ public sealed class AdminCouponsController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<CouponAdminResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> CreateCoupon(
-        [FromBody] CouponCreateRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> CreateCoupon( [FromBody] CouponCreateRequest? request, CancellationToken cancellationToken = default)
     {
         if (request is null)
-        {
             return BadRequestProblem("Request body is required.");
-        }
 
         try
         {
-            var coupon = await _tierService.CreateCouponAsync(request, cancellationToken);
+            var coupon = await tierService.CreateCouponAsync(request, cancellationToken);
             return OkEnvelope(coupon);
         }
         catch (TierNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Attempt to create coupon for missing tier {TierId}", request.TierId);
+            logger.LogWarning(ex, "Attempt to create coupon for missing tier {TierId}", request.TierId);
             return NotFoundProblem("Tier not found", ex.Message);
         }
         catch (TierServiceException ex)
         {
-            _logger.LogWarning(ex, "Coupon creation failed for code {Code}", request.Code);
+            logger.LogWarning(ex, "Coupon creation failed for code {Code}", request.Code);
             return BadRequestProblem("Unable to create coupon", ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error creating coupon {Code}", request.Code);
+            logger.LogError(ex, "Unhandled error creating coupon {Code}", request.Code);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -85,34 +67,29 @@ public sealed class AdminCouponsController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<CouponAdminResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> UpdateCoupon(
-        Guid couponId,
-        [FromBody] CouponUpdateRequest request,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> UpdateCoupon( Guid couponId, [FromBody] CouponUpdateRequest? request, CancellationToken cancellationToken = default)
     {
         if (request is null)
-        {
             return BadRequestProblem("Request body is required.");
-        }
 
         try
         {
-            var coupon = await _tierService.UpdateCouponAsync(couponId, request, cancellationToken);
+            var coupon = await tierService.UpdateCouponAsync(couponId, request, cancellationToken);
             return OkEnvelope(coupon);
         }
         catch (TierNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Attempt to associate coupon {CouponId} to missing tier {TierId}", couponId, request.TierId);
+            logger.LogWarning(ex, "Attempt to associate coupon {CouponId} to missing tier {TierId}", couponId, request.TierId);
             return NotFoundProblem("Tier not found", ex.Message);
         }
         catch (TierServiceException ex)
         {
-            _logger.LogWarning(ex, "Coupon update failed for {CouponId}", couponId);
+            logger.LogWarning(ex, "Coupon update failed for {CouponId}", couponId);
             return BadRequestProblem("Unable to update coupon", ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error updating coupon {CouponId}", couponId);
+            logger.LogError(ex, "Unhandled error updating coupon {CouponId}", couponId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -130,17 +107,17 @@ public sealed class AdminCouponsController : BaseApiController
     {
         try
         {
-            await _tierService.DeleteCouponAsync(couponId, cancellationToken);
+            await tierService.DeleteCouponAsync(couponId, cancellationToken);
             return NoContent();
         }
         catch (TierServiceException ex)
         {
-            _logger.LogWarning(ex, "Coupon delete failed for {CouponId}", couponId);
+            logger.LogWarning(ex, "Coupon delete failed for {CouponId}", couponId);
             return BadRequestProblem("Unable to delete coupon", ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error deleting coupon {CouponId}", couponId);
+            logger.LogError(ex, "Unhandled error deleting coupon {CouponId}", couponId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -158,17 +135,17 @@ public sealed class AdminCouponsController : BaseApiController
     {
         try
         {
-            await _tierService.DeleteCouponAsync(couponId, cancellationToken);
+            await tierService.DeleteCouponAsync(couponId, cancellationToken);
             return OkEnvelope(new { deleted = true });
         }
         catch (TierServiceException ex)
         {
-            _logger.LogWarning(ex, "Coupon delete failed for {CouponId}", couponId);
+            logger.LogWarning(ex, "Coupon delete failed for {CouponId}", couponId);
             return BadRequestProblem("Unable to delete coupon", ex.Message);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled error deleting coupon {CouponId}", couponId);
+            logger.LogError(ex, "Unhandled error deleting coupon {CouponId}", couponId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",

@@ -4,24 +4,15 @@ using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Linqyard.Api.Controllers;
 
-[Route("group")]
+[Route($"group")]
 [ApiController]
-public sealed class GroupsController : BaseApiController
+public sealed class GroupsController(ILogger<GroupsController> logger, IGroupService groupService)
+    : BaseApiController
 {
-    private readonly IGroupService _groupService;
-    private readonly ILogger<GroupsController> _logger;
-
-    public GroupsController(ILogger<GroupsController> logger, IGroupService groupService)
-    {
-        _logger = logger;
-        _groupService = groupService;
-    }
-
     [HttpGet("")]
     [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<LinkGroupResponse>>), StatusCodes.Status200OK)]
     public async Task<IActionResult> GetGroups(CancellationToken cancellationToken = default)
@@ -33,12 +24,12 @@ public sealed class GroupsController : BaseApiController
 
         try
         {
-            var groups = await _groupService.GetGroupsAsync(userId, cancellationToken);
+            var groups = await groupService.GetGroupsAsync(userId, cancellationToken);
             return OkEnvelope(groups);
         }
         catch (GroupServiceException ex)
         {
-            _logger.LogError(ex, "Error getting groups for user {UserId}", userId);
+            logger.LogError(ex, "Error getting groups for user {UserId}", userId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while retrieving groups");
         }
@@ -55,17 +46,17 @@ public sealed class GroupsController : BaseApiController
     {
         try
         {
-            var groups = await _groupService.GetGroupsByUsernameAsync(username, cancellationToken);
+            var groups = await groupService.GetGroupsByUsernameAsync(username, cancellationToken);
             return OkEnvelope(groups);
         }
         catch (GroupNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Groups not found for username {Username}", username);
+            logger.LogWarning(ex, "Groups not found for username {Username}", username);
             return NotFoundProblem(ex.Message);
         }
         catch (GroupServiceException ex)
         {
-            _logger.LogError(ex, "Error getting groups for username {Username}", username);
+            logger.LogError(ex, "Error getting groups for username {Username}", username);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while retrieving groups");
         }
@@ -75,7 +66,7 @@ public sealed class GroupsController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<LinkGroupResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Creating link group with CorrelationId {CorrelationId}", CorrelationId);
+        logger.LogInformation("Creating link group with CorrelationId {CorrelationId}", CorrelationId);
 
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -89,22 +80,22 @@ public sealed class GroupsController : BaseApiController
 
         try
         {
-            var result = await _groupService.CreateGroupAsync(userId, request, cancellationToken);
+            var result = await groupService.CreateGroupAsync(userId, request, cancellationToken);
             return OkEnvelope(result);
         }
         catch (GroupLimitExceededException ex)
         {
-            _logger.LogWarning(ex, "Group creation blocked due to tier limits for user {UserId}", userId);
+            logger.LogWarning(ex, "Group creation blocked due to tier limits for user {UserId}", userId);
             return BadRequestProblem(ex.Message);
         }
         catch (GroupValidationException ex)
         {
-            _logger.LogWarning(ex, "Group creation validation error for user {UserId}", userId);
+            logger.LogWarning(ex, "Group creation validation error for user {UserId}", userId);
             return BadRequestProblem(ex.Message);
         }
         catch (GroupServiceException ex)
         {
-            _logger.LogError(ex, "Error creating group for user {UserId}", userId);
+            logger.LogError(ex, "Error creating group for user {UserId}", userId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while creating the group");
         }
@@ -114,7 +105,7 @@ public sealed class GroupsController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<LinkGroupResponse>), StatusCodes.Status200OK)]
     public async Task<IActionResult> EditGroup(Guid id, [FromBody] UpdateGroupRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Editing group {GroupId} with CorrelationId {CorrelationId}", id, CorrelationId);
+        logger.LogInformation("Editing group {GroupId} with CorrelationId {CorrelationId}", id, CorrelationId);
 
         if (!Guid.TryParse(UserId, out var userId))
         {
@@ -123,7 +114,7 @@ public sealed class GroupsController : BaseApiController
 
         try
         {
-            var group = await _groupService.UpdateGroupAsync(
+            var group = await groupService.UpdateGroupAsync(
                 id,
                 userId,
                 User.IsInRole("admin"),
@@ -134,22 +125,22 @@ public sealed class GroupsController : BaseApiController
         }
         catch (GroupNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Group {GroupId} not found for edit", id);
+            logger.LogWarning(ex, "Group {GroupId} not found for edit", id);
             return NotFoundProblem(ex.Message);
         }
         catch (GroupForbiddenException ex)
         {
-            _logger.LogWarning(ex, "User {UserId} forbidden to edit group {GroupId}", userId, id);
+            logger.LogWarning(ex, "User {UserId} forbidden to edit group {GroupId}", userId, id);
             return ForbiddenProblem(ex.Message);
         }
         catch (GroupValidationException ex)
         {
-            _logger.LogWarning(ex, "Validation error while editing group {GroupId}", id);
+            logger.LogWarning(ex, "Validation error while editing group {GroupId}", id);
             return BadRequestProblem(ex.Message);
         }
         catch (GroupServiceException ex)
         {
-            _logger.LogError(ex, "Error editing group {GroupId}", id);
+            logger.LogError(ex, "Error editing group {GroupId}", id);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while editing the group");
         }
@@ -159,7 +150,7 @@ public sealed class GroupsController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     public async Task<IActionResult> DeleteGroup(Guid id, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Deleting group {GroupId} with CorrelationId {CorrelationId}", id, CorrelationId);
+        logger.LogInformation("Deleting group {GroupId} with CorrelationId {CorrelationId}", id, CorrelationId);
 
         if (!Guid.TryParse(UserId, out var userId))
         {
@@ -168,7 +159,7 @@ public sealed class GroupsController : BaseApiController
 
         try
         {
-            await _groupService.DeleteGroupAsync(
+            await groupService.DeleteGroupAsync(
                 id,
                 userId,
                 User.IsInRole("admin"),
@@ -178,17 +169,17 @@ public sealed class GroupsController : BaseApiController
         }
         catch (GroupNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Group {GroupId} not found for delete", id);
+            logger.LogWarning(ex, "Group {GroupId} not found for delete", id);
             return NotFoundProblem(ex.Message);
         }
         catch (GroupForbiddenException ex)
         {
-            _logger.LogWarning(ex, "User {UserId} forbidden to delete group {GroupId}", userId, id);
+            logger.LogWarning(ex, "User {UserId} forbidden to delete group {GroupId}", userId, id);
             return ForbiddenProblem(ex.Message);
         }
         catch (GroupServiceException ex)
         {
-            _logger.LogError(ex, "Error deleting group {GroupId}", id);
+            logger.LogError(ex, "Error deleting group {GroupId}", id);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while deleting the group");
         }
@@ -198,37 +189,33 @@ public sealed class GroupsController : BaseApiController
     /// Resequence groups for the current user. POST-only.
     /// Body: [{ "id": "...", "sequence": 0 }, ...]
     /// </summary>
-    [HttpPost("resequence")]
+    [HttpPost($"resequence")]
     [ProducesResponseType(typeof(ApiResponse<GroupResequenceResult>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> ResequenceGroups([FromBody] List<GroupResequenceItemRequest> items, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> ResequenceGroups([FromBody] List<GroupResequenceItemRequest>? items, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("GROUP RESEQUENCE START: {Count} items", items?.Count ?? 0);
+        logger.LogInformation("GROUP RESEQUENCE START: {Count} items", items?.Count ?? 0);
 
         if (!Guid.TryParse(UserId, out var userId))
-        {
             return UnauthorizedProblem("Invalid user context");
-        }
 
         if (items is null || items.Count == 0)
-        {
             return BadRequestProblem("No items provided");
-        }
 
         try
         {
-            var result = await _groupService.ResequenceGroupsAsync(userId, items, cancellationToken);
+            var result = await groupService.ResequenceGroupsAsync(userId, items, cancellationToken);
             return OkEnvelope(result);
         }
         catch (GroupValidationException ex)
         {
-            _logger.LogWarning(ex, "Validation error while resequencing groups for user {UserId}", userId);
+            logger.LogWarning(ex, "Validation error while resequencing groups for user {UserId}", userId);
             return BadRequestProblem(ex.Message);
         }
         catch (GroupServiceException ex)
         {
-            _logger.LogError(ex, "Error resequencing groups for user {UserId}", userId);
+            logger.LogError(ex, "Error resequencing groups for user {UserId}", userId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while resequencing groups");
         }

@@ -7,17 +7,9 @@ using System.Runtime.InteropServices;
 namespace Linqyard.Api.Controllers;
 
 [Route("")]
-public sealed class HomeController : BaseApiController
+public sealed class HomeController(ILogger<HomeController> logger, IConfiguration configuration)
+    : BaseApiController
 {
-    private readonly ILogger<HomeController> _logger;
-    private readonly IConfiguration _configuration;
-
-    public HomeController(ILogger<HomeController> logger, IConfiguration configuration)
-    {
-        _logger = logger;
-        _configuration = configuration;
-    }
-
     /// <summary>
     /// Root: prints machine, OS, and uptime details.
     /// </summary>
@@ -55,26 +47,26 @@ public sealed class HomeController : BaseApiController
     {
         try
         {
-            bool dbIsDown = false;
+            //const bool dbIsDown = false;
 
-            if (dbIsDown)
-            {
-                throw new InvalidOperationException("Database is not reachable");
-            }
+            // if (dbIsDown)
+            // {
+            //     throw new InvalidOperationException("Database is not reachable");
+            // }
 
-             _logger.LogError(null,
+            logger.LogError(null,
                 "Intentional error log 2 {Time} with CorrelationId {CorrelationId}",
                 DateTimeOffset.UtcNow,
                 CorrelationId);
 
-            var testVal = _configuration["PyUrl"];
+            var testVal = configuration["PyUrl"];
             var payload = new HealthStatus("Healthy and stuff 2", DateTimeOffset.UtcNow, testVal);
             return OkEnvelope(payload);
         }
         catch (Exception ex)
         {
             // Explicit error log
-            _logger.LogError(ex,
+            logger.LogError(ex,
                 "Health check failed at {Time} with CorrelationId {CorrelationId}",
                 DateTimeOffset.UtcNow,
                 CorrelationId);

@@ -1,45 +1,29 @@
-using System.Net;
 using Linqyard.Api.Services;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
-using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
 
 namespace Linqyard.Api.Controllers;
 
-public record ClickPayload(string? fp);
+public record ClickPayload(string? Fp);
 
-[Route("analytics")]
-public sealed class AnalyticsController : BaseApiController
+[Route($"analytics")]
+public sealed class AnalyticsController(
+    ILogger<AnalyticsController> logger,
+    IUserRepository userRepository,
+    IAnalyticsRepository analyticsRepository,
+    IClientIpResolver clientIpResolver,
+    IIpGeolocationService ipGeolocationService)
+    : BaseApiController
 {
-    private readonly ILogger<AnalyticsController> _logger;
-    private readonly IUserRepository _userRepository;
-    private readonly IAnalyticsRepository _analyticsRepository;
-    private readonly IClientIpResolver _clientIpResolver;
-    private readonly IIpGeolocationService _ipGeolocationService;
-
-    public AnalyticsController(
-        ILogger<AnalyticsController> logger,
-        IUserRepository userRepository,
-        IAnalyticsRepository analyticsRepository,
-        IClientIpResolver clientIpResolver,
-        IIpGeolocationService ipGeolocationService)
-    {
-        _logger = logger;
-        _userRepository = userRepository;
-        _analyticsRepository = analyticsRepository;
-        _clientIpResolver = clientIpResolver;
-        _ipGeolocationService = ipGeolocationService;
-    }
-
     /// <summary>
     /// Record a click for a link. This endpoint is intentionally permissive and does not require authentication.
     /// If the request is authenticated, the UserId will be set on the AuditLog so users can later query their own analytics.
     /// </summary>
-    [HttpPost("/link/{linkId:guid}/click")]
+    [HttpPost($"/link/{{linkId:guid}}/click")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> RecordLinkClick([FromRoute] Guid linkId, [FromBody] ClickPayload? body, CancellationToken cancellationToken = default)
@@ -47,18 +31,12 @@ public sealed class AnalyticsController : BaseApiController
         try
         {
             Guid? userId = null;
-            if (IsAuthenticated && Guid.TryParse(UserId, out var parsedUserId))
-            {
-                userId = parsedUserId;
-            }
+            if (IsAuthenticated && Guid.TryParse(UserId, out var parsedUserId)) userId = parsedUserId;
 
             string? userAgent = null;
-            if (Request.Headers.TryGetValue("User-Agent", out var ua) && !StringValues.IsNullOrEmpty(ua))
-            {
-                userAgent = ua.ToString();
-            }
+            if (Request.Headers.TryGetValue("User-Agent", out var ua) && !StringValues.IsNullOrEmpty(ua)) userAgent = ua.ToString();
 
-            IPAddress? ipAddress = _clientIpResolver.GetClientIp(HttpContext);
+            var ipAddress = clientIpResolver.GetClientIp(HttpContext);
 
             double? latitude = null;
             double? longitude = null;
@@ -66,7 +44,7 @@ public sealed class AnalyticsController : BaseApiController
 
             if (ipAddress is not null)
             {
-                var geo = await _ipGeolocationService.ResolveAsync(ipAddress, cancellationToken);
+                var geo = await ipGeolocationService.ResolveAsync(ipAddress, cancellationToken);
                 if (geo is not null)
                 {
                     latitude = geo.Latitude;
@@ -79,7 +57,7 @@ public sealed class AnalyticsController : BaseApiController
                 Id: Guid.NewGuid(),
                 LinkId: linkId,
                 UserId: userId,
-                Fingerprint: body?.fp,
+                Fingerprint: body?.Fp,
                 Latitude: latitude,
                 Longitude: longitude,
                 Accuracy: accuracy,
@@ -87,13 +65,13 @@ public sealed class AnalyticsController : BaseApiController
                 IpAddress: ipAddress,
                 At: DateTimeOffset.UtcNow);
 
-            await _analyticsRepository.RecordLinkClickAsync(request, cancellationToken);
+            await analyticsRepository.RecordLinkClickAsync(request, cancellationToken);
 
             return OkEnvelope(new { message = "Recorded" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error recording link click");
+            logger.LogError(ex, "Error recording link click");
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "Could not record click");
         }
     }
@@ -109,7 +87,7 @@ public sealed class AnalyticsController : BaseApiController
     {
         if (!IsAuthenticated || !Guid.TryParse(UserId, out var uid)) return UnauthorizedProblem();
 
-        var results = await _analyticsRepository.GetLinkClickCountsAsync(uid, cancellationToken);
+        var results = await analyticsRepository.GetLinkClickCountsAsync(uid, cancellationToken);
         return OkEnvelope(results);
     }
 
@@ -123,10 +101,9 @@ public sealed class AnalyticsController : BaseApiController
     {
         if (!IsAuthenticated || !Guid.TryParse(UserId, out var uid)) return UnauthorizedProblem();
 
-        var events = await _analyticsRepository.GetLinkEventsForUserAsync(uid, linkId, 100, cancellationToken);
-        if (events is null) return ForbiddenProblem("You do not own this link");
-
-        return OkEnvelope(events);
+        var events = await analyticsRepository.GetLinkEventsForUserAsync(uid, linkId, 100, cancellationToken);
+        
+        return events is null ? ForbiddenProblem("You do not own this link") : OkEnvelope(events);
     }
 
     /// <summary>
@@ -148,10 +125,10 @@ public sealed class AnalyticsController : BaseApiController
         var start = new DateTimeOffset(startDateUtc, TimeSpan.Zero);
         var end = new DateTimeOffset(endDateUtc, TimeSpan.Zero);
 
-        var totalClicks = await _analyticsRepository.GetClickCountAsync(uid, start, end, cancellationToken);
+        var totalClicks = await analyticsRepository.GetClickCountAsync(uid, start, end, cancellationToken);
 
         var days = (toVal.Date - fromVal.Date).TotalDays + 1;
-        var averagePerDay = days > 0 ? (double)totalClicks / days : 0.0;
+        var averagePerDay = days > 0 ? totalClicks / days : 0.0;
 
         var result = new
         {
@@ -175,7 +152,7 @@ public sealed class AnalyticsController : BaseApiController
     {
         try
         {
-            var userCount = await _userRepository.GetUserCountAsync(cancellationToken);
+            var userCount = await userRepository.GetUserCountAsync(cancellationToken);
 
             var result = new
             {
@@ -187,7 +164,7 @@ public sealed class AnalyticsController : BaseApiController
         }
         catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Configuration error while retrieving user count");
+            logger.LogError(ex, "Configuration error while retrieving user count");
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Configuration Error",
@@ -195,7 +172,7 @@ public sealed class AnalyticsController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error retrieving user count");
+            logger.LogError(ex, "Error retrieving user count");
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -214,7 +191,7 @@ public sealed class AnalyticsController : BaseApiController
     {
         if (!IsAuthenticated || !Guid.TryParse(UserId, out var uid)) return UnauthorizedProblem();
 
-        var userAgents = await _analyticsRepository.GetUserAgentsForUserAsync(uid, cancellationToken);
+        var userAgents = await analyticsRepository.GetUserAgentsForUserAsync(uid, cancellationToken);
 
         int mobile = 0, tablet = 0, desktop = 0, other = 0;
 

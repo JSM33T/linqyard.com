@@ -1,6 +1,5 @@
 using Linqyard.Contracts;
 using Linqyard.Contracts.Requests;
-using Microsoft.AspNetCore.Http;
 using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,25 +7,17 @@ using Linqyard.Contracts.Interfaces;
 
 namespace Linqyard.Api.Controllers;
 
-[Route("profile")]
+[Route($"profile")]
 [Authorize]
-public sealed class ProfileController : BaseApiController
+public sealed class ProfileController(
+    ILogger<ProfileController> logger,
+    IProfileService profileService)
+    : BaseApiController
 {
-    private readonly ILogger<ProfileController> _logger;
-    private readonly IProfileService _profileService;
-
-    public ProfileController(
-        ILogger<ProfileController> logger,
-        IProfileService profileService)
-    {
-        _logger = logger;
-        _profileService = profileService;
-    }
-
     /// <summary>
     /// Get current user's profile details
     /// </summary>
-    [HttpGet("")]
+    [HttpGet($"")]
     [ProducesResponseType(typeof(ApiResponse<ProfileDetailsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -35,22 +26,19 @@ public sealed class ProfileController : BaseApiController
         try
         {
             if (!Guid.TryParse(UserId, out var userIdGuid))
-            {
                 return UnauthorizedProblem("Invalid user context");
-            }
 
-            var profile = await _profileService.GetProfileDetailsAsync(userIdGuid, cancellationToken);
-            if (profile == null)
-            {
-                _logger.LogWarning("User {UserId} not found", UserId);
-                return NotFoundProblem("User not found");
-            }
+            var profile = await profileService.GetProfileDetailsAsync(userIdGuid, cancellationToken);
+            
+            if (profile != null) return OkEnvelope(profile);
+            
+            logger.LogWarning("User {UserId} not found", UserId);
+            return NotFoundProblem("User not found");
 
-            return OkEnvelope(profile);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting profile details for user {UserId}", UserId);
+            logger.LogError(ex, "Error getting profile details for user {UserId}", UserId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -61,32 +49,30 @@ public sealed class ProfileController : BaseApiController
     /// <summary>
     /// Update user's profile information (excluding password)
     /// </summary>
-    [HttpPost("")]
+    [HttpPost($"")]
     [ProducesResponseType(typeof(ApiResponse<ProfileUpdateResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Updating profile for user {UserId} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Updating profile for user {UserId} with CorrelationId {CorrelationId}",
             UserId, CorrelationId);
 
         try
         {
             if (!Guid.TryParse(UserId, out var userIdGuid))
-            {
                 return UnauthorizedProblem("Invalid user context");
-            }
 
-            var result = await _profileService.UpdateProfileAsync(userIdGuid, request, cancellationToken);
+            var result = await profileService.UpdateProfileAsync(userIdGuid, request, cancellationToken);
 
             switch (result.Status)
             {
                 case ProfileUpdateStatus.Success:
-                    _logger.LogInformation("Profile updated successfully for user {UserId}", UserId);
+                    logger.LogInformation("Profile updated successfully for user {UserId}", UserId);
                     return OkEnvelope(result.Response!);
                 case ProfileUpdateStatus.UserNotFound:
-                    _logger.LogWarning("User {UserId} not found", UserId);
+                    logger.LogWarning("User {UserId} not found", UserId);
                     return NotFoundProblem("User not found");
                 case ProfileUpdateStatus.UsernameTaken:
                 case ProfileUpdateStatus.InvalidUsername:
@@ -102,7 +88,7 @@ public sealed class ProfileController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error updating profile for user {UserId}", UserId);
+            logger.LogError(ex, "Error updating profile for user {UserId}", UserId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -113,25 +99,23 @@ public sealed class ProfileController : BaseApiController
     /// <summary>
     /// Change user's password
     /// </summary>
-    [HttpPost("password")]
+    [HttpPost($"password")]
     [ProducesResponseType(typeof(ApiResponse<PasswordChangeResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Password change attempt for user {UserId} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Password change attempt for user {UserId} with CorrelationId {CorrelationId}",
             UserId, CorrelationId);
 
         try
         {
             if (!Guid.TryParse(UserId, out var userIdGuid))
-            {
                 return UnauthorizedProblem("Invalid user context");
-            }
 
             var sessionContext = BuildSessionRequest();
-            var result = await _profileService.ChangePasswordAsync(
+            var result = await profileService.ChangePasswordAsync(
                 userIdGuid,
                 request,
                 sessionContext,
@@ -152,7 +136,7 @@ public sealed class ProfileController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error changing password for user {UserId}", UserId);
+            logger.LogError(ex, "Error changing password for user {UserId}", UserId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -163,28 +147,26 @@ public sealed class ProfileController : BaseApiController
     /// <summary>
     /// Get all active sessions for the current user
     /// </summary>
-    [HttpGet("sessions")]
+    [HttpGet($"sessions")]
     [ProducesResponseType(typeof(ApiResponse<SessionsResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSessions(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Getting sessions for user {UserId} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Getting sessions for user {UserId} with CorrelationId {CorrelationId}",
             UserId, CorrelationId);
 
         try
         {
             if (!Guid.TryParse(UserId, out var userIdGuid))
-            {
                 return UnauthorizedProblem("Invalid user context");
-            }
 
             var sessionContext = BuildSessionRequest();
-            var sessions = await _profileService.GetSessionsAsync(userIdGuid, sessionContext, cancellationToken);
+            var sessions = await profileService.GetSessionsAsync(userIdGuid, sessionContext, cancellationToken);
             return OkEnvelope(sessions);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting sessions for user {UserId}", UserId);
+            logger.LogError(ex, "Error getting sessions for user {UserId}", UserId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -202,17 +184,15 @@ public sealed class ProfileController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> LogoutFromSession(Guid sessionId, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Logout from session {SessionId} for user {UserId} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Logout from session {SessionId} for user {UserId} with CorrelationId {CorrelationId}",
             sessionId, UserId, CorrelationId);
 
         try
         {
             if (!Guid.TryParse(UserId, out var userIdGuid))
-            {
                 return UnauthorizedProblem("Invalid user context");
-            }
 
-            var result = await _profileService.LogoutFromSessionAsync(userIdGuid, sessionId, cancellationToken);
+            var result = await profileService.LogoutFromSessionAsync(userIdGuid, sessionId, cancellationToken);
 
             return result.Status switch
             {
@@ -227,7 +207,7 @@ public sealed class ProfileController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error logging out session {SessionId} for user {UserId}", sessionId, UserId);
+            logger.LogError(ex, "Error logging out session {SessionId} for user {UserId}", sessionId, UserId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -243,25 +223,23 @@ public sealed class ProfileController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> LogoutFromAllOtherSessions(CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Logout from all other sessions for user {UserId} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Logout from all other sessions for user {UserId} with CorrelationId {CorrelationId}",
             UserId, CorrelationId);
 
         try
         {
             if (!Guid.TryParse(UserId, out var userIdGuid))
-            {
                 return UnauthorizedProblem("Invalid user context");
-            }
 
             var sessionContext = BuildSessionRequest();
-            var response = await _profileService.LogoutFromAllOtherSessionsAsync(userIdGuid, sessionContext, cancellationToken);
+            var response = await profileService.LogoutFromAllOtherSessionsAsync(userIdGuid, sessionContext, cancellationToken);
 
-            _logger.LogInformation("Logged out from other sessions for user {UserId}", UserId);
+            logger.LogInformation("Logged out from other sessions for user {UserId}", UserId);
             return OkEnvelope(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error logging out from all other sessions for user {UserId}", UserId);
+            logger.LogError(ex, "Error logging out from all other sessions for user {UserId}", UserId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -280,32 +258,30 @@ public sealed class ProfileController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteAccount([FromBody] DeleteAccountRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Account deletion attempt for user {UserId} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Account deletion attempt for user {UserId} with CorrelationId {CorrelationId}",
             UserId, CorrelationId);
 
         try
         {
             if (!Guid.TryParse(UserId, out var userIdGuid))
-            {
                 return UnauthorizedProblem("Invalid user context");
-            }
 
-            var result = await _profileService.DeleteAccountAsync(userIdGuid, request, cancellationToken);
+            var result = await profileService.DeleteAccountAsync(userIdGuid, request, cancellationToken);
 
             switch (result.Status)
             {
                 case AccountDeleteServiceStatus.InvalidConfirmation:
                     return BadRequestProblem(result.ErrorMessage ?? "Invalid confirmation text");
                 case AccountDeleteServiceStatus.UserNotFound:
-                    _logger.LogWarning("User {UserId} not found for deletion", UserId);
+                    logger.LogWarning("User {UserId} not found for deletion", UserId);
                     return NotFoundProblem("User not found");
                 case AccountDeleteServiceStatus.InvalidPassword:
-                    _logger.LogWarning("Invalid password provided for account deletion by user {UserId}", UserId);
+                    logger.LogWarning("Invalid password provided for account deletion by user {UserId}", UserId);
                     return BadRequestProblem(result.ErrorMessage ?? "Password is incorrect");
                 case AccountDeleteServiceStatus.Success:
                     break;
                 default:
-                    _logger.LogError("Unexpected account delete status {Status} for user {UserId}", result.Status, UserId);
+                    logger.LogError("Unexpected account delete status {Status} for user {UserId}", result.Status, UserId);
                     return Problem(
                         statusCode: StatusCodes.Status500InternalServerError,
                         title: "Internal Server Error",
@@ -320,12 +296,12 @@ public sealed class ProfileController : BaseApiController
                 Path = "/auth"
             });
 
-            _logger.LogInformation("Account deleted successfully for user {UserId}", UserId);
+            logger.LogInformation("Account deleted successfully for user {UserId}", UserId);
             return OkEnvelope(result.Response!);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error deleting account for user {UserId}", UserId);
+            logger.LogError(ex, "Error deleting account for user {UserId}", UserId);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",

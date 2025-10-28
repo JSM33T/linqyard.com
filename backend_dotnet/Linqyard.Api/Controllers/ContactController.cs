@@ -3,7 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace Linqyard.Api.Controllers
 {
-    [Route("api/[controller]")]
+    [Route($"api/contact")]
     [ApiController]
     public class ContactController : ControllerBase
     {

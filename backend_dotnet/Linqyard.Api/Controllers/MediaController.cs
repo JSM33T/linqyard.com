@@ -5,32 +5,18 @@ using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Infra;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.IO;
-using System.Threading;
-using System.Threading.Tasks;
 
 namespace Linqyard.Api.Controllers;
 
 [Route("media")]
 [Authorize]
-public sealed class MediaController : BaseApiController
+public sealed class MediaController(
+    IAzureBlobStorageService blobStorageService,
+    IProfileRepository profileRepository,
+    ILogger<MediaController> logger)
+    : BaseApiController
 {
-    private readonly IAzureBlobStorageService _blobStorageService;
-    private readonly IProfileRepository _profileRepository;
-    private readonly ILogger<MediaController> _logger;
-
-    public MediaController(
-        IAzureBlobStorageService blobStorageService,
-        IProfileRepository profileRepository,
-        ILogger<MediaController> logger)
-    {
-        _blobStorageService = blobStorageService;
-        _profileRepository = profileRepository;
-        _logger = logger;
-    }
-
     /// <summary>
     /// Uploads an image to Cloudinary and stores a cached copy locally.
     /// </summary>
@@ -52,7 +38,7 @@ public sealed class MediaController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Image upload failed");
+            logger.LogError(ex, "Image upload failed");
             return Problem(
                 StatusCodes.Status500InternalServerError,
                 "Image upload failed",
@@ -86,7 +72,7 @@ public sealed class MediaController : BaseApiController
             var uploadResult = await UploadFileAsync(file, $"{userId:N}-avatar", cancellationToken);
 
             var updateRequest = new UpdateProfileRequest(AvatarUrl: uploadResult.Url);
-            var updateResponse = await _profileRepository.UpdateProfileAsync(userId, updateRequest, cancellationToken);
+            var updateResponse = await profileRepository.UpdateProfileAsync(userId, updateRequest, cancellationToken);
 
             if (updateResponse is null)
             {
@@ -97,7 +83,7 @@ public sealed class MediaController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Avatar upload failed for user {UserId}", UserId);
+            logger.LogError(ex, "Avatar upload failed for user {UserId}", UserId);
             return Problem(
                 StatusCodes.Status500InternalServerError,
                 "Avatar upload failed",
@@ -129,7 +115,7 @@ public sealed class MediaController : BaseApiController
             var uploadResult = await UploadFileAsync(file, $"{userId:N}-cover", cancellationToken);
 
             var updateRequest = new UpdateProfileRequest(CoverUrl: uploadResult.Url);
-            var updateResponse = await _profileRepository.UpdateProfileAsync(userId, updateRequest, cancellationToken);
+            var updateResponse = await profileRepository.UpdateProfileAsync(userId, updateRequest, cancellationToken);
 
             if (updateResponse is null)
             {
@@ -140,7 +126,7 @@ public sealed class MediaController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Cover upload failed for user {UserId}", UserId);
+            logger.LogError(ex, "Cover upload failed for user {UserId}", UserId);
             return Problem(
                 StatusCodes.Status500InternalServerError,
                 "Cover upload failed",
@@ -159,7 +145,7 @@ public sealed class MediaController : BaseApiController
     private async Task<BlobUploadResult> UploadFileAsync(IFormFile file, string? blobName, CancellationToken cancellationToken)
     {
         await using var stream = file.OpenReadStream();
-        return await _blobStorageService.UploadImageAsync(
+        return await blobStorageService.UploadImageAsync(
             stream,
             file.FileName,
             string.IsNullOrWhiteSpace(file.ContentType) ? "application/octet-stream" : file.ContentType,
@@ -208,7 +194,7 @@ public sealed class MediaController : BaseApiController
             return BadRequestProblem("Invalid image identifier", "The blob name provided is empty.");
         }
 
-        var cachedImage = await _blobStorageService.GetImageAsync(blobName, cancellationToken);
+        var cachedImage = await blobStorageService.GetImageAsync(blobName, cancellationToken);
         if (cachedImage is null)
         {
             return NotFoundProblem("Image not found", $"No image found for blob name '{blobName}'.");
@@ -230,7 +216,7 @@ public sealed class MediaController : BaseApiController
         string mediaDescription,
         CancellationToken cancellationToken)
     {
-        var profile = await _profileRepository.GetProfileDetailsAsync(userId, cancellationToken);
+        var profile = await profileRepository.GetProfileDetailsAsync(userId, cancellationToken);
         if (profile is null)
         {
             return NotFoundProblem("User not found", $"No profile found for user '{userId}'.");
@@ -242,13 +228,12 @@ public sealed class MediaController : BaseApiController
             return NotFoundProblem($"{mediaTitle} not found", $"The user '{userId}' has not set a {mediaDescription}.");
         }
 
-        var cachedImage = await ResolveCachedImageAsync(mediaReference!, cancellationToken);
+        var cachedImage = await ResolveCachedImageAsync(mediaReference, cancellationToken);
+        
         if (cachedImage is null)
-        {
             return NotFoundProblem(
                 $"{mediaTitle} not found",
                 $"No cached {mediaDescription} available for user '{userId}'.");
-        }
 
         return StreamCachedImage(
             resourceType: $"{mediaDescription}",
@@ -263,14 +248,14 @@ public sealed class MediaController : BaseApiController
     {
         if (Uri.TryCreate(mediaReference, UriKind.Absolute, out _))
         {
-            var cachedFromUrl = await _blobStorageService.GetImageByUrlAsync(mediaReference, cancellationToken);
+            var cachedFromUrl = await blobStorageService.GetImageByUrlAsync(mediaReference, cancellationToken);
             if (cachedFromUrl is not null)
             {
                 return cachedFromUrl;
             }
         }
 
-        return await _blobStorageService.GetImageAsync(mediaReference, cancellationToken);
+        return await blobStorageService.GetImageAsync(mediaReference, cancellationToken);
     }
 
     private IActionResult StreamCachedImage(
@@ -295,12 +280,12 @@ public sealed class MediaController : BaseApiController
         }
         catch (FileNotFoundException)
         {
-            _logger.LogWarning("Cached file missing for {ResourceType} identifier {CacheIdentifier}", resourceType, cacheIdentifier);
+            logger.LogWarning("Cached file missing for {ResourceType} identifier {CacheIdentifier}", resourceType, cacheIdentifier);
             return NotFoundProblem(notFoundTitle, notFoundDetail);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to read cached {ResourceType} for identifier {CacheIdentifier}", resourceType, cacheIdentifier);
+            logger.LogError(ex, "Failed to read cached {ResourceType} for identifier {CacheIdentifier}", resourceType, cacheIdentifier);
             return Problem(
                 StatusCodes.Status500InternalServerError,
                 errorTitle,

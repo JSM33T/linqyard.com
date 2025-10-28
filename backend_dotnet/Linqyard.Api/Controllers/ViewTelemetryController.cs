@@ -1,6 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
-using System.Net;
 using Linqyard.Api.Services;
 using Linqyard.Contracts;
 using Linqyard.Contracts.Interfaces;
@@ -11,36 +10,22 @@ using Microsoft.Extensions.Primitives;
 namespace Linqyard.Api.Controllers;
 
 public record ProfileViewPayload(
-    string? fp,
-    string? source,
-    string? referrer,
-    UtmParametersDto? utm,
-    string? sessionId
+    string? Fp,
+    string? Source,
+    string? Referrer,
+    UtmParametersDto? Utm,
+    string? SessionId
 );
 
-[Route("telemetry")]
-public sealed class ViewTelemetryController : BaseApiController
+[Route($"telemetry")]
+public sealed class ViewTelemetryController(
+    ILogger<ViewTelemetryController> logger,
+    IViewTelemetryRepository viewTelemetryRepository,
+    IUserRepository userRepository,
+    IClientIpResolver clientIpResolver,
+    IIpGeolocationService ipGeolocationService)
+    : BaseApiController
 {
-    private readonly ILogger<ViewTelemetryController> _logger;
-    private readonly IViewTelemetryRepository _viewTelemetryRepository;
-    private readonly IUserRepository _userRepository;
-    private readonly IClientIpResolver _clientIpResolver;
-    private readonly IIpGeolocationService _ipGeolocationService;
-
-    public ViewTelemetryController(
-        ILogger<ViewTelemetryController> logger,
-        IViewTelemetryRepository viewTelemetryRepository,
-        IUserRepository userRepository,
-        IClientIpResolver clientIpResolver,
-        IIpGeolocationService ipGeolocationService)
-    {
-        _logger = logger;
-        _viewTelemetryRepository = viewTelemetryRepository;
-        _userRepository = userRepository;
-        _clientIpResolver = clientIpResolver;
-        _ipGeolocationService = ipGeolocationService;
-    }
-
     /// <summary>
     /// Record a profile view. This endpoint is intentionally permissive and does not require authentication.
     /// </summary>
@@ -48,32 +33,21 @@ public sealed class ViewTelemetryController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
-    public async Task<IActionResult> RecordProfileView(
-        [FromRoute] string username,
-        [FromBody] ProfileViewPayload? body,
-        CancellationToken cancellationToken = default)
+    public async Task<IActionResult> RecordProfileView( [FromRoute] string username, [FromBody] ProfileViewPayload? body, CancellationToken cancellationToken = default)
     {
+        var source = body?.Source;
         try
         {
             // Get the profile user by username
-            var profileUser = await _userRepository.GetUserByUsernameAsync(username, cancellationToken);
+            var profileUser = await userRepository.GetUserByUsernameAsync(username, cancellationToken);
             if (profileUser == null)
-            {
                 return Problem(StatusCodes.Status404NotFound, "Not Found", "Profile not found");
-            }
 
             Guid? viewerUserId = null;
-            if (IsAuthenticated && Guid.TryParse(UserId, out var parsedUserId))
-            {
-                viewerUserId = parsedUserId;
-            }
+            if (IsAuthenticated && Guid.TryParse(UserId, out var parsedUserId)) viewerUserId = parsedUserId;
 
             // Parse source from referrer if not provided
-            string? source = body?.source;
-            if (string.IsNullOrEmpty(source) && !string.IsNullOrEmpty(body?.referrer))
-            {
-                source = ParseSourceFromReferrer(body.referrer);
-            }
+            if (string.IsNullOrEmpty(source) && !string.IsNullOrEmpty(body?.Referrer)) source = ParseSourceFromReferrer(body.Referrer);
 
             // Get user agent and parse device info
             string? userAgent = null;
@@ -81,14 +55,11 @@ public sealed class ViewTelemetryController : BaseApiController
             string? os = null;
             string? browser = null;
 
-            if (Request.Headers.TryGetValue("User-Agent", out var ua) && !StringValues.IsNullOrEmpty(ua))
-            {
-                userAgent = ua.ToString();
-                (deviceType, os, browser) = ParseUserAgent(userAgent);
-            }
+            if (Request.Headers.TryGetValue("User-Agent", out var ua) && !StringValues.IsNullOrEmpty(ua)) 
+                (deviceType, os, browser) = ParseUserAgent(ua.ToString());
 
             // Get IP address
-            IPAddress? ipAddress = _clientIpResolver.GetClientIp(HttpContext);
+            var ipAddress = clientIpResolver.GetClientIp(HttpContext);
 
             // Get location data from IP
             double? latitude = null;
@@ -99,7 +70,7 @@ public sealed class ViewTelemetryController : BaseApiController
 
             if (ipAddress is not null)
             {
-                var geo = await _ipGeolocationService.ResolveAsync(ipAddress, cancellationToken);
+                var geo = await ipGeolocationService.ResolveAsync(ipAddress, cancellationToken);
                 if (geo is not null)
                 {
                     latitude = geo.Latitude;
@@ -114,10 +85,10 @@ public sealed class ViewTelemetryController : BaseApiController
                 Id: Guid.NewGuid(),
                 ProfileUserId: profileUser.Id,
                 ViewerUserId: viewerUserId,
-                Fingerprint: body?.fp,
+                Fingerprint: body?.Fp,
                 Source: source,
-                Referrer: body?.referrer,
-                UtmParameters: body?.utm,
+                Referrer: body?.Referrer,
+                UtmParameters: body?.Utm,
                 Latitude: latitude,
                 Longitude: longitude,
                 Accuracy: accuracy,
@@ -128,17 +99,17 @@ public sealed class ViewTelemetryController : BaseApiController
                 Os: os,
                 Browser: browser,
                 IpAddress: ipAddress,
-                SessionId: body?.sessionId,
+                SessionId: body?.SessionId,
                 ViewedAt: DateTimeOffset.UtcNow
             );
 
-            await _viewTelemetryRepository.RecordProfileViewAsync(request, cancellationToken);
+            await viewTelemetryRepository.RecordProfileViewAsync(request, cancellationToken);
 
             return OkEnvelope(new { message = "View recorded" });
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error recording profile view for username {Username}", username);
+            logger.LogError(ex, "Error recording profile view for username {Username}", username);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "Could not record view");
         }
     }
@@ -174,12 +145,12 @@ public sealed class ViewTelemetryController : BaseApiController
                 Math.Min(take, 100) // Cap at 100
             );
 
-            var result = await _viewTelemetryRepository.GetProfileViewsAsync(request, cancellationToken);
+            var result = await viewTelemetryRepository.GetProfileViewsAsync(request, cancellationToken);
             return OkEnvelope(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting profile views");
+            logger.LogError(ex, "Error getting profile views");
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "Could not retrieve views");
         }
     }
@@ -203,12 +174,12 @@ public sealed class ViewTelemetryController : BaseApiController
                 return Problem(StatusCodes.Status401Unauthorized, "Unauthorized", "Invalid user ID");
             }
 
-            var result = await _viewTelemetryRepository.GetProfileViewStatsAsync(userId, startDate, endDate, cancellationToken);
+            var result = await viewTelemetryRepository.GetProfileViewStatsAsync(userId, startDate, endDate, cancellationToken);
             return OkEnvelope(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting profile view stats");
+            logger.LogError(ex, "Error getting profile view stats");
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "Could not retrieve stats");
         }
     }
@@ -217,7 +188,7 @@ public sealed class ViewTelemetryController : BaseApiController
     /// Get source breakdown for profile views
     /// </summary>
     [Authorize]
-    [HttpGet("source-breakdown")]
+    [HttpGet($"source-breakdown")]
     [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<SourceBreakdownResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetSourceBreakdown(
@@ -232,12 +203,12 @@ public sealed class ViewTelemetryController : BaseApiController
                 return Problem(StatusCodes.Status401Unauthorized, "Unauthorized", "Invalid user ID");
             }
 
-            var result = await _viewTelemetryRepository.GetSourceBreakdownAsync(userId, startDate, endDate, cancellationToken);
+            var result = await viewTelemetryRepository.GetSourceBreakdownAsync(userId, startDate, endDate, cancellationToken);
             return OkEnvelope(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting source breakdown");
+            logger.LogError(ex, "Error getting source breakdown");
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "Could not retrieve breakdown");
         }
     }
@@ -246,7 +217,7 @@ public sealed class ViewTelemetryController : BaseApiController
     /// Get geographic distribution of profile views
     /// </summary>
     [Authorize]
-    [HttpGet("geographic-distribution")]
+    [HttpGet($"geographic-distribution")]
     [ProducesResponseType(typeof(ApiResponse<IReadOnlyList<GeographicDistributionResponse>>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetGeographicDistribution(
@@ -261,12 +232,12 @@ public sealed class ViewTelemetryController : BaseApiController
                 return Problem(StatusCodes.Status401Unauthorized, "Unauthorized", "Invalid user ID");
             }
 
-            var result = await _viewTelemetryRepository.GetGeographicDistributionAsync(userId, startDate, endDate, cancellationToken);
+            var result = await viewTelemetryRepository.GetGeographicDistributionAsync(userId, startDate, endDate, cancellationToken);
             return OkEnvelope(result);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error getting geographic distribution");
+            logger.LogError(ex, "Error getting geographic distribution");
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "Could not retrieve distribution");
         }
     }
@@ -318,7 +289,7 @@ public sealed class ViewTelemetryController : BaseApiController
         var ua = userAgent.ToLowerInvariant();
 
         // Device type
-        string? deviceType = null;
+        string? deviceType;
         if (ua.Contains("mobile") || ua.Contains("android") || ua.Contains("iphone"))
             deviceType = "mobile";
         else if (ua.Contains("tablet") || ua.Contains("ipad"))

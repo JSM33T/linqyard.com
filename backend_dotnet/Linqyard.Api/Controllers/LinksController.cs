@@ -4,29 +4,19 @@ using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Linqyard.Api.Controllers;
 
-[Route("link")]
+[Route($"link")]
 [ApiController]
 [Authorize]
-public sealed class LinksController : BaseApiController
+public sealed class LinksController(ILogger<LinksController> logger, ILinkService linkService) : BaseApiController
 {
-    private readonly ILinkService _linkService;
-    private readonly ILogger<LinksController> _logger;
-
-    public LinksController(ILogger<LinksController> logger, ILinkService linkService)
-    {
-        _logger = logger;
-        _linkService = linkService;
-    }
-
     /// <summary>
     /// Get links grouped by their group for the authenticated user.
     /// </summary>
-    [HttpGet("")]
+    [HttpGet($"")]
     [ProducesResponseType(typeof(ApiResponse<LinksGroupedResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> GetLinks(CancellationToken cancellationToken = default)
@@ -38,12 +28,12 @@ public sealed class LinksController : BaseApiController
 
         try
         {
-            var response = await _linkService.GetLinksAsync(userId, cancellationToken);
+            var response = await linkService.GetLinksAsync(userId, cancellationToken);
             return OkEnvelope(response);
         }
         catch (LinkServiceException ex)
         {
-            _logger.LogError(ex, "Error getting links for user {UserId}", userId);
+            logger.LogError(ex, "Error getting links for user {UserId}", userId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while retrieving links");
         }
@@ -52,7 +42,7 @@ public sealed class LinksController : BaseApiController
     /// <summary>
     /// Get links grouped by group for a public username (anonymous access).
     /// </summary>
-    [HttpGet("user/{username}")]
+    [HttpGet($"user/{{username}}")]
     [AllowAnonymous]
     [ProducesResponseType(typeof(ApiResponse<LinksGroupedResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
@@ -60,17 +50,17 @@ public sealed class LinksController : BaseApiController
     {
         try
         {
-            var response = await _linkService.GetLinksByUsernameAsync(username, cancellationToken);
+            var response = await linkService.GetLinksByUsernameAsync(username, cancellationToken);
             return OkEnvelope(response);
         }
         catch (LinkNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Links not found for username {Username}", username);
+            logger.LogWarning(ex, "Links not found for username {Username}", username);
             return NotFoundProblem(ex.Message);
         }
         catch (LinkServiceException ex)
         {
-            _logger.LogError(ex, "Error getting links for username {Username}", username);
+            logger.LogError(ex, "Error getting links for username {Username}", username);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while retrieving links");
         }
@@ -79,42 +69,40 @@ public sealed class LinksController : BaseApiController
     /// <summary>
     /// Create a new link.
     /// </summary>
-    [HttpPost("")]
+    [HttpPost($"")]
     [ProducesResponseType(typeof(ApiResponse<LinkSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> CreateLink([FromBody] CreateLinkRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Creating link for user {UserId} with CorrelationId {CorrelationId}", UserId, CorrelationId);
+        logger.LogInformation("Creating link for user {UserId} with CorrelationId {CorrelationId}", UserId, CorrelationId);
 
         if (!Guid.TryParse(UserId, out var userId))
-        {
             return UnauthorizedProblem("Invalid user context");
-        }
 
         try
         {
-            var summary = await _linkService.CreateLinkAsync(userId, request, cancellationToken);
+            var summary = await linkService.CreateLinkAsync(userId, request, cancellationToken);
             return OkEnvelope(summary);
         }
         catch (LinkLimitExceededException ex)
         {
-            _logger.LogWarning(ex, "Link creation blocked due to tier limits for user {UserId}", userId);
+            logger.LogWarning(ex, "Link creation blocked due to tier limits for user {UserId}", userId);
             return BadRequestProblem(ex.Message);
         }
         catch (LinkValidationException ex)
         {
-            _logger.LogWarning(ex, "Validation error while creating link for user {UserId}", userId);
+            logger.LogWarning(ex, "Validation error while creating link for user {UserId}", userId);
             return BadRequestProblem(ex.Message);
         }
         catch (LinkForbiddenException ex)
         {
-            _logger.LogWarning(ex, "User {UserId} forbidden to create link", userId);
+            logger.LogWarning(ex, "User {UserId} forbidden to create link", userId);
             return ForbiddenProblem(ex.Message);
         }
         catch (LinkServiceException ex)
         {
-            _logger.LogError(ex, "Error creating link for user {UserId}", userId);
+            logger.LogError(ex, "Error creating link for user {UserId}", userId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while creating the link");
         }
@@ -123,43 +111,41 @@ public sealed class LinksController : BaseApiController
     /// <summary>
     /// Edit a link by id (only owner or admin).
     /// </summary>
-    [HttpPost("{id:guid}/edit")]
+    [HttpPost($"{{id:guid}}/edit")]
     [ProducesResponseType(typeof(ApiResponse<LinkSummary>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> EditLink(Guid id, [FromBody] EditLinkRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Editing link {LinkId} by user {UserId}", id, UserId);
+        logger.LogInformation("Editing link {LinkId} by user {UserId}", id, UserId);
 
         if (!Guid.TryParse(UserId, out var userId))
-        {
             return UnauthorizedProblem("Invalid user context");
-        }
 
         try
         {
-            var summary = await _linkService.UpdateLinkAsync(id, userId, User.IsInRole("admin"), request, cancellationToken);
+            var summary = await linkService.UpdateLinkAsync(id, userId, User.IsInRole("admin"), request, cancellationToken);
             return OkEnvelope(summary);
         }
         catch (LinkNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Link {LinkId} not found for edit", id);
+            logger.LogWarning(ex, "Link {LinkId} not found for edit", id);
             return NotFoundProblem(ex.Message);
         }
         catch (LinkForbiddenException ex)
         {
-            _logger.LogWarning(ex, "User {UserId} forbidden to edit link {LinkId}", userId, id);
+            logger.LogWarning(ex, "User {UserId} forbidden to edit link {LinkId}", userId, id);
             return ForbiddenProblem(ex.Message);
         }
         catch (LinkValidationException ex)
         {
-            _logger.LogWarning(ex, "Validation error while editing link {LinkId}", id);
+            logger.LogWarning(ex, "Validation error while editing link {LinkId}", id);
             return BadRequestProblem(ex.Message);
         }
         catch (LinkServiceException ex)
         {
-            _logger.LogError(ex, "Error editing link {LinkId}", id);
+            logger.LogError(ex, "Error editing link {LinkId}", id);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while editing the link");
         }
@@ -173,23 +159,19 @@ public sealed class LinksController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> Resequence([FromBody] List<ResequenceItem> items, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> Resequence([FromBody] List<ResequenceItem>? items, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("RESEQUENCE START: {Count} items", items?.Count ?? 0);
+        logger.LogInformation("RESEQUENCE START: {Count} items", items?.Count ?? 0);
 
         if (!Guid.TryParse(UserId, out var userId))
-        {
             return UnauthorizedProblem("Invalid user context");
-        }
 
         if (items is null || items.Count == 0)
-        {
             return BadRequestProblem("No items provided");
-        }
 
         try
         {
-            var finalState = await _linkService.ResequenceLinksAsync(userId, items, cancellationToken);
+            var finalState = await linkService.ResequenceLinksAsync(userId, items, cancellationToken);
             return OkEnvelope(new
             {
                 Message = "Resequenced exactly as specified",
@@ -198,17 +180,17 @@ public sealed class LinksController : BaseApiController
         }
         catch (LinkForbiddenException ex)
         {
-            _logger.LogWarning(ex, "User {UserId} forbidden to resequence links", userId);
+            logger.LogWarning(ex, "User {UserId} forbidden to resequence links", userId);
             return ForbiddenProblem(ex.Message);
         }
         catch (LinkValidationException ex)
         {
-            _logger.LogWarning(ex, "Validation error while resequencing links for user {UserId}", userId);
+            logger.LogWarning(ex, "Validation error while resequencing links for user {UserId}", userId);
             return BadRequestProblem(ex.Message);
         }
         catch (LinkServiceException ex)
         {
-            _logger.LogError(ex, "Error resequencing links for user {UserId}", userId);
+            logger.LogError(ex, "Error resequencing links for user {UserId}", userId);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while resequencing links");
         }
@@ -223,31 +205,29 @@ public sealed class LinksController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteLink(Guid id, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Deleting link {LinkId} by user {UserId}", id, UserId);
+        logger.LogInformation("Deleting link {LinkId} by user {UserId}", id, UserId);
 
         if (!Guid.TryParse(UserId, out var userId))
-        {
             return UnauthorizedProblem("Invalid user context");
-        }
 
         try
         {
-            await _linkService.DeleteLinkAsync(id, userId, User.IsInRole("admin"), cancellationToken);
+            await linkService.DeleteLinkAsync(id, userId, User.IsInRole("admin"), cancellationToken);
             return OkEnvelope(new { Message = "Link deleted" });
         }
         catch (LinkNotFoundException ex)
         {
-            _logger.LogWarning(ex, "Link {LinkId} not found for delete", id);
+            logger.LogWarning(ex, "Link {LinkId} not found for delete", id);
             return NotFoundProblem(ex.Message);
         }
         catch (LinkForbiddenException ex)
         {
-            _logger.LogWarning(ex, "User {UserId} forbidden to delete link {LinkId}", userId, id);
+            logger.LogWarning(ex, "User {UserId} forbidden to delete link {LinkId}", userId, id);
             return ForbiddenProblem(ex.Message);
         }
         catch (LinkServiceException ex)
         {
-            _logger.LogError(ex, "Error deleting link {LinkId}", id);
+            logger.LogError(ex, "Error deleting link {LinkId}", id);
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error",
                 "An error occurred while deleting the link");
         }

@@ -1,18 +1,13 @@
-﻿using BCrypt.Net;
-using Linqyard.Api.Configuration;
+﻿using Linqyard.Api.Configuration;
 using Linqyard.Data;
 using Linqyard.Api.Services;
 using Linqyard.Contracts;
-using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Linqyard.Entities;
 using Linqyard.Entities.Enums;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Net.Http.Headers;
 using System.Net.Mail;
 using System.Security.Cryptography;
@@ -23,39 +18,20 @@ using Linqyard.Infra;
 
 namespace Linqyard.Api.Controllers;
 
-[Route("auth")]
-public sealed class AuthController : BaseApiController
+[Route($"auth")]
+public sealed class AuthController(
+    ILogger<AuthController> logger,
+    LinqyardDbContext context,
+    IConfiguration configuration,
+    IJwtService jwtService,
+    IRateLimiterService rateLimiter,
+    HttpClient httpClient,
+    IEmailService emailService,
+    IAzureBlobStorageService blobStorageService)
+    : BaseApiController
 {
-    private readonly ILogger<AuthController> _logger;
-    private readonly LinqyardDbContext _context;
-    private readonly IConfiguration _configuration;
-    private readonly IJwtService _jwtService;
-    private readonly HttpClient _httpClient;
-    private readonly Linqyard.Infra.IEmailService _emailService;
-    private readonly IRateLimiterService _rateLimiter;
-    private readonly IAzureBlobStorageService _blobStorageService;
     private const string GitHubUserAgent = "LinqyardApp/1.0";
     private const string ExternalAvatarUserAgent = "LinqyardAvatarFetcher/1.0";
-
-    public AuthController(
-        ILogger<AuthController> logger,
-        LinqyardDbContext context,
-        IConfiguration configuration,
-        IJwtService jwtService,
-        IRateLimiterService rateLimiter,
-        HttpClient httpClient,
-        Linqyard.Infra.IEmailService emailService,
-        IAzureBlobStorageService blobStorageService)
-    {
-        _logger = logger;
-        _context = context;
-        _configuration = configuration;
-        _jwtService = jwtService;
-        _rateLimiter = rateLimiter;
-        _httpClient = httpClient;
-        _emailService = emailService;
-        _blobStorageService = blobStorageService;
-    }
 
     /// <summary>
     /// Authenticate user with email or username and create a new session
@@ -67,13 +43,13 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Login attempt for {EmailOrUsername} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Login attempt for {EmailOrUsername} with CorrelationId {CorrelationId}",
             request.EmailOrUsername, CorrelationId);
 
         try
         {
             // Find user by email or username (case-insensitive)
-            var user = await _context.Users
+            var user = await context.Users
                 .Include(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
                 .Include(u => u.UserTiers)
@@ -83,21 +59,21 @@ public sealed class AuthController : BaseApiController
 
             if (user == null)
             {
-                _logger.LogWarning("Login failed: User not found for {EmailOrUsername}", request.EmailOrUsername);
+                logger.LogWarning("Login failed: User not found for {EmailOrUsername}", request.EmailOrUsername);
                 return UnauthorizedProblem("Invalid email/username or password");
             }
 
             // Verify password (in production, use proper password hashing like BCrypt)
             if (!VerifyPassword(request.Password, user.PasswordHash))
             {
-                _logger.LogWarning("Login failed: Invalid password for user {UserId}", user.Id);
+                logger.LogWarning("Login failed: Invalid password for user {UserId}", user.Id);
                 return UnauthorizedProblem("Invalid email or password");
             }
 
             // Check if email is verified
             if (!user.EmailVerified)
             {
-                _logger.LogWarning("Login failed: Email not verified for user {UserId}", user.Id);
+                logger.LogWarning("Login failed: Email not verified for user {UserId}", user.Id);
                 return UnauthorizedProblem("Please verify your email before logging in");
             }
 
@@ -107,29 +83,29 @@ public sealed class AuthController : BaseApiController
                 Id = Guid.NewGuid(),
                 UserId = user.Id,
                 AuthMethod = "EmailPassword",
-                UserAgent = Request.Headers.UserAgent.ToString() ?? "Unknown",
+                UserAgent = Request.Headers.UserAgent.ToString(),
                 IpAddress = HttpContext.Connection.RemoteIpAddress ?? System.Net.IPAddress.Loopback,
                 CreatedAt = DateTimeOffset.UtcNow,
                 LastSeenAt = DateTimeOffset.UtcNow
             };
 
-            _context.Sessions.Add(session);
+            context.Sessions.Add(session);
 
             // Create refresh token (use centralized helper so lifetimes are consistent)
-            var (refreshTokenValue, refreshToken) = await CreateAndAddRefreshToken(user.Id, session.Id, request.RememberMe);
+            var (refreshTokenValue, _) = await CreateAndAddRefreshToken(user.Id, session.Id, request.RememberMe);
             user.UpdatedAt = DateTimeOffset.UtcNow;
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             // Generate JWT access token with session ID
-            var accessToken = _jwtService.GenerateToken(user, session.Id);
-            var jwtExpiryMinutes = _configuration.GetSection("JWT:ExpiryMinutes").Get<int?>();
+            var accessToken = jwtService.GenerateToken(user, session.Id);
+            var jwtExpiryMinutes = configuration.GetSection("JWT:ExpiryMinutes").Get<int?>();
             // var expiryMinutes = jwtExpiryMinutes ?? 15;
             // var expiresAt = DateTimeOffset.UtcNow.AddMinutes(expiryMinutes);
             var expiryMinutes = jwtExpiryMinutes ?? 15;
             if (expiryMinutes <= 0 || expiryMinutes > 24 * 60) // 1 day cap, tweak as you like
             {
-                _logger.LogError("Invalid JWT:ExpiryMinutes value {Configured}. Falling back to 15.", jwtExpiryMinutes);
+                logger.LogError("Invalid JWT:ExpiryMinutes value {Configured}. Falling back to 15.", jwtExpiryMinutes);
                 expiryMinutes = 15;
             }
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(expiryMinutes);
@@ -144,7 +120,7 @@ public sealed class AuthController : BaseApiController
             {
                 var refreshTokenCookieOptions = CreateSecureCookieOptions(TimeSpan.FromDays(request.RememberMe ? 60 : 14)); // Match refresh token expiry
                 Response.Cookies.Append("refreshToken", refreshTokenValue, refreshTokenCookieOptions);
-                _logger.LogInformation("Set refresh token HTTP-only cookie for regular login user {UserId}", user.Id);
+                logger.LogInformation("Set refresh token HTTP-only cookie for regular login user {UserId}", user.Id);
             }
 
             // Return refresh token in response for frontend compatibility
@@ -155,12 +131,12 @@ public sealed class AuthController : BaseApiController
                 User: userInfo
             );
 
-            _logger.LogInformation("User {UserId} logged in successfully", user.Id);
+            logger.LogInformation("User {UserId} logged in successfully", user.Id);
             return OkEnvelope(authResponse);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during login for {EmailOrUsername}", request.EmailOrUsername);
+            logger.LogError(ex, "Error during login for {EmailOrUsername}", request.EmailOrUsername);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -222,13 +198,13 @@ public sealed class AuthController : BaseApiController
 
             var normalizedLower = normalized.ToLowerInvariant();
 
-            var existing = await _context.Users
+            var existing = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Username.ToLower() == normalizedLower, cancellationToken);
 
             if (existing is null)
             {
-                _logger.LogInformation("Username {Username} is available", normalized);
+                logger.LogInformation("Username {Username} is available", normalized);
                 return OkEnvelope(new AvailabilityResponse(
                     Value: normalized,
                     IsValid: true,
@@ -238,7 +214,7 @@ public sealed class AuthController : BaseApiController
 
             if (existing.EmailVerified)
             {
-                _logger.LogInformation("Username {Username} is taken by a verified account", normalized);
+                logger.LogInformation("Username {Username} is taken by a verified account", normalized);
                 return OkEnvelope(new AvailabilityResponse(
                     Value: normalized,
                     IsValid: true,
@@ -248,7 +224,7 @@ public sealed class AuthController : BaseApiController
                 ));
             }
 
-            _logger.LogInformation("Username {Username} is held by an unverified account", normalized);
+            logger.LogInformation("Username {Username} is held by an unverified account", normalized);
             return OkEnvelope(new AvailabilityResponse(
                 Value: normalized,
                 IsValid: true,
@@ -259,7 +235,7 @@ public sealed class AuthController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking username availability for {Username}", normalized);
+            logger.LogError(ex, "Error checking username availability for {Username}", normalized);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -316,13 +292,13 @@ public sealed class AuthController : BaseApiController
 
             var normalizedLower = normalized.ToLowerInvariant();
 
-            var existing = await _context.Users
+            var existing = await context.Users
                 .AsNoTracking()
                 .FirstOrDefaultAsync(u => u.Email.ToLower() == normalizedLower, cancellationToken);
 
             if (existing is null)
             {
-                _logger.LogInformation("Email {Email} is available", normalized);
+                logger.LogInformation("Email {Email} is available", normalized);
                 return OkEnvelope(new AvailabilityResponse(
                     Value: normalized,
                     IsValid: true,
@@ -332,7 +308,7 @@ public sealed class AuthController : BaseApiController
 
             if (existing.EmailVerified)
             {
-                _logger.LogInformation("Email {Email} is already in use by a verified account", normalized);
+                logger.LogInformation("Email {Email} is already in use by a verified account", normalized);
                 return OkEnvelope(new AvailabilityResponse(
                     Value: normalized,
                     IsValid: true,
@@ -342,7 +318,7 @@ public sealed class AuthController : BaseApiController
                 ));
             }
 
-            _logger.LogInformation("Email {Email} is associated with an unverified account", normalized);
+            logger.LogInformation("Email {Email} is associated with an unverified account", normalized);
             return OkEnvelope(new AvailabilityResponse(
                 Value: normalized,
                 IsValid: true,
@@ -353,7 +329,7 @@ public sealed class AuthController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error checking email availability for {Email}", normalized);
+            logger.LogError(ex, "Error checking email availability for {Email}", normalized);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -371,13 +347,13 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status409Conflict)]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Registration attempt for email {Email} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Registration attempt for email {Email} with CorrelationId {CorrelationId}",
             request.Email, CorrelationId);
 
         try
         {
             // Check if signup is disabled
-            var signupDisabled = await _context.AppConfigs.AsNoTracking()
+            var signupDisabled = await context.AppConfigs.AsNoTracking()
                 .Where(ac => ac.Key == "SignupDisabled")
                 .Select(ac => ac.Value == "true")
                 .FirstOrDefaultAsync(cancellationToken);
@@ -401,12 +377,12 @@ public sealed class AuthController : BaseApiController
                 return BadRequestProblem("Username can only contain letters, numbers, underscores, and hyphens");
 
             // Password policy
-            var minPasswordLength = await _context.AppConfigs.AsNoTracking()
+            var minPasswordLength = await context.AppConfigs.AsNoTracking()
                 .Where(ac => ac.Key == "PasswordMinLength")
                 .Select(ac => int.Parse(ac.Value))
                 .FirstOrDefaultAsync(cancellationToken);
 
-            if (request.Password?.Length < minPasswordLength)
+            if (request.Password.Length < minPasswordLength)
                 return BadRequestProblem($"Password must be at least {minPasswordLength} characters long");
 
             // Normalize for case-insensitive checks
@@ -415,19 +391,19 @@ public sealed class AuthController : BaseApiController
             var normalizedUsernameLower = normalizedUsername.ToLower();
 
             // ── Look up potential conflicting accounts (TRACKED; we may delete) ──
-            var emailOwner = await _context.Users
+            var emailOwner = await context.Users
                 .FirstOrDefaultAsync(u => u.Email == normalizedEmail, cancellationToken);
 
-            var usernameOwner = await _context.Users
+            var usernameOwner = await context.Users
                 .FirstOrDefaultAsync(u => u.Username.ToLower() == normalizedUsernameLower, cancellationToken);
 
             // ── Hard conflicts (verified accounts) ────────────────────────────
-            if (emailOwner is not null && emailOwner.EmailVerified == true)
+            if (emailOwner is not null && emailOwner.EmailVerified)
             {
                 return ConflictProblem("A user with this email already exists");
             }
 
-            if (usernameOwner is not null && usernameOwner.EmailVerified == true)
+            if (usernameOwner is not null && usernameOwner.EmailVerified)
             {
                 return ConflictProblem("This username is already taken");
             }
@@ -436,25 +412,25 @@ public sealed class AuthController : BaseApiController
             // If there’s an unverified account holding the same email, remove it.
             if (emailOwner is not null && emailOwner.EmailVerified == false)
             {
-                _logger.LogInformation("Removing unverified user holding email {Email} to allow re-registration", normalizedEmail);
-                _context.Users.Remove(emailOwner); // assumes cascade for related rows
-                await _context.SaveChangesAsync(cancellationToken);
+                logger.LogInformation("Removing unverified user holding email {Email} to allow re-registration", normalizedEmail);
+                context.Users.Remove(emailOwner); // assumes cascade for related rows
+                await context.SaveChangesAsync(cancellationToken);
             }
 
             // If there’s an unverified account holding the same username, remove it.
             // Note: Re-query in case emailOwner removal also freed the username.
-            usernameOwner = await _context.Users
+            usernameOwner = await context.Users
                 .FirstOrDefaultAsync(u => u.Username.ToLower() == normalizedUsernameLower, cancellationToken);
 
             if (usernameOwner is not null && usernameOwner.EmailVerified == false)
             {
-                _logger.LogInformation("Removing unverified user holding username {Username} to allow re-registration", normalizedUsername);
-                _context.Users.Remove(usernameOwner); // assumes cascade for related rows
-                await _context.SaveChangesAsync(cancellationToken);
+                logger.LogInformation("Removing unverified user holding username {Username} to allow re-registration", normalizedUsername);
+                context.Users.Remove(usernameOwner); // assumes cascade for related rows
+                await context.SaveChangesAsync(cancellationToken);
             }
 
             // ── Final safety check (should not hit if above handled properly) ──
-            var usernameStillTaken = await _context.Users.AsNoTracking()
+            var usernameStillTaken = await context.Users.AsNoTracking()
                 .AnyAsync(u => u.Username.ToLower() == normalizedUsernameLower, cancellationToken);
             if (usernameStillTaken)
             {
@@ -465,13 +441,13 @@ public sealed class AuthController : BaseApiController
             var userId = Guid.NewGuid();
             var now = DateTimeOffset.UtcNow;
 
-            var freeTier = await _context.Tiers
+            var freeTier = await context.Tiers
                 .AsNoTracking()
                 .FirstOrDefaultAsync(t => t.Id == (int)TierType.Free, cancellationToken);
 
             if (freeTier is null)
             {
-                _logger.LogError("Default free tier definition is missing. Unable to register user {UserId}", userId);
+                logger.LogError("Default free tier definition is missing. Unable to register user {UserId}", userId);
                 return Problem(
                     statusCode: StatusCodes.Status500InternalServerError,
                     title: "Configuration Error",
@@ -481,7 +457,7 @@ public sealed class AuthController : BaseApiController
             {
                 Id = userId,
                 Email = normalizedEmail,
-            PasswordHash = HashPassword(request.Password!),
+            PasswordHash = HashPassword(request.Password),
             EmailVerified = false,
             FirstName = request.FirstName,
             LastName = request.LastName,
@@ -505,13 +481,13 @@ public sealed class AuthController : BaseApiController
 
             user.UserTiers.Add(userTier);
 
-            _context.Users.Add(user);
-            _context.UserTiers.Add(userTier);
+            context.Users.Add(user);
+            context.UserTiers.Add(userTier);
 
             var activeTierInfo = new UserTierInfo(freeTier.Id, freeTier.Name, now, null);
 
             // Assign default role (assumes cascade on UserRoles; no AsNoTracking here)
-            var userRole = await _context.Roles
+            var userRole = await context.Roles
                 .FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
 
             if (userRole != null)
@@ -522,7 +498,7 @@ public sealed class AuthController : BaseApiController
                     RoleId = userRole.Id
                 };
 
-                _context.UserRoles.Add(userRoleLink);
+                context.UserRoles.Add(userRoleLink);
                 user.UserRoles.Add(userRoleLink);
             }
 
@@ -537,20 +513,20 @@ public sealed class AuthController : BaseApiController
                 ExpiresAt = DateTimeOffset.UtcNow.AddHours(24)
             };
 
-            _logger.LogInformation("Verification token generated for {Email}: {Token}", normalizedEmail, verificationToken);
-            _context.OtpCodes.Add(otpCode);
+            logger.LogInformation("Verification token generated for {Email}: {Token}", normalizedEmail, verificationToken);
+            context.OtpCodes.Add(otpCode);
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             // Send verification email (best-effort)
             try
             {
-                await _emailService.SendVerificationEmailAsync(normalizedEmail, request.FirstName ?? "User", verificationToken);
-                _logger.LogInformation("Verification email sent to {Email}", normalizedEmail);
+                await emailService.SendVerificationEmailAsync(normalizedEmail, request.FirstName ?? "User", verificationToken);
+                logger.LogInformation("Verification email sent to {Email}", normalizedEmail);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send verification email to {Email}", normalizedEmail);
+                logger.LogError(ex, "Failed to send verification email to {Email}", normalizedEmail);
                 // Non-fatal: user can resend verification
             }
 
@@ -560,13 +536,13 @@ public sealed class AuthController : BaseApiController
                 cancellationToken: cancellationToken,
                 activeTierOverride: activeTierInfo);
 
-            _logger.LogInformation("User {UserId} registered successfully", user.Id);
+            logger.LogInformation("User {UserId} registered successfully", user.Id);
 
             return Created($"/auth/users/{user.Id}", new ApiResponse<UserInfo>(userInfo));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during registration for email {Email}", request.Email);
+            logger.LogError(ex, "Error during registration for email {Email}", request.Email);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -583,7 +559,7 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Token refresh attempt with CorrelationId {CorrelationId}", CorrelationId);
+        logger.LogInformation("Token refresh attempt with CorrelationId {CorrelationId}", CorrelationId);
 
         try
         {
@@ -596,20 +572,20 @@ public sealed class AuthController : BaseApiController
                 if (Request.Cookies.TryGetValue("refreshToken", out var cookieToken))
                 {
                     refreshTokenValue = cookieToken;
-                    _logger.LogInformation("Using refresh token from HTTP-only cookie");
+                    logger.LogInformation("Using refresh token from HTTP-only cookie");
                 }
             }
 
             if (string.IsNullOrEmpty(refreshTokenValue))
             {
-                _logger.LogWarning("Refresh token not provided in request body or cookie");
+                logger.LogWarning("Refresh token not provided in request body or cookie");
                 return UnauthorizedProblem("Refresh token not found");
             }
 
             var tokenHash = HashToken(refreshTokenValue);
 
             // Find the refresh token by hash
-            var refreshToken = await _context.RefreshTokens
+            var refreshToken = await context.RefreshTokens
                 .Include(rt => rt.User)
                     .ThenInclude(u => u.UserRoles)
                         .ThenInclude(ur => ur.Role)
@@ -621,21 +597,21 @@ public sealed class AuthController : BaseApiController
 
             if (refreshToken == null)
             {
-                _logger.LogWarning("Refresh token not found");
+                logger.LogWarning("Refresh token not found");
                 return UnauthorizedProblem("Invalid refresh token");
             }
 
             // Check if token is expired
             if (refreshToken.ExpiresAt <= DateTimeOffset.UtcNow)
             {
-                _logger.LogWarning("Expired refresh token used for user {UserId}", refreshToken.UserId);
+                logger.LogWarning("Expired refresh token used for user {UserId}", refreshToken.UserId);
                 return UnauthorizedProblem("Refresh token has expired");
             }
 
             // Check if token is revoked
             if (refreshToken.RevokedAt.HasValue)
             {
-                _logger.LogWarning("Revoked refresh token used for user {UserId}", refreshToken.UserId);
+                logger.LogWarning("Revoked refresh token used for user {UserId}", refreshToken.UserId);
                 return UnauthorizedProblem("Refresh token has been revoked");
             }
 
@@ -652,16 +628,13 @@ public sealed class AuthController : BaseApiController
             refreshToken.ReplacedById = newRefreshToken.Id;
 
             // Update session last seen
-            if (refreshToken.Session != null)
-            {
-                refreshToken.Session.LastSeenAt = DateTimeOffset.UtcNow;
-            }
+            refreshToken.Session.LastSeenAt = DateTimeOffset.UtcNow;
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             // Generate new JWT access token with session ID
-            var accessToken = _jwtService.GenerateToken(refreshToken.User, refreshToken.SessionId);
-            var jwtExpiryMinutes = _configuration.GetSection("JWT:ExpiryMinutes").Get<int?>();
+            var accessToken = jwtService.GenerateToken(refreshToken.User, refreshToken.SessionId);
+            var jwtExpiryMinutes = configuration.GetSection("JWT:ExpiryMinutes").Get<int?>();
             var expiryMinutes = jwtExpiryMinutes ?? 15;
             var expiresAt = DateTimeOffset.UtcNow.AddMinutes(expiryMinutes);
 
@@ -679,12 +652,12 @@ public sealed class AuthController : BaseApiController
                 ExpiresAt: expiresAt
             );
 
-            _logger.LogInformation("Token refreshed successfully for user {UserId}", refreshToken.UserId);
+            logger.LogInformation("Token refreshed successfully for user {UserId}", refreshToken.UserId);
             return OkEnvelope(response);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during token refresh");
+            logger.LogError(ex, "Error during token refresh");
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -700,7 +673,7 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Logout attempt with CorrelationId {CorrelationId}", CorrelationId);
+        logger.LogInformation("Logout attempt with CorrelationId {CorrelationId}", CorrelationId);
 
         try
         {
@@ -708,7 +681,7 @@ public sealed class AuthController : BaseApiController
             if (!string.IsNullOrEmpty(request.RefreshToken))
             {
                 var tokenHash = HashToken(request.RefreshToken);
-                var refreshToken = await _context.RefreshTokens
+                var refreshToken = await context.RefreshTokens
                     .Include(rt => rt.Session)
                     .Include(rt => rt.User)
                     .FirstOrDefaultAsync(rt => rt.TokenHash == tokenHash, cancellationToken);
@@ -721,15 +694,12 @@ public sealed class AuthController : BaseApiController
                     refreshToken.RevokedAt = now;
 
                     // Revoke the session if present
-                    if (refreshToken.Session != null && !refreshToken.Session.RevokedAt.HasValue)
-                    {
-                        refreshToken.Session.RevokedAt = now;
-                    }
+                    refreshToken.Session.RevokedAt ??= now;
 
                     // Revoke any other refresh tokens tied to the same session
                     if (refreshToken.SessionId != Guid.Empty)
                     {
-                        var siblingTokens = await _context.RefreshTokens
+                        var siblingTokens = await context.RefreshTokens
                             .Where(rt => rt.SessionId == refreshToken.SessionId && !rt.RevokedAt.HasValue)
                             .ToListAsync(cancellationToken);
 
@@ -739,9 +709,9 @@ public sealed class AuthController : BaseApiController
                         }
                     }
 
-                    await _context.SaveChangesAsync(cancellationToken);
+                    await context.SaveChangesAsync(cancellationToken);
 
-                    _logger.LogInformation("User {UserId} logged out and session revoked", refreshToken.UserId);
+                    logger.LogInformation("User {UserId} logged out and session revoked", refreshToken.UserId);
                 }
             }
             else
@@ -750,25 +720,20 @@ public sealed class AuthController : BaseApiController
                 var sessionClaim = User.FindFirst("session_id")?.Value ?? User.FindFirst("sid")?.Value;
                 if (!string.IsNullOrEmpty(sessionClaim) && Guid.TryParse(sessionClaim, out var sessionId))
                 {
-                    var session = await _context.Sessions
+                    var session = await context.Sessions
                         .Include(s => s.RefreshTokens)
                         .FirstOrDefaultAsync(s => s.Id == sessionId, cancellationToken);
 
                     if (session != null)
                     {
                         var now = DateTimeOffset.UtcNow;
-                        if (!session.RevokedAt.HasValue)
-                        {
-                            session.RevokedAt = now;
-                        }
+                        session.RevokedAt ??= now;
 
-                        foreach (var rt in session.RefreshTokens.Where(r => !r.RevokedAt.HasValue))
-                        {
+                        foreach (var rt in session.RefreshTokens.Where(r => !r.RevokedAt.HasValue)) 
                             rt.RevokedAt = now;
-                        }
 
-                        await _context.SaveChangesAsync(cancellationToken);
-                        _logger.LogInformation("Session {SessionId} revoked via logout", sessionId);
+                        await context.SaveChangesAsync(cancellationToken);
+                        logger.LogInformation("Session {SessionId} revoked via logout", sessionId);
                     }
                 }
             }
@@ -783,12 +748,10 @@ public sealed class AuthController : BaseApiController
             };
 
             // Set domain for development cross-port access
-            var isDevelopment = _configuration.GetValue<bool>("IsDevelopment", false) ||
-                               !_configuration.GetValue<bool>("IsProduction", false);
-            if (isDevelopment && HttpContext.Request.Host.Host == "localhost")
-            {
+            var isDevelopment = configuration.GetValue("IsDevelopment", false) ||
+                               !configuration.GetValue("IsProduction", false);
+            if (isDevelopment && HttpContext.Request.Host.Host == "localhost") 
                 deleteCookieOptions.Domain = "localhost";
-            }
 
             Response.Cookies.Delete("refreshToken", deleteCookieOptions);
 
@@ -801,7 +764,7 @@ public sealed class AuthController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during logout");
+            logger.LogError(ex, "Error during logout");
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -817,41 +780,33 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> VerifyEmail([FromBody] VerifyEmailRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Email verification attempt for {Email} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Email verification attempt for {Email} with CorrelationId {CorrelationId}",
             request.Email, CorrelationId);
 
         try
         {
             // Find verification token (comparing plain tokens for development)
-            var otpCode = await _context.OtpCodes
+            var otpCode = await context.OtpCodes
                 .FirstOrDefaultAsync(oc => oc.Email == request.Email &&
-                                         oc.CodeHash == request.Token.ToUpper() &&
+                                         oc.CodeHash.Equals(request.Token, StringComparison.CurrentCultureIgnoreCase) &&
                                          oc.Purpose == "Signup",
                                    cancellationToken);
 
-            if (otpCode == null)
-            {
+            if (otpCode == null) 
                 return BadRequestProblem("Invalid verification token");
-            }
-
+            
             if (otpCode.ExpiresAt <= DateTimeOffset.UtcNow)
-            {
                 return BadRequestProblem("Verification token has expired");
-            }
-
+            
             if (otpCode.ConsumedAt.HasValue)
-            {
                 return BadRequestProblem("Verification token has already been used");
-            }
 
             // Find user and verify email
-            var user = await _context.Users
+            var user = await context.Users
                 .FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
             if (user == null)
-            {
                 return BadRequestProblem("User not found");
-            }
 
             user.EmailVerified = true;
             user.UpdatedAt = DateTimeOffset.UtcNow;
@@ -859,17 +814,17 @@ public sealed class AuthController : BaseApiController
             // Mark token as used
             otpCode.ConsumedAt = DateTimeOffset.UtcNow;
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
             // Send welcome email
             try
             {
-                await _emailService.SendWelcomeEmailAsync(user.Email, user.FirstName ?? "User");
-                _logger.LogInformation("Welcome email sent to {Email}", user.Email);
+                await emailService.SendWelcomeEmailAsync(user.Email, user.FirstName ?? "User");
+                logger.LogInformation("Welcome email sent to {Email}", user.Email);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send welcome email to {Email}", user.Email);
+                logger.LogError(ex, "Failed to send welcome email to {Email}", user.Email);
                 // Continue without failing - email verification was successful
             }
 
@@ -878,12 +833,13 @@ public sealed class AuthController : BaseApiController
                 SentAt: DateTimeOffset.UtcNow
             );
 
-            _logger.LogInformation("Email verified successfully for user {UserId}", user.Id);
+            logger.LogInformation("Email verified successfully for user {UserId}", user.Id);
             return OkEnvelope(response);
+
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during email verification for {Email}", request.Email);
+            logger.LogError(ex, "Error during email verification for {Email}", request.Email);
             return Problem(
                 statusCode: StatusCodes.Status500InternalServerError,
                 title: "Internal Server Error",
@@ -892,12 +848,8 @@ public sealed class AuthController : BaseApiController
     }
 
     // Helper methods (in production, move to separate services)
-    private static string HashPassword(string password)
-    {
-        // Use BCrypt for secure password hashing
-        return BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12);
-    }
-
+    private static string HashPassword(string password) => BCrypt.Net.BCrypt.HashPassword(password, workFactor: 12);
+    
     private static bool VerifyPassword(string password, string hash)
     {
         try
@@ -928,17 +880,13 @@ public sealed class AuthController : BaseApiController
 
     // Centralized helper to create a refresh token entity and add it to the DbContext.
     // Returns the plain token value (to return to client) and the created RefreshToken entity (for further processing).
-    private Task<(string TokenValue, RefreshToken RefreshToken)> CreateAndAddRefreshToken(
-        Guid userId,
-        Guid sessionId,
-        bool rememberMe = false,
-        Guid? familyId = null)
+    private Task<(string TokenValue, RefreshToken RefreshToken)> CreateAndAddRefreshToken( Guid userId, Guid sessionId, bool rememberMe = false, Guid? familyId = null)
     {
         var now = DateTimeOffset.UtcNow;
 
         // Determine expiry days from configuration, with sensible defaults
-        var defaultDays = _configuration.GetValue<int>("Auth:RefreshTokenDays", 14);
-        var rememberDays = _configuration.GetValue<int>("Auth:RefreshTokenRememberDays", 60);
+        var defaultDays = configuration.GetValue("Auth:RefreshTokenDays", 14);
+        var rememberDays = configuration.GetValue("Auth:RefreshTokenRememberDays", 60);
         var days = rememberMe ? rememberDays : defaultDays;
 
         var tokenValue = GenerateRefreshToken();
@@ -953,7 +901,7 @@ public sealed class AuthController : BaseApiController
             IssuedAt = now
         };
 
-        _context.RefreshTokens.Add(token);
+        context.RefreshTokens.Add(token);
 
         return Task.FromResult((tokenValue, token));
     }
@@ -977,11 +925,9 @@ public sealed class AuthController : BaseApiController
         var userIdString = UserId; // From BaseApiController
 
         if (string.IsNullOrEmpty(userIdString) || !Guid.TryParse(userIdString, out var userId))
-        {
             return UnauthorizedProblem("Not authenticated");
-        }
 
-        var user = await _context.Users
+        var user = await context.Users
             .AsNoTracking()
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
@@ -1001,20 +947,18 @@ public sealed class AuthController : BaseApiController
         var sessionClaim = User.FindFirst("session_id")?.Value ?? User.FindFirst("sid")?.Value;
         if (!string.IsNullOrEmpty(sessionClaim) && Guid.TryParse(sessionClaim, out var sessionId))
         {
-            var session = await _context.Sessions
+            var session = await context.Sessions
                 .AsNoTracking()
                 .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, cancellationToken);
 
-            if (session != null)
-            {
+            if (session != null) 
                 authMethod = session.AuthMethod;
-            }
         }
 
         // Fallback: if no session found, check external logins
         if (string.IsNullOrEmpty(authMethod))
         {
-            var hasGoogleLogin = await _context.ExternalLogins
+            var hasGoogleLogin = await context.ExternalLogins
                 .AsNoTracking()
                 .AnyAsync(el => el.UserId == userId && el.Provider == "google", cancellationToken);
 
@@ -1032,7 +976,7 @@ public sealed class AuthController : BaseApiController
     /// <summary>
     /// Test endpoint to check cookie functionality (development only)
     /// </summary>
-    [HttpGet("test-cookies")]
+    [HttpGet($"test-cookies")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     public IActionResult TestCookies()
     {
@@ -1057,18 +1001,15 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResendVerification([FromBody] ResendVerificationRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Resend verification attempt for {Email} with CorrelationId {CorrelationId}",
-            request.Email, CorrelationId);
+        logger.LogInformation("Resend verification attempt for {Email} with CorrelationId {CorrelationId}", request.Email, CorrelationId);
 
         try
         {
-            var throttleKey = request.Email?.Trim().ToLowerInvariant();
+            var throttleKey = request.Email.Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(throttleKey))
-            {
                 return BadRequestProblem("A valid email is required to resend verification.");
-            }
 
-            var rateDecision = await _rateLimiter.ShouldAllowAsync("auth-verification-resend", throttleKey, cancellationToken);
+            var rateDecision = await rateLimiter.ShouldAllowAsync("auth-verification-resend", throttleKey, cancellationToken);
             ApplyRateLimitHeaders(rateDecision);
             if (!rateDecision.IsAllowed)
             {
@@ -1078,17 +1019,13 @@ public sealed class AuthController : BaseApiController
                     rateDecision);
             }
 
-            var user = await _context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
+            var user = await context.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
             if (user == null)
-            {
                 return BadRequestProblem("User not found");
-            }
 
             if (user.EmailVerified)
-            {
                 return BadRequestProblem("Email is already verified");
-            }
 
             // Generate new verification token
             var verificationToken = GenerateVerificationToken();
@@ -1101,20 +1038,20 @@ public sealed class AuthController : BaseApiController
                 ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15)
             };
 
-            _context.OtpCodes.Add(otpCode);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.OtpCodes.Add(otpCode);
+            await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("New verification code generated for user {UserId}: {Code}", user.Id, verificationToken);
+            logger.LogInformation("New verification code generated for user {UserId}: {Code}", user.Id, verificationToken);
 
             // Send verification email
             try
             {
-                await _emailService.SendVerificationEmailAsync(user.Email, user.FirstName ?? "User", verificationToken);
-                _logger.LogInformation("Verification email resent to {Email}", user.Email);
+                await emailService.SendVerificationEmailAsync(user.Email, user.FirstName ?? "User", verificationToken);
+                logger.LogInformation("Verification email resent to {Email}", user.Email);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to resend verification email to {Email}", user.Email);
+                logger.LogError(ex, "Failed to resend verification email to {Email}", user.Email);
                 // Continue without failing - user can try again
             }
 
@@ -1127,7 +1064,7 @@ public sealed class AuthController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during resend verification for {Email}", request.Email);
+            logger.LogError(ex, "Error during resend verification for {Email}", request.Email);
             return Problem("An error occurred while resending verification");
         }
     }
@@ -1140,18 +1077,16 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Forgot password attempt for {Email} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Forgot password attempt for {Email} with CorrelationId {CorrelationId}",
             request.Email, CorrelationId);
 
         try
         {
-            var throttleKey = request.Email?.Trim().ToLowerInvariant();
+            var throttleKey = request.Email.Trim().ToLowerInvariant();
             if (string.IsNullOrWhiteSpace(throttleKey))
-            {
                 return BadRequestProblem("A valid email is required to reset a password.");
-            }
 
-            var rateDecision = await _rateLimiter.ShouldAllowAsync("auth-forgot-password", throttleKey, cancellationToken);
+            var rateDecision = await rateLimiter.ShouldAllowAsync("auth-forgot-password", throttleKey, cancellationToken);
             ApplyRateLimitHeaders(rateDecision);
             if (!rateDecision.IsAllowed)
             {
@@ -1161,7 +1096,7 @@ public sealed class AuthController : BaseApiController
                     rateDecision);
             }
 
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
+            var user = await context.Users.FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
             if (user == null)
             {
@@ -1175,10 +1110,7 @@ public sealed class AuthController : BaseApiController
             }
 
             // Allow password reset for unverified users in case verification email failed
-            if (!user.EmailVerified)
-            {
-                _logger.LogInformation("Password reset requested for unverified email {Email} - allowing in case verification email failed", request.Email);
-            }
+            if (!user.EmailVerified) logger.LogInformation("Password reset requested for unverified email {Email} - allowing in case verification email failed", request.Email);
 
             // Generate password reset token
             var resetToken = GenerateVerificationToken();
@@ -1191,20 +1123,20 @@ public sealed class AuthController : BaseApiController
                 ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(15)
             };
 
-            _context.OtpCodes.Add(otpCode);
-            await _context.SaveChangesAsync(cancellationToken);
+            context.OtpCodes.Add(otpCode);
+            await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Password reset code generated for user {UserId}: {Code}", user.Id, resetToken);
+            logger.LogInformation("Password reset code generated for user {UserId}: {Code}", user.Id, resetToken);
 
             // Send password reset email
             try
             {
-                await _emailService.SendPasswordResetEmailAsync(user.Email, user.FirstName ?? "User", resetToken);
-                _logger.LogInformation("Password reset email sent to {Email}", user.Email);
+                await emailService.SendPasswordResetEmailAsync(user.Email, user.FirstName ?? "User", resetToken);
+                logger.LogInformation("Password reset email sent to {Email}", user.Email);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Failed to send password reset email to {Email}", user.Email);
+                logger.LogError(ex, "Failed to send password reset email to {Email}", user.Email);
                 // Continue without failing - user can try again
             }
 
@@ -1217,7 +1149,7 @@ public sealed class AuthController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during forgot password for {Email}", request.Email);
+            logger.LogError(ex, "Error during forgot password for {Email}", request.Email);
             return Problem("An error occurred while processing password reset request");
         }
     }
@@ -1225,17 +1157,17 @@ public sealed class AuthController : BaseApiController
     /// <summary>
     /// Reset password using verification code
     /// </summary>
-    [HttpPost("reset-password")]
+    [HttpPost($"reset-password")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Reset password attempt for {Email} with CorrelationId {CorrelationId}",
+        logger.LogInformation("Reset password attempt for {Email} with CorrelationId {CorrelationId}",
             request.Email, CorrelationId);
 
         try
         {
-            var user = await _context.Users.FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
+            var user = await context.Users.FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
             if (user == null)
             {
@@ -1243,7 +1175,7 @@ public sealed class AuthController : BaseApiController
             }
 
             // Find valid password reset token (comparing plain tokens for development)
-            var otpCode = await _context.OtpCodes
+            var otpCode = await context.OtpCodes
                 .FirstOrDefaultAsync(oc => oc.Email == user.Email &&
                                           oc.CodeHash == request.Token.ToUpper() &&
                                           oc.Purpose == "PasswordReset" &&
@@ -1251,21 +1183,15 @@ public sealed class AuthController : BaseApiController
                                     cancellationToken);
 
             if (otpCode == null)
-            {
                 return BadRequestProblem("Invalid or expired code");
-            }
 
             if (otpCode.ExpiresAt <= DateTimeOffset.UtcNow)
-            {
                 return BadRequestProblem("Reset code has expired");
-            }
 
             // Validate new password
-            var minPasswordLength = _configuration.GetValue<int>("Auth:MinPasswordLength", 8);
+            var minPasswordLength = configuration.GetValue("Auth:MinPasswordLength", 8);
             if (request.NewPassword.Length < minPasswordLength)
-            {
                 return BadRequestProblem($"Password must be at least {minPasswordLength} characters long");
-            }
 
             // Update password
             user.PasswordHash = HashPassword(request.NewPassword);
@@ -1276,14 +1202,14 @@ public sealed class AuthController : BaseApiController
             if (!user.EmailVerified)
             {
                 user.EmailVerified = true;
-                _logger.LogInformation("Email automatically verified for user {UserId} during password reset", user.Id);
+                logger.LogInformation("Email automatically verified for user {UserId} during password reset", user.Id);
             }
 
             // Mark reset code as consumed
             otpCode.ConsumedAt = DateTimeOffset.UtcNow;
 
             // Revoke all existing refresh tokens for security
-            var refreshTokens = await _context.RefreshTokens
+            var refreshTokens = await context.RefreshTokens
                 .Where(rt => rt.UserId == user.Id && !rt.RevokedAt.HasValue)
                 .ToListAsync(cancellationToken);
 
@@ -1292,30 +1218,30 @@ public sealed class AuthController : BaseApiController
                 refreshToken.RevokedAt = DateTimeOffset.UtcNow;
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Password reset successful for user {UserId}", user.Id);
+            logger.LogInformation("Password reset successful for user {UserId}", user.Id);
 
             // Send welcome email if this was the first time email was verified
-            if (wasEmailUnverified)
+            if (!wasEmailUnverified) 
+                return Ok(new ApiResponse<object>(new { message = "Password reset successful" }));
+            
+            try
             {
-                try
-                {
-                    await _emailService.SendWelcomeEmailAsync(user.Email, user.FirstName ?? "User");
-                    _logger.LogInformation("Welcome email sent to newly verified user {Email}", user.Email);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Failed to send welcome email to {Email}", user.Email);
-                    // Don't fail the password reset for email sending issues
-                }
+                await emailService.SendWelcomeEmailAsync(user.Email, user.FirstName ?? "User");
+                logger.LogInformation("Welcome email sent to newly verified user {Email}", user.Email);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to send welcome email to {Email}", user.Email);
+                // Don't fail the password reset for email sending issues
             }
 
             return Ok(new ApiResponse<object>(new { message = "Password reset successful" }));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during password reset for {Email}", request.Email);
+            logger.LogError(ex, "Error during password reset for {Email}", request.Email);
             return Problem("An error occurred while resetting password");
         }
     }
@@ -1324,17 +1250,17 @@ public sealed class AuthController : BaseApiController
     /// Set or change password. Google-only accounts can set password without current password.
     /// Other accounts must provide current password.
     /// </summary>
-    [HttpPost("set-password")]
+    [HttpPost($"set-password")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
-    public async Task<IActionResult> SetPassword([FromBody] Linqyard.Contracts.Requests.SetPasswordRequest request, CancellationToken cancellationToken = default)
+    public async Task<IActionResult> SetPassword([FromBody] SetPasswordRequest request, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("SetPassword attempt for {Email} with CorrelationId {CorrelationId}", request.Email, CorrelationId);
+        logger.LogInformation("SetPassword attempt for {Email} with CorrelationId {CorrelationId}", request.Email, CorrelationId);
 
         try
         {
-            var user = await _context.Users
+            var user = await context.Users
                 .Include(u => u.ExternalLogins)
                 .FirstOrDefaultAsync(u => u.Email == request.Email, cancellationToken);
 
@@ -1359,7 +1285,7 @@ public sealed class AuthController : BaseApiController
             }
 
             // Validate new password length using existing app config fallback
-            var minPasswordLength = _configuration.GetValue<int>("Auth:MinPasswordLength", 8);
+            var minPasswordLength = configuration.GetValue("Auth:MinPasswordLength", 8);
             if (request.NewPassword.Length < minPasswordLength)
             {
                 return BadRequestProblem($"Password must be at least {minPasswordLength} characters long");
@@ -1369,7 +1295,7 @@ public sealed class AuthController : BaseApiController
             user.PasswordHash = HashPassword(request.NewPassword);
             user.UpdatedAt = DateTimeOffset.UtcNow;
 
-            var refreshTokens = await _context.RefreshTokens
+            var refreshTokens = await context.RefreshTokens
                 .Where(rt => rt.UserId == user.Id && !rt.RevokedAt.HasValue)
                 .ToListAsync(cancellationToken);
 
@@ -1378,15 +1304,15 @@ public sealed class AuthController : BaseApiController
                 rt.RevokedAt = DateTimeOffset.UtcNow;
             }
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Password set/changed successfully for user {UserId}", user.Id);
+            logger.LogInformation("Password set/changed successfully for user {UserId}", user.Id);
 
             return Ok(new ApiResponse<object>(new { message = "Password updated successfully" }));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error during set password for {Email}", request.Email);
+            logger.LogError(ex, "Error during set password for {Email}", request.Email);
             return Problem("An error occurred while setting password");
         }
     }
@@ -1394,22 +1320,22 @@ public sealed class AuthController : BaseApiController
     /// <summary>
     /// Initiate GitHub OAuth flow
     /// </summary>
-    [HttpGet("github")]
+    [HttpGet($"github")]
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     public IActionResult GitHubLogin()
     {
-        _logger.LogInformation("Initiating GitHub OAuth flow with CorrelationId {CorrelationId}", CorrelationId);
+        logger.LogInformation("Initiating GitHub OAuth flow with CorrelationId {CorrelationId}", CorrelationId);
 
-        var githubSettings = _configuration.GetSection("OAuth:GitHub").Get<GitHubOAuthSettings>();
+        var githubSettings = configuration.GetSection("OAuth:GitHub").Get<GitHubOAuthSettings>();
 
         if (githubSettings == null || string.IsNullOrEmpty(githubSettings.ClientId))
         {
-            _logger.LogError("GitHub OAuth settings not configured");
+            logger.LogError("GitHub OAuth settings not configured");
             return BadRequestProblem("GitHub OAuth not configured");
         }
 
         var state = Guid.NewGuid().ToString();
-        var scope = "read:user user:email";
+        const string scope = "read:user user:email";
 
         var authUrl = "https://github.com/login/oauth/authorize" +
                       $"?client_id={Uri.EscapeDataString(githubSettings.ClientId)}" +
@@ -1429,61 +1355,55 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GitHubCallback(string code, string state, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Processing GitHub OAuth callback with CorrelationId {CorrelationId}", CorrelationId);
+        logger.LogInformation("Processing GitHub OAuth callback with CorrelationId {CorrelationId}", CorrelationId);
 
         try
         {
             if (string.IsNullOrEmpty(state) || string.IsNullOrEmpty(code))
             {
-                _logger.LogWarning("Missing OAuth parameters for GitHub");
+                logger.LogWarning("Missing OAuth parameters for GitHub");
                 return BadRequestProblem("Missing OAuth parameters");
             }
 
-            var githubSettings = _configuration.GetSection("OAuth:GitHub").Get<GitHubOAuthSettings>();
+            var githubSettings = configuration.GetSection("OAuth:GitHub").Get<GitHubOAuthSettings>();
             if (githubSettings == null)
-            {
                 return BadRequestProblem("GitHub OAuth not configured");
-            }
 
             var tokenResponse = await ExchangeCodeForGitHubToken(code, githubSettings, cancellationToken);
             if (tokenResponse == null || string.IsNullOrEmpty(tokenResponse.AccessToken))
-            {
                 return BadRequestProblem("Failed to exchange code for token");
-            }
 
             var githubUser = await GetGitHubUserDetails(tokenResponse.AccessToken, cancellationToken);
             if (githubUser == null)
-            {
                 return BadRequestProblem("Unable to retrieve required email information from GitHub. Please ensure your account has a verified email address.");
-            }
 
             var user = await FindOrCreateGitHubUser(githubUser, cancellationToken);
 
             var authResponse = await GenerateAuthResponse(user, "GitHub", cancellationToken);
 
-            _logger.LogInformation("GitHub OAuth login successful for user {UserId}", user.Id);
+            logger.LogInformation("GitHub OAuth login successful for user {UserId}", user.Id);
 
             if (!string.IsNullOrEmpty(authResponse.RefreshToken))
             {
                 var refreshTokenCookieOptions = CreateSecureCookieOptions(TimeSpan.FromDays(7));
                 Response.Cookies.Append("refreshToken", authResponse.RefreshToken, refreshTokenCookieOptions);
-                _logger.LogInformation("Set refresh token HTTP-only cookie for GitHub OAuth user {UserId}", user.Id);
+                logger.LogInformation("Set refresh token HTTP-only cookie for GitHub OAuth user {UserId}", user.Id);
             }
             else
             {
-                _logger.LogWarning("No refresh token available to set as cookie for GitHub user {UserId}", user.Id);
+                logger.LogWarning("No refresh token available to set as cookie for GitHub user {UserId}", user.Id);
             }
 
-            var frontendUrl = _configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
+            var frontendUrl = configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
             var redirectUrl = $"{frontendUrl}/account/oauth/callback?success=true&token={authResponse.AccessToken}&expires={authResponse.ExpiresAt:yyyy-MM-ddTHH:mm:ssZ}";
 
             return Redirect(redirectUrl);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing GitHub OAuth callback");
+            logger.LogError(ex, "Error processing GitHub OAuth callback");
 
-            var frontendUrl = _configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
+            var frontendUrl = configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
             var errorUrl = $"{frontendUrl}/account/oauth/callback?success=false&error=authentication_failed";
 
             return Redirect(errorUrl);
@@ -1497,13 +1417,13 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
     public IActionResult GoogleLogin()
     {
-        _logger.LogInformation("Initiating Google OAuth flow with CorrelationId {CorrelationId}", CorrelationId);
+        logger.LogInformation("Initiating Google OAuth flow with CorrelationId {CorrelationId}", CorrelationId);
 
-        var googleSettings = _configuration.GetSection("OAuth:Google").Get<GoogleOAuthSettings>();
+        var googleSettings = configuration.GetSection("OAuth:Google").Get<GoogleOAuthSettings>();
 
         if (googleSettings == null || string.IsNullOrEmpty(googleSettings.ClientId))
         {
-            _logger.LogError("Google OAuth settings not configured");
+            logger.LogError("Google OAuth settings not configured");
             return BadRequestProblem("Google OAuth not configured");
         }
 
@@ -1528,36 +1448,30 @@ public sealed class AuthController : BaseApiController
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     public async Task<IActionResult> GoogleCallback(string code, string state, CancellationToken cancellationToken = default)
     {
-        _logger.LogInformation("Processing Google OAuth callback with CorrelationId {CorrelationId}", CorrelationId);
+        logger.LogInformation("Processing Google OAuth callback with CorrelationId {CorrelationId}", CorrelationId);
 
         try
         {
             // Basic validation - in production you might want to store/validate state more securely
             if (string.IsNullOrEmpty(state) || string.IsNullOrEmpty(code))
             {
-                _logger.LogWarning("Missing OAuth parameters");
+                logger.LogWarning("Missing OAuth parameters");
                 return BadRequestProblem("Missing OAuth parameters");
             }
 
-            var googleSettings = _configuration.GetSection("OAuth:Google").Get<GoogleOAuthSettings>();
+            var googleSettings = configuration.GetSection("OAuth:Google").Get<GoogleOAuthSettings>();
             if (googleSettings == null)
-            {
                 return BadRequestProblem("Google OAuth not configured");
-            }
 
             // Exchange code for access token
             var tokenResponse = await ExchangeCodeForGoogleToken(code, googleSettings, cancellationToken);
             if (tokenResponse == null)
-            {
                 return BadRequestProblem("Failed to exchange code for token");
-            }
 
             // Get user info from Google
             var googleUser = await GetGoogleUserInfo(tokenResponse.AccessToken, cancellationToken);
             if (googleUser == null)
-            {
                 return BadRequestProblem("Failed to get user info from Google");
-            }
 
             // Find or create user
             var user = await FindOrCreateGoogleUser(googleUser, cancellationToken);
@@ -1565,32 +1479,32 @@ public sealed class AuthController : BaseApiController
             // Generate JWT and refresh token
             var authResponse = await GenerateAuthResponse(user, "Google", cancellationToken);
 
-            _logger.LogInformation("Google OAuth login successful for user {UserId}", user.Id);
+            logger.LogInformation("Google OAuth login successful for user {UserId}", user.Id);
 
             // Set refresh token as HTTP-only cookie  
             if (!string.IsNullOrEmpty(authResponse.RefreshToken))
             {
                 var refreshTokenCookieOptions = CreateSecureCookieOptions(TimeSpan.FromDays(7)); // Match refresh token expiry
                 Response.Cookies.Append("refreshToken", authResponse.RefreshToken, refreshTokenCookieOptions);
-                _logger.LogInformation("Set refresh token HTTP-only cookie for Google OAuth user {UserId}", user.Id);
+                logger.LogInformation("Set refresh token HTTP-only cookie for Google OAuth user {UserId}", user.Id);
             }
             else
             {
-                _logger.LogWarning("No refresh token available to set as cookie for user {UserId}", user.Id);
+                logger.LogWarning("No refresh token available to set as cookie for user {UserId}", user.Id);
             }
 
             // Must redirect back to frontend (this is a browser redirect, not an API call)
-            var frontendUrl = _configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
+            var frontendUrl = configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
             var redirectUrl = $"{frontendUrl}/account/oauth/callback?success=true&token={authResponse.AccessToken}&expires={authResponse.ExpiresAt:yyyy-MM-ddTHH:mm:ssZ}";
 
             return Redirect(redirectUrl);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error processing Google OAuth callback");
+            logger.LogError(ex, "Error processing Google OAuth callback");
 
             // Redirect back to frontend with error
-            var frontendUrl = _configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
+            var frontendUrl = configuration.GetValue<string>("Frontend:BaseUrl", "http://localhost:3000");
             var errorUrl = $"{frontendUrl}/account/oauth/callback?success=false&error=authentication_failed";
 
             return Redirect(errorUrl);
@@ -1601,24 +1515,23 @@ public sealed class AuthController : BaseApiController
     {
         var tokenRequest = new HttpRequestMessage(HttpMethod.Post, "https://github.com/login/oauth/access_token")
         {
-            Content = new FormUrlEncodedContent(new[]
-            {
+            Content = new FormUrlEncodedContent([
                 new KeyValuePair<string, string>("client_id", settings.ClientId),
                 new KeyValuePair<string, string>("client_secret", settings.ClientSecret),
                 new KeyValuePair<string, string>("code", code),
                 new KeyValuePair<string, string>("redirect_uri", settings.RedirectUri)
-            })
+            ])
         };
 
         tokenRequest.Headers.Accept.Clear();
         tokenRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
         tokenRequest.Headers.UserAgent.ParseAdd(GitHubUserAgent);
 
-        var response = await _httpClient.SendAsync(tokenRequest, cancellationToken);
+        var response = await httpClient.SendAsync(tokenRequest, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("Failed to exchange code for GitHub token. Status: {StatusCode}", response.StatusCode);
+            logger.LogError("Failed to exchange code for GitHub token. Status: {StatusCode}", response.StatusCode);
             return null;
         }
 
@@ -1641,11 +1554,11 @@ public sealed class AuthController : BaseApiController
         userRequest.Headers.UserAgent.ParseAdd(GitHubUserAgent);
         userRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
-        var userResponse = await _httpClient.SendAsync(userRequest, cancellationToken);
+        var userResponse = await httpClient.SendAsync(userRequest, cancellationToken);
 
         if (!userResponse.IsSuccessStatusCode)
         {
-            _logger.LogError("Failed to get GitHub user info. Status: {StatusCode}", userResponse.StatusCode);
+            logger.LogError("Failed to get GitHub user info. Status: {StatusCode}", userResponse.StatusCode);
             return null;
         }
 
@@ -1654,7 +1567,7 @@ public sealed class AuthController : BaseApiController
 
         if (userInfo == null)
         {
-            _logger.LogError("Failed to deserialize GitHub user info");
+            logger.LogError("Failed to deserialize GitHub user info");
             return null;
         }
 
@@ -1680,20 +1593,18 @@ public sealed class AuthController : BaseApiController
             emailVerified = true;
         }
 
-        if (string.IsNullOrEmpty(email))
-        {
-            _logger.LogWarning("GitHub user {UserId} does not have an accessible email address", userInfo.Id);
-            return null;
-        }
+        if (!string.IsNullOrEmpty(email))
+            return new GitHubUserDetails(
+                Id: userInfo.Id.ToString(),
+                Login: userInfo.Login,
+                Name: userInfo.Name,
+                Email: email,
+                EmailVerified: emailVerified,
+                AvatarUrl: userInfo.AvatarUrl
+            );
+        logger.LogWarning("GitHub user {UserId} does not have an accessible email address", userInfo.Id);
+        return null;
 
-        return new GitHubUserDetails(
-            Id: userInfo.Id.ToString(),
-            Login: userInfo.Login,
-            Name: userInfo.Name,
-            Email: email,
-            EmailVerified: emailVerified,
-            AvatarUrl: userInfo.AvatarUrl
-        );
     }
 
     private async Task<GitHubEmailInfo[]?> GetGitHubEmails(string accessToken, CancellationToken cancellationToken)
@@ -1703,11 +1614,11 @@ public sealed class AuthController : BaseApiController
         emailRequest.Headers.UserAgent.ParseAdd(GitHubUserAgent);
         emailRequest.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
 
-        var emailResponse = await _httpClient.SendAsync(emailRequest, cancellationToken);
+        var emailResponse = await httpClient.SendAsync(emailRequest, cancellationToken);
 
         if (!emailResponse.IsSuccessStatusCode)
         {
-            _logger.LogWarning("Failed to load GitHub account emails. Status: {StatusCode}", emailResponse.StatusCode);
+            logger.LogWarning("Failed to load GitHub account emails. Status: {StatusCode}", emailResponse.StatusCode);
             return null;
         }
 
@@ -1720,7 +1631,7 @@ public sealed class AuthController : BaseApiController
 
     private async Task<User> FindOrCreateGitHubUser(GitHubUserDetails githubUser, CancellationToken cancellationToken)
     {
-        var existingExternalLogin = await _context.ExternalLogins
+        var existingExternalLogin = await context.ExternalLogins
             .Include(el => el.User)
                 .ThenInclude(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
@@ -1731,7 +1642,7 @@ public sealed class AuthController : BaseApiController
 
         if (existingExternalLogin != null)
         {
-            _logger.LogInformation("Found existing GitHub user {UserId}", existingExternalLogin.User.Id);
+            logger.LogInformation("Found existing GitHub user {UserId}", existingExternalLogin.User.Id);
             var saveRequired = false;
 
             if (!existingExternalLogin.User.EmailVerified && githubUser.EmailVerified)
@@ -1742,19 +1653,14 @@ public sealed class AuthController : BaseApiController
             }
 
             if (await TryUpdateAvatarFromProviderAsync(existingExternalLogin.User, githubUser.AvatarUrl, "github", cancellationToken))
-            {
                 saveRequired = true;
-            }
 
-            if (saveRequired)
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-            }
+            if (saveRequired) await context.SaveChangesAsync(cancellationToken);
 
             return existingExternalLogin.User;
         }
 
-        var existingUser = await _context.Users
+        var existingUser = await context.Users
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .Include(u => u.UserTiers)
@@ -1773,7 +1679,7 @@ public sealed class AuthController : BaseApiController
                 LinkedAt = DateTimeOffset.UtcNow
             };
 
-            _context.ExternalLogins.Add(externalLogin);
+            context.ExternalLogins.Add(externalLogin);
 
             if (!existingUser.EmailVerified && githubUser.EmailVerified)
             {
@@ -1783,21 +1689,21 @@ public sealed class AuthController : BaseApiController
 
             await TryUpdateAvatarFromProviderAsync(existingUser, githubUser.AvatarUrl, "github", cancellationToken);
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Linked GitHub account to existing user {UserId}", existingUser.Id);
+            logger.LogInformation("Linked GitHub account to existing user {UserId}", existingUser.Id);
             return existingUser;
         }
 
         var now = DateTimeOffset.UtcNow;
 
-        var freeTier = await _context.Tiers
+        var freeTier = await context.Tiers
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == (int)TierType.Free, cancellationToken);
 
         if (freeTier is null)
         {
-            _logger.LogError("Default free tier definition is missing. Unable to create GitHub OAuth user for {Email}", githubUser.Email);
+            logger.LogError("Default free tier definition is missing. Unable to create GitHub OAuth user for {Email}", githubUser.Email);
             throw new InvalidOperationException("Default tier configuration is missing.");
         }
 
@@ -1808,14 +1714,15 @@ public sealed class AuthController : BaseApiController
         if (!string.IsNullOrEmpty(fullName))
         {
             var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 1)
+            switch (parts.Length)
             {
-                firstName = parts[0];
-            }
-            else if (parts.Length >= 2)
-            {
-                firstName = parts[0];
-                lastName = parts[^1];
+                case 1:
+                    firstName = parts[0];
+                    break;
+                case >= 2:
+                    firstName = parts[0];
+                    lastName = parts[^1];
+                    break;
             }
         }
 
@@ -1849,10 +1756,8 @@ public sealed class AuthController : BaseApiController
         };
 
         var cachedAvatar = await CacheExternalAvatarAsync(newUser.Id, "github", githubUser.AvatarUrl, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(cachedAvatar))
-        {
+        if (!string.IsNullOrWhiteSpace(cachedAvatar)) 
             newUser.AvatarUrl = cachedAvatar;
-        }
 
         var newUserTier = new UserTier
         {
@@ -1869,8 +1774,8 @@ public sealed class AuthController : BaseApiController
 
         newUser.UserTiers.Add(newUserTier);
 
-        _context.Users.Add(newUser);
-        _context.UserTiers.Add(newUserTier);
+        context.Users.Add(newUser);
+        context.UserTiers.Add(newUserTier);
 
         var newExternalLogin = new ExternalLogin
         {
@@ -1882,9 +1787,9 @@ public sealed class AuthController : BaseApiController
             LinkedAt = now
         };
 
-        _context.ExternalLogins.Add(newExternalLogin);
+        context.ExternalLogins.Add(newExternalLogin);
 
-        var defaultRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
+        var defaultRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
         if (defaultRole != null)
         {
             var userRoleLink = new UserRole
@@ -1893,52 +1798,44 @@ public sealed class AuthController : BaseApiController
                 RoleId = defaultRole.Id
             };
 
-            _context.UserRoles.Add(userRoleLink);
+            context.UserRoles.Add(userRoleLink);
             newUser.UserRoles.Add(userRoleLink);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Created new user from GitHub OAuth {UserId}", newUser.Id);
+        logger.LogInformation("Created new user from GitHub OAuth {UserId}", newUser.Id);
 
         try
         {
-            await _emailService.SendWelcomeEmailAsync(newUser.Email, newUser.FirstName ?? newUser.Username);
-            _logger.LogInformation("Welcome email sent to new GitHub OAuth user {Email}", newUser.Email);
+            await emailService.SendWelcomeEmailAsync(newUser.Email, newUser.FirstName ?? newUser.Username);
+            logger.LogInformation("Welcome email sent to new GitHub OAuth user {Email}", newUser.Email);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send welcome email to new GitHub OAuth user {Email}", newUser.Email);
+            logger.LogError(ex, "Failed to send welcome email to new GitHub OAuth user {Email}", newUser.Email);
         }
 
         return newUser;
     }
 
-    private sealed record GitHubUserDetails(
-        string Id,
-        string Login,
-        string? Name,
-        string Email,
-        bool EmailVerified,
-        string? AvatarUrl
-    );
+    private sealed record GitHubUserDetails( string Id, string Login, string? Name, string Email, bool EmailVerified, string? AvatarUrl);
 
     private async Task<GoogleTokenResponse?> ExchangeCodeForGoogleToken(string code, GoogleOAuthSettings settings, CancellationToken cancellationToken)
     {
-        var tokenRequest = new FormUrlEncodedContent(new[]
-        {
+        var tokenRequest = new FormUrlEncodedContent([
             new KeyValuePair<string, string>("client_id", settings.ClientId),
             new KeyValuePair<string, string>("client_secret", settings.ClientSecret),
             new KeyValuePair<string, string>("code", code),
             new KeyValuePair<string, string>("grant_type", "authorization_code"),
             new KeyValuePair<string, string>("redirect_uri", settings.RedirectUri)
-        });
+        ]);
 
-        var response = await _httpClient.PostAsync("https://oauth2.googleapis.com/token", tokenRequest, cancellationToken);
+        var response = await httpClient.PostAsync("https://oauth2.googleapis.com/token", tokenRequest, cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("Failed to exchange code for Google token. Status: {StatusCode}", response.StatusCode);
+            logger.LogError("Failed to exchange code for Google token. Status: {StatusCode}", response.StatusCode);
             return null;
         }
 
@@ -1951,14 +1848,14 @@ public sealed class AuthController : BaseApiController
 
     private async Task<GoogleUserInfo?> GetGoogleUserInfo(string accessToken, CancellationToken cancellationToken)
     {
-        _httpClient.DefaultRequestHeaders.Clear();
-        _httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
+        httpClient.DefaultRequestHeaders.Clear();
+        httpClient.DefaultRequestHeaders.Add("Authorization", $"Bearer {accessToken}");
 
-        var response = await _httpClient.GetAsync("https://www.googleapis.com/oauth2/v2/userinfo", cancellationToken);
+        var response = await httpClient.GetAsync("https://www.googleapis.com/oauth2/v2/userinfo", cancellationToken);
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("Failed to get Google user info. Status: {StatusCode}", response.StatusCode);
+            logger.LogError("Failed to get Google user info. Status: {StatusCode}", response.StatusCode);
             return null;
         }
 
@@ -1972,7 +1869,7 @@ public sealed class AuthController : BaseApiController
     private async Task<User> FindOrCreateGoogleUser(GoogleUserInfo googleUser, CancellationToken cancellationToken)
     {
         // First, check if user exists by external login
-        var existingExternalLogin = await _context.ExternalLogins
+        var existingExternalLogin = await context.ExternalLogins
             .Include(el => el.User)
                 .ThenInclude(u => u.UserRoles)
                     .ThenInclude(ur => ur.Role)
@@ -1983,7 +1880,7 @@ public sealed class AuthController : BaseApiController
 
         if (existingExternalLogin != null)
         {
-            _logger.LogInformation("Found existing Google user {UserId}", existingExternalLogin.User.Id);
+            logger.LogInformation("Found existing Google user {UserId}", existingExternalLogin.User.Id);
             var saveRequired = false;
 
             // Ensure user's email is marked verified when they sign in via Google
@@ -1995,20 +1892,16 @@ public sealed class AuthController : BaseApiController
             }
 
             if (await TryUpdateAvatarFromProviderAsync(existingExternalLogin.User, googleUser.Picture, "google", cancellationToken))
-            {
                 saveRequired = true;
-            }
 
-            if (saveRequired)
-            {
-                await _context.SaveChangesAsync(cancellationToken);
-            }
+            if (saveRequired) 
+                await context.SaveChangesAsync(cancellationToken);
 
             return existingExternalLogin.User;
         }
 
         // Check if user exists by email
-        var existingUser = await _context.Users
+        var existingUser = await context.Users
             .Include(u => u.UserRoles)
                 .ThenInclude(ur => ur.Role)
             .Include(u => u.UserTiers)
@@ -2028,7 +1921,7 @@ public sealed class AuthController : BaseApiController
                 LinkedAt = DateTimeOffset.UtcNow
             };
 
-            _context.ExternalLogins.Add(externalLogin);
+            context.ExternalLogins.Add(externalLogin);
             // If the existing user's email wasn't verified, trust Google's verification and mark it verified
             if (!existingUser.EmailVerified)
             {
@@ -2038,41 +1931,43 @@ public sealed class AuthController : BaseApiController
 
             await TryUpdateAvatarFromProviderAsync(existingUser, googleUser.Picture, "google", cancellationToken);
 
-            await _context.SaveChangesAsync(cancellationToken);
+            await context.SaveChangesAsync(cancellationToken);
 
-            _logger.LogInformation("Linked Google account to existing user {UserId}", existingUser.Id);
+            logger.LogInformation("Linked Google account to existing user {UserId}", existingUser.Id);
             return existingUser;
         }
 
         // Parse display name into first and last name (if possible)
-        string parsedFirstName = googleUser.GivenName;
-        string parsedLastName = googleUser.FamilyName;
-        var fullName = (googleUser.Name ?? string.Empty).Trim();
+        var parsedFirstName = googleUser.GivenName;
+        var parsedLastName = googleUser.FamilyName;
+        var fullName = (googleUser.Name).Trim();
         if (string.IsNullOrEmpty(parsedFirstName) && !string.IsNullOrEmpty(fullName))
         {
             var parts = fullName.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 1)
+            
+            switch (parts.Length)
             {
-                parsedFirstName = parts[0];
-                parsedLastName = string.Empty;
-            }
-            else if (parts.Length >= 2)
-            {
-                parsedFirstName = parts[0];
-                parsedLastName = parts[^1]; // last word as last name
+                case 1:
+                    parsedFirstName = parts[0];
+                    parsedLastName = string.Empty;
+                    break;
+                case >= 2:
+                    parsedFirstName = parts[0];
+                    parsedLastName = parts[^1]; // last word as last name
+                    break;
             }
         }
 
         // Create new user
         var now = DateTimeOffset.UtcNow;
 
-        var freeTier = await _context.Tiers
+        var freeTier = await context.Tiers
             .AsNoTracking()
             .FirstOrDefaultAsync(t => t.Id == (int)TierType.Free, cancellationToken);
 
         if (freeTier is null)
         {
-            _logger.LogError("Default free tier definition is missing. Unable to create Google OAuth user for {Email}", googleUser.Email);
+            logger.LogError("Default free tier definition is missing. Unable to create Google OAuth user for {Email}", googleUser.Email);
             throw new InvalidOperationException("Default tier configuration is missing.");
         }
 
@@ -2094,10 +1989,7 @@ public sealed class AuthController : BaseApiController
         };
 
         var cachedAvatar = await CacheExternalAvatarAsync(newUser.Id, "google", googleUser.Picture, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(cachedAvatar))
-        {
-            newUser.AvatarUrl = cachedAvatar;
-        }
+        if (!string.IsNullOrWhiteSpace(cachedAvatar)) newUser.AvatarUrl = cachedAvatar;
 
         var newUserTier = new UserTier
         {
@@ -2114,8 +2006,8 @@ public sealed class AuthController : BaseApiController
 
         newUser.UserTiers.Add(newUserTier);
 
-        _context.Users.Add(newUser);
-        _context.UserTiers.Add(newUserTier);
+        context.Users.Add(newUser);
+        context.UserTiers.Add(newUserTier);
 
         // Add external login record
         var newExternalLogin = new ExternalLogin
@@ -2128,10 +2020,10 @@ public sealed class AuthController : BaseApiController
             LinkedAt = now
         };
 
-        _context.ExternalLogins.Add(newExternalLogin);
+        context.ExternalLogins.Add(newExternalLogin);
 
         // Assign default user role (match the registration pattern)
-        var defaultRole = await _context.Roles.FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
+        var defaultRole = await context.Roles.FirstOrDefaultAsync(r => r.Name == "user", cancellationToken);
         if (defaultRole != null)
         {
             var userRoleLink = new UserRole
@@ -2140,23 +2032,23 @@ public sealed class AuthController : BaseApiController
                 RoleId = defaultRole.Id
             };
 
-            _context.UserRoles.Add(userRoleLink);
+            context.UserRoles.Add(userRoleLink);
             newUser.UserRoles.Add(userRoleLink);
         }
 
-        await _context.SaveChangesAsync(cancellationToken);
+        await context.SaveChangesAsync(cancellationToken);
 
-        _logger.LogInformation("Created new user from Google OAuth {UserId}", newUser.Id);
+        logger.LogInformation("Created new user from Google OAuth {UserId}", newUser.Id);
 
         // Send welcome email for new Google OAuth users
         try
         {
-            await _emailService.SendWelcomeEmailAsync(newUser.Email, newUser.FirstName ?? "User");
-            _logger.LogInformation("Welcome email sent to new Google OAuth user {Email}", newUser.Email);
+            await emailService.SendWelcomeEmailAsync(newUser.Email, newUser.FirstName ?? "User");
+            logger.LogInformation("Welcome email sent to new Google OAuth user {Email}", newUser.Email);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to send welcome email to new Google OAuth user {Email}", newUser.Email);
+            logger.LogError(ex, "Failed to send welcome email to new Google OAuth user {Email}", newUser.Email);
             // Continue without failing - user creation was successful
         }
 
@@ -2170,9 +2062,7 @@ public sealed class AuthController : BaseApiController
         CancellationToken cancellationToken)
     {
         if (!ShouldReplaceAvatar(user.AvatarUrl, provider) || string.IsNullOrWhiteSpace(externalUrl))
-        {
             return false;
-        }
 
         var cachedUrl = await CacheExternalAvatarAsync(user.Id, provider, externalUrl, cancellationToken);
         if (string.IsNullOrWhiteSpace(cachedUrl) ||
@@ -2193,9 +2083,7 @@ public sealed class AuthController : BaseApiController
         CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(externalUrl))
-        {
             return null;
-        }
 
         try
         {
@@ -2203,14 +2091,14 @@ public sealed class AuthController : BaseApiController
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("image/*"));
             request.Headers.UserAgent.ParseAdd(ExternalAvatarUserAgent);
 
-            using var response = await _httpClient.SendAsync(
+            using var response = await httpClient.SendAsync(
                 request,
                 HttpCompletionOption.ResponseHeadersRead,
                 cancellationToken);
 
             if (!response.IsSuccessStatusCode)
             {
-                _logger.LogWarning(
+                logger.LogWarning(
                     "Failed to download {Provider} avatar for user {UserId}. StatusCode {StatusCode}",
                     provider,
                     userId,
@@ -2223,7 +2111,7 @@ public sealed class AuthController : BaseApiController
 
             await using var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken);
 
-            var uploadResult = await _blobStorageService.UploadImageAsync(
+            var uploadResult = await blobStorageService.UploadImageAsync(
                 sourceStream,
                 $"{provider}-avatar{GetExtensionFromContentType(resolvedContentType)}",
                 resolvedContentType,
@@ -2234,7 +2122,7 @@ public sealed class AuthController : BaseApiController
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(
+            logger.LogWarning(
                 ex,
                 "Failed to cache {Provider} avatar for user {UserId}",
                 provider,
@@ -2246,9 +2134,7 @@ public sealed class AuthController : BaseApiController
     private static bool ShouldReplaceAvatar(string? currentAvatarUrl, string provider)
     {
         if (string.IsNullOrWhiteSpace(currentAvatarUrl))
-        {
             return true;
-        }
 
         return provider.ToLowerInvariant() switch
         {
@@ -2315,13 +2201,13 @@ public sealed class AuthController : BaseApiController
             Id = Guid.NewGuid(),
             UserId = user.Id,
             AuthMethod = authMethod,
-            UserAgent = Request.Headers.UserAgent.ToString() ?? "Unknown",
+            UserAgent = Request.Headers.UserAgent.ToString(),
             IpAddress = HttpContext.Connection.RemoteIpAddress ?? System.Net.IPAddress.Loopback,
             CreatedAt = DateTimeOffset.UtcNow,
             LastSeenAt = DateTimeOffset.UtcNow
         };
 
-        _context.Sessions.Add(session);
+        context.Sessions.Add(session);
 
         // Create refresh token
         var refreshTokenValue = GenerateRefreshToken();
@@ -2336,11 +2222,11 @@ public sealed class AuthController : BaseApiController
             IssuedAt = DateTimeOffset.UtcNow
         };
 
-        _context.RefreshTokens.Add(refreshToken);
-        await _context.SaveChangesAsync(cancellationToken);
+        context.RefreshTokens.Add(refreshToken);
+        await context.SaveChangesAsync(cancellationToken);
 
         // Generate JWT with session ID
-        var accessToken = _jwtService.GenerateToken(user, session.Id);
+        var accessToken = jwtService.GenerateToken(user, session.Id);
 
         var userInfo = await BuildUserInfoAsync(
             user,
@@ -2359,7 +2245,7 @@ public sealed class AuthController : BaseApiController
         var username = cleanName;
         var counter = 1;
 
-        while (await _context.Users.AnyAsync(u => u.Username == username, cancellationToken))
+        while (await context.Users.AnyAsync(u => u.Username == username, cancellationToken))
         {
             username = $"{cleanName}{counter}";
             counter++;
@@ -2399,7 +2285,7 @@ public sealed class AuthController : BaseApiController
 
         var roles = rolesOverride != null
             ? rolesOverride.ToArray()
-            : user.UserRoles?.Select(ur => ur.Role.Name).ToArray() ?? Array.Empty<string>();
+            : user.UserRoles.Select(ur => ur.Role.Name).ToArray();
 
         var activeTier = activeTierOverride ?? ResolveActiveTier(user);
         activeTier ??= await GetActiveTierInfoAsync(user.Id, cancellationToken);
@@ -2422,7 +2308,7 @@ public sealed class AuthController : BaseApiController
 
     private static UserTierInfo? ResolveActiveTier(User user)
     {
-        if (user.UserTiers is null || user.UserTiers.Count == 0)
+        if (user.UserTiers.Count == 0)
             return null;
 
         var now = DateTimeOffset.UtcNow;
@@ -2449,7 +2335,7 @@ public sealed class AuthController : BaseApiController
     {
         var now = DateTimeOffset.UtcNow;
 
-        return await _context.UserTiers
+        return await context.UserTiers
             .AsNoTracking()
             .Where(ut => ut.UserId == userId &&
                          ut.IsActive &&
@@ -2469,10 +2355,10 @@ public sealed class AuthController : BaseApiController
     private CookieOptions CreateSecureCookieOptions(TimeSpan? maxAge = null)
     {
         var isHttps = HttpContext.Request.IsHttps;
-        var isDevelopment = _configuration.GetValue<bool>("IsDevelopment", false) ||
-                           !_configuration.GetValue<bool>("IsProduction", false);
+        var isDevelopment = configuration.GetValue("IsDevelopment", false) ||
+                           !configuration.GetValue("IsProduction", false);
 
-        _logger.LogInformation("Cookie configuration - HTTPS: {IsHttps}, Development: {IsDevelopment}", isHttps, isDevelopment);
+        logger.LogInformation("Cookie configuration - HTTPS: {IsHttps}, Development: {IsDevelopment}", isHttps, isDevelopment);
 
         var cookieOptions = new CookieOptions
         {
@@ -2487,7 +2373,7 @@ public sealed class AuthController : BaseApiController
         if (isDevelopment && HttpContext.Request.Host.Host == "localhost")
         {
             cookieOptions.Domain = "localhost";
-            _logger.LogInformation("Setting cookie domain to 'localhost' for development cross-port access");
+            logger.LogInformation("Setting cookie domain to 'localhost' for development cross-port access");
         }
 
         return cookieOptions;

@@ -1,6 +1,5 @@
 ﻿using Linqyard.Api.Extensions;
 using Linqyard.Contracts;
-using Linqyard.Contracts.Responses;
 using Linqyard.Infra;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Primitives;
@@ -25,12 +24,12 @@ public abstract class BaseApiController : ControllerBase
     /// <summary>
     /// Standard request ID header name.
     /// </summary>
-    public const string HeaderRequestId = "X-Request-Id";
+    private const string HeaderRequestId = "X-Request-Id";
 
     /// <summary>
     /// Standard correlation ID header name.
     /// </summary>
-    public const string HeaderCorrelationId = "X-Correlation-Id";
+    private const string HeaderCorrelationId = "X-Correlation-Id";
 
     // -------- Context helpers --------
 
@@ -74,7 +73,7 @@ public abstract class BaseApiController : ControllerBase
     /// <summary>
     /// Gets a value indicating whether the current user is authenticated.
     /// </summary>
-    protected bool IsAuthenticated => User?.Identity?.IsAuthenticated == true;
+    protected bool IsAuthenticated => User.Identity?.IsAuthenticated == true;
 
     // -------- ProblemDetails helpers (RFC 7807) --------
 
