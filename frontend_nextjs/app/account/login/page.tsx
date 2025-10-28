@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
 import { toast } from "sonner";
 import { usePost, useApi } from "@/hooks/useApi";
 import { LoginRequest, LoginResponse } from "@/hooks/types";
-import { useUser } from "@/contexts/UserContext";
+import { useUser, userHelpers } from "@/contexts/UserContext";
 import { useRouter } from "next/navigation";
 import GoogleOAuthButton from "@/components/GoogleOAuthButton";
 import GitHubOAuthButton from "@/components/GitHubOAuthButton";
@@ -49,9 +49,16 @@ export default function LoginPage() {
   
   // Hooks //nuked login error state
   const { mutate: login, loading: isLoading } = usePost<LoginResponse>("/auth/login");
-  const { setUser } = useUser();
+  const { user, setUser, isInitialized } = useUser();
   const { setTokens } = useApi();
   const router = useRouter();
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (isInitialized && user && userHelpers.isSessionValid(user)) {
+      router.replace('/');
+    }
+  }, [user, isInitialized, router]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({

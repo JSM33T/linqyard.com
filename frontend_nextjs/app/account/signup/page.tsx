@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +22,7 @@ import { usePost } from "@/hooks/useApi";
 import { apiService } from "@/hooks/apiService";
 import { AvailabilityCheckResponse, SignupRequest, SignupResponse } from "@/hooks/types";
 import { useRouter } from "next/navigation";
+import { useUser, userHelpers } from "@/contexts/UserContext";
 import GoogleOAuthButton from "@/components/GoogleOAuthButton";
 import GitHubOAuthButton from "@/components/GitHubOAuthButton";
 
@@ -90,7 +91,15 @@ export default function SignupPage() {
   
   // Hooks nuked: , error: signupError
   const { mutate: signup, loading: isLoading } = usePost<SignupResponse>("/auth/register");
+  const { user, isInitialized } = useUser();
   const router = useRouter();
+
+  // Redirect if user is already logged in
+  useEffect(() => {
+    if (isInitialized && user && userHelpers.isSessionValid(user)) {
+      router.replace('/');
+    }
+  }, [user, isInitialized, router]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
