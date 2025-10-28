@@ -12,6 +12,7 @@ import { FooterVisibilityProvider } from "@/contexts/FooterVisibilityContext";
 import { Toaster } from "@/components/ui/sonner";
 import { SessionChecker } from "@/components/SessionChecker";
 import { FingerprintInitializer } from "@/components/FingerprintInitializer";
+import TopLoader from "@/components/TopLoader";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -55,6 +56,7 @@ export default function RootLayout({
           <UserProvider>
             <NavbarVisibilityProvider>
               <FooterVisibilityProvider>
+              <TopLoader />
               <FingerprintInitializer />
               <SessionChecker />
               <Navbar />
