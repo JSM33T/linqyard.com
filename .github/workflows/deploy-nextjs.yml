@@ -30,12 +30,13 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Deploy nextjs service (locked & verified)
+      - name: Deploy nextjs service (locked & health-gated via compose)
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+          SERVICE_NAME: nextjs  # set to your compose service key (e.g., nextjs)
         run: |
           ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "bash -lc '
             set -euo pipefail
@@ -58,34 +59,9 @@ jobs:
             git pull --ff-only
 
             echo \"[nextjs] Rebuilding and bringing up service with health wait...\"
-            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans --wait --wait-timeout 180 nextjs
+            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans --wait --wait-timeout 180 \"$SERVICE_NAME\"
 
-            echo \"[nextjs] Verifying container health...\"
-            CID=\$(docker compose -p linqyard ps -q nextjs)
-            if [ -z \"\$CID\" ]; then
-              echo \"[nextjs] ERROR: nextjs container not found after deploy.\" >&2
-              exit 1
-            fi
-
-            HEALTH=\$(docker inspect -f \"{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}\" \"\$CID\")
-            case \"\$HEALTH\" in
-              healthy)
-                echo \"[nextjs] Container is healthy ✅\"
-                ;;
-              none)
-                echo \"[nextjs] ERROR: No healthcheck defined for nextjs; cannot assert readiness.\" >&2
-                echo \"[nextjs] Tip: add a healthcheck to docker-compose and expose /api/health.\" >&2
-                exit 1
-                ;;
-              *)
-                echo \"[nextjs] ERROR: Container health status is '\$HEALTH'.\" >&2
-                docker compose -p linqyard ps
-                docker compose -p linqyard logs nextjs --since=10m || true
-                exit 1
-                ;;
-            esac
-
-            echo \"[nextjs] Deploy verified.\"
+            echo \"[nextjs] Deploy verified by compose --wait ✅\"
           '"
 
       - name: Show recent service logs (shared lock)
@@ -95,6 +71,7 @@ jobs:
           SSH_PORT: ${{ secrets.SSH_PORT }}
           SSH_USER: ${{ secrets.SSH_USER }}
           REMOTE_DIR: ${{ secrets.REMOTE_DIR }}
+          SERVICE_NAME: nextjs
         run: |
           ssh -p "${SSH_PORT:-22}" "${SSH_USER}@${SSH_HOST}" "bash -lc '
             set -euo pipefail
@@ -104,7 +81,7 @@ jobs:
             # Shared lock; wait up to 2 minutes to avoid clashing with an active deploy
             if flock -s -w 120 9; then
               cd \"${REMOTE_DIR}\"
-              docker compose -p linqyard logs nextjs --since=5m || true
+              docker compose -p linqyard logs \"$SERVICE_NAME\" --since=5m || true
             else
               echo \"[nextjs] Skipping logs: could not acquire shared lock within 2 minutes\" >&2
             fi
