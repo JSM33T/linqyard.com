@@ -30,7 +30,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Deploy nextjs service (locked)
+      - name: Deploy nextjs service (locked & verified)
         env:
           SSH_HOST: ${{ secrets.SSH_HOST }}
           SSH_PORT: ${{ secrets.SSH_PORT }}
@@ -48,7 +48,6 @@ jobs:
               exit 1
             fi
             echo \"[nextjs] Lock acquired at \$(date -Is)\"
-            # IMPORTANT: avoid single quotes inside this single-quoted script
             trap \"echo [nextjs] Releasing lock; flock -u 9\" EXIT
 
             cd \"${REMOTE_DIR}\"
@@ -58,9 +57,36 @@ jobs:
             git clean -fd -e logs/
             git pull --ff-only
 
-            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans nextjs
-            docker compose -p linqyard ps
-          '" || echo '[nextjs] Build or deploy failed'
+            echo \"[nextjs] Rebuilding and bringing up service with health wait...\"
+            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans --wait --wait-timeout 180 nextjs
+
+            echo \"[nextjs] Verifying container health...\"
+            CID=\$(docker compose -p linqyard ps -q nextjs)
+            if [ -z \"\$CID\" ]; then
+              echo \"[nextjs] ERROR: nextjs container not found after deploy.\" >&2
+              exit 1
+            fi
+
+            HEALTH=\$(docker inspect -f \"{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}\" \"\$CID\")
+            case \"\$HEALTH\" in
+              healthy)
+                echo \"[nextjs] Container is healthy ✅\"
+                ;;
+              none)
+                echo \"[nextjs] ERROR: No healthcheck defined for nextjs; cannot assert readiness.\" >&2
+                echo \"[nextjs] Tip: add a healthcheck to docker-compose and expose /api/health.\" >&2
+                exit 1
+                ;;
+              *)
+                echo \"[nextjs] ERROR: Container health status is '\$HEALTH'.\" >&2
+                docker compose -p linqyard ps
+                docker compose -p linqyard logs nextjs --since=10m || true
+                exit 1
+                ;;
+            esac
+
+            echo \"[nextjs] Deploy verified.\"
+          '"
 
       - name: Show recent service logs (shared lock)
         if: always()
