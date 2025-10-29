@@ -69,20 +69,25 @@ As Linqyard scales, the goal is to keep the backend **stateless, modular, and cl
 
 ## AI and Automation Layer
 
-We’re currently building an **AI microservice** with **FastAPI**, designed to power smarter automation within Linqyard — things like link categorization, auto-generated summaries, and contextual recommendations.
+The **AI microservice** is now fully built using **.NET**, integrated directly within our service ecosystem.
 
-- **LangChain** will provide structured reasoning and contextual embedding pipelines.
-- The service communicates asynchronously with the main API via HTTP and event triggers.
-- It’s isolated by design — ensuring that AI tasks never overload the core API.
+It handles automation tasks such as:
+- **Smart link categorization** and tagging.
+- **Auto-generated summaries** for profile content.
+- **Contextual recommendations** and analytics insights.
 
-This layer is in active development, forming the base for upcoming **smart link suggestions**, **content summaries**, and **AI-assisted user flows**.
+The service uses **embedding models** and **semantic processing** libraries to deliver contextual intelligence while maintaining high performance and reliability.
+
+It communicates with the main API through internal HTTP endpoints and background jobs — ensuring that AI operations are **asynchronous**, **fault-tolerant**, and **non-blocking** for the user experience.
+
+This foundation powers our upcoming **AI-assisted features**, including **link insights**, **profile recommendations**, and **automated analytics summaries**.
 
 ---
 
 ## Infrastructure & Deployment
 
 Linqyard’s infrastructure is containerized using **Docker** and orchestrated through **Docker Compose** (with an eye toward future **Kubernetes migration**).
-Each service — Web API, FastAPI, Redis, PostgreSQL, and the front-end — runs in its own isolated container.
+Each service — Web API, AI service, Redis, PostgreSQL, and the front-end — runs in its own isolated container.
 
 - **Storage:** Assets such as profile images and cover photos are hosted on **Azure Blob Storage** for reliability and CDN-level performance.
 - **Scaling:** Stateless containers allow us to spin up additional instances easily during spikes.
