@@ -10,15 +10,7 @@ services:
     volumes:
       - /home/jassi/deployments/Linqyard/logs/dotnet:/app/logs/dotnet
       - /home/jassi/deployments/Linqyard/cache:/app/cache
-      
-  fastapi:
-    build:
-      context: ./backend_fastapi
-      dockerfile: Dockerfile
-    ports:
-      - "8001:8001"
-    env_file:
-      - .env
+
   nextjs:
     build:
       context: ./frontend_nextjs
