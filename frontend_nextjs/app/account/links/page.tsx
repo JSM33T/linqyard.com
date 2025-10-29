@@ -100,7 +100,7 @@ function SortableLinkRow({ item, onEdit, onDelete }: { item: LinkItem; onEdit: (
     <div
       ref={setNodeRef}
       style={style}
-      className={"group/link flex items-center gap-3 rounded-lg border bg-background/60 hover:bg-accent/50 transition-all p-3"}
+  className={"group/link flex items-center gap-3 rounded-lg border bg-card/40 dark:bg-card/30 hover:bg-accent/50 transition-all p-3 shadow-sm backdrop-blur-sm border-border/60"}
     >
       <button
         {...attributes}
@@ -251,7 +251,7 @@ function GroupSection({
   const { setNodeRef, isOver } = useDroppable({ id: containerId });
 
   return (
-    <AccordionItem value={containerId} className="rounded-xl border border-border bg-card last:border-b">
+  <AccordionItem value={containerId} className="rounded-xl border border-border/60 bg-card/50 dark:bg-card/40 last:border-b shadow-sm backdrop-blur-sm">
       <AccordionTrigger className="px-4 no-underline hover:no-underline">
         {id ? (
           <SortableGroupHeader 
@@ -301,7 +301,7 @@ function GroupSection({
             </AnimatePresence>
 
             {items.length === 0 && (
-              <div className="flex items-center justify-center h-24 border-2 border-dashed rounded-lg">
+              <div className="flex items-center justify-center h-24 border-2 border-dashed rounded-lg bg-card/40 dark:bg-card/30">
                 <div className="text-center">
                   <Plus className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
                   <p className="text-sm text-muted-foreground">{onEmptyDropHint ?? "Drop links here"}</p>
