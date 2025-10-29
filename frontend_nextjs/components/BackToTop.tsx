@@ -44,7 +44,11 @@ export default function BackToTop() {
         className={[
           "h-12 w-12 rounded-full shadow-lg",
           "bg-background/70 backdrop-blur-md",
-          "border border-border/50",
+          // subtle secondary outline + fallback border
+          "border border-border/50 dark:border-border/40",
+          "border-secondary/30 dark:border-secondary/40",
+          // visible focus outline in secondary color
+          "focus-visible:ring-2 focus-visible:ring-secondary/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           "hover:bg-background/90 hover:scale-110",
           "transition-all duration-300",
           "text-foreground hover:text-foreground",

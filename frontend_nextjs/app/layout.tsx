@@ -5,7 +5,6 @@ import "./override.css";
 import Navbar from "@/components/navbar";
 import Footer from "@/components/footer";
 import BackToTop from "@/components/BackToTop";
-import ChatWidget from "@/components/chatbot/ChatWidget";
 import { UserProvider } from "@/contexts/UserContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { NavbarVisibilityProvider } from "@/contexts/NavbarVisibilityContext";
@@ -64,7 +63,6 @@ export default function RootLayout({
               <main className="flex-1">{children}</main>
               <Footer />
               <BackToTop />
-              <ChatWidget />
               <Toaster />
               </FooterVisibilityProvider>
             </NavbarVisibilityProvider>
