@@ -1,29 +1,6 @@
 version: "3.9"
 
 services:
-  # =========================
-  # FastAPI (Python backend)
-  # =========================
-  fastapi:
-    # Bind-mount local source so code changes hot-reload inside the container (dev only)
-    volumes:
-      - ./backend_fastapi:/app:rw
-    # Working directory inside the container where uvicorn will run
-    working_dir: /app
-    # Start the dev server with live reload and listen on all interfaces
-    command: uvicorn main:app --host 0.0.0.0 --port 8001 --reload
-    # Expose the container port (add "ports:" below if you want to reach it from host)
-    # ports:
-    #   - "8001:8001"
-    # Optional: ensure it comes up after dotnet if FastAPI consumes it
-    # depends_on:
-    #   - dotnet
-    # Optional: healthcheck to make docker aware of readiness
-    # healthcheck:
-    #   test: ["CMD", "wget", "-qO-", "http://localhost:8001/health"]   # adjust endpoint
-    #   interval: 10s
-    #   timeout: 3s
-    #   retries: 5
 
   # =========================
   # .NET 9 API (C# backend)
