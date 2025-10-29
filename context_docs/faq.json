@@ -1,0 +1,126 @@
+{
+  "knowledge_domain": "linqyard-faq-compact",
+  "last_updated": "2025-10-29",
+  "meta": {
+    "description": "Compact Linqyard FAQ used for context-aware chat responses. Each entry includes triggers, concise answers, and optional instructions for clarification.",
+    "behavior": {
+      "on_uncertain_match": "Ask a clarifying question before answering.",
+      "on_confident_match": "Respond with the answer, include helpful links, and cite the reference."
+    }
+  },
+  "faqs": [
+    {
+      "id": "greeting",
+      "question": "User greeting or welcome message",
+      "aliases": [
+        "hi",
+        "hello",
+        "hey",
+        "hiya",
+        "good morning",
+        "good evening",
+        "greetings",
+        "welcome",
+        "what's up"
+      ],
+      "answer": "Hello! I'm the Linqyard assistant. I can help you with signing up, logging in, integrations, and troubleshooting. What would you like to explore today?",
+      "clarify": "Is there something specific in Linqyard you want to dive into?",
+      "links": [
+        { "label": "Help Center", "url": "https://linqyard.com" }
+      ]
+    },
+    {
+      "id": "signup",
+      "question": "How to sign up?",
+      "aliases": [
+        "create account",
+        "register",
+        "new workspace"
+      ],
+      "answer": "Sign up on Linqyard to create your workspace. Use your name, email, and password, then verify your email to activate.",
+      "clarify": "Would you like help with manual signup or API-based signup?",
+      "links": [
+        { "label": "Signup", "url": "https://app.linqyard.com/signup" }
+      ]
+    },
+    {
+      "id": "login",
+      "question": "How to log in?",
+      "aliases": [
+        "sign in",
+        "access dashboard",
+        "login issue"
+      ],
+      "answer": "Go to app.linqyard.com/login, enter your registered email and password, and complete verification if prompted.",
+      "clarify": "Are you unable to log in or just looking for the login link?",
+      "links": [
+        { "label": "Login", "url": "https://app.linqyard.com/login" },
+        { "label": "Reset Password", "url": "https://app.linqyard.com/reset-password" }
+      ]
+    },
+    {
+      "id": "analytics",
+      "question": "Does Linqyard have analytics?",
+      "aliases": [
+        "track clicks",
+        "view performance",
+        "insights"
+      ],
+      "answer": "Yes, analytics are built in. The Insights dashboard shows link clicks, referrers, devices, and regions.",
+      "clarify": "Do you want an overview of built-in analytics or instructions for enabling them?",
+      "links": [
+        { "label": "Insights", "url": "https://app.linqyard.com/dashboard/insights" },
+        { "label": "Docs", "url": "https://linqyard.com/features/analytics" }
+      ]
+    },
+    {
+      "id": "customize",
+      "question": "How to customize my page?",
+      "aliases": [
+        "edit theme",
+        "change color",
+        "add links"
+      ],
+      "answer": "Go to your dashboard’s Design tab to update your avatar, links, and color theme.",
+      "clarify": "Do you want help changing appearance or managing links?",
+      "links": [
+        { "label": "Design Dashboard", "url": "https://linqyard.com/dashboard/design" }
+      ]
+    },
+    {
+      "id": "integrations",
+      "question": "What integrations are available?",
+      "aliases": [
+        "connect services",
+        "crm",
+        "analytics tools"
+      ],
+      "answer": "Linqyard integrates with tools like Notion, GitHub, and Google Analytics. Find setup steps in the integration catalogue.",
+      "clarify": "Which service do you want to connect?",
+      "links": [
+        { "label": "Integrations", "url": "https://linqyard.com/integrations/catalogue" }
+      ]
+    },
+    {
+      "id": "diagnostics",
+      "question": "Webhook or notification issues?",
+      "aliases": [
+        "failed webhooks",
+        "run diagnostics",
+        "notifications delayed"
+      ],
+      "answer": "You can trigger a diagnostics check to verify webhook delivery and queue status. Results are sent to workspace admins.",
+      "clarify": "Do you want me to trigger the diagnostics or just explain how it works?",
+      "links": [
+        { "label": "Diagnostics Guide", "url": "https://linqyard.com/runbooks/webhooks/diagnostics" }
+      ]
+    }
+  ],
+  "fallback": {
+    "ask": "I’m not sure what you meant — could you clarify your question about Linqyard?",
+    "contact": {
+      "label": "Contact Support",
+      "url": "https://linqyard.com/support"
+    }
+  }
+}
