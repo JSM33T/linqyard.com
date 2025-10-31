@@ -785,11 +785,16 @@ public sealed class AuthController(
 
         try
         {
+            if (string.IsNullOrWhiteSpace(request.Token))
+                return BadRequestProblem("Verification token is required");
+
+            var normalizedToken = request.Token.Trim().ToUpperInvariant();
+
             // Find verification token (comparing plain tokens for development)
             var otpCode = await context.OtpCodes
                 .FirstOrDefaultAsync(oc => oc.Email == request.Email &&
-                                         oc.CodeHash.Equals(request.Token, StringComparison.CurrentCultureIgnoreCase) &&
-                                         oc.Purpose == "Signup",
+                                          oc.CodeHash == normalizedToken &&
+                                          oc.Purpose == "Signup",
                                    cancellationToken);
 
             if (otpCode == null) 
