@@ -139,7 +139,7 @@ export default function ContactClient() {
             Contact
           </Badge>
           <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
-            We're here to help
+            We&apos;re here to help
           </h1>
           <p className="text-muted-foreground max-w-2xl mx-auto">
             Whether you have a product question, need help troubleshooting, or
@@ -195,7 +195,7 @@ export default function ContactClient() {
             <CardHeader className="space-y-2">
               <CardTitle>Send us a message</CardTitle>
               <CardDescription>
-                Share a few details and we'll respond within one business day.
+                Share a few details and we&apos;ll respond within one business day.
               </CardDescription>
             </CardHeader>
             <CardContent>

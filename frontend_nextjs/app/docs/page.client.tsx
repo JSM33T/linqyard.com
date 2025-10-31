@@ -204,7 +204,7 @@ export default function DocsPageClient() {
                 <CardContent className="space-y-3 text-sm">
                   <ul className="list-disc pl-5 space-y-1">
                     <li>
-                      <span className="font-medium">Forgot password</span>: Use the "Forgot password" link on the sign-in page to request a password reset email. Follow the instructions in the email to set a new password.
+                      <span className="font-medium">Forgot password</span>: Use the &quot;Forgot password&quot; link on the sign-in page to request a password reset email. Follow the instructions in the email to set a new password.
                     </li>
                     <li>
                       Reset links are one-time use and expire after a short period for security. If a link expires, request a new reset from the sign-in page.
