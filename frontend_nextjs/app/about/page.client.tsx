@@ -22,6 +22,8 @@ import {
   TrendingUp,
   CheckCircle,
   ExternalLink,
+  Mail,
+  Github,
 } from "lucide-react";
 
 const containerVariants = {
@@ -40,7 +42,7 @@ const itemVariants = {
 const principles = [
   {
     icon: <Shield className="h-6 w-6" />,
-    title: "Privacy‑first",
+    title: "Privacy-first",
     desc:
       "Built with security in mind. Your data stays yours with transparent handling and minimal collection.",
   },
@@ -51,7 +53,7 @@ const principles = [
   },
   {
     icon: <Users className="h-6 w-6" />,
-    title: "Creator‑friendly",
+    title: "Creator-friendly",
     desc: "Manage links and CTAs without clutter. Start simple; grow gradually.",
   },
   {
@@ -72,19 +74,11 @@ const roadmap = [
   },
   {
     when: "Soon",
-    items: [
-      "Basic teams & roles",
-      "Import from common socials",
-      "Improved analytics summaries",
-    ],
+    items: ["Basic teams & roles", "Import from common socials", "Improved analytics summaries"],
   },
   {
     when: "Exploring",
-    items: [
-      "UTM helpers",
-      "QR sharing",
-      "Bulk actions",
-    ],
+    items: ["UTM helpers", "QR sharing", "Bulk actions"],
   },
 ];
 
@@ -95,26 +89,44 @@ interface GitHubContributor {
   contributions: number;
 }
 
+const FOUNDER_NAME = "Jasmeet Singh";
+const FOUNDER_GITHUB = "jsm33t"; // case-insensitive match
+
 export default function AboutClient() {
   const [contributors, setContributors] = useState<GitHubContributor[]>([]);
   const [loading, setLoading] = useState(true);
+  const [founderContribs, setFounderContribs] = useState<number | null>(null);
+  const [founderAvatar, setFounderAvatar] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchContributors = async () => {
       try {
         const response = await fetch(
-          'https://api.github.com/repos/jsm33t/linqyard.com/contributors'
+          "https://api.github.com/repos/jsm33t/linqyard.com/contributors"
         );
         if (response.ok) {
-          const data = await response.json();
-          // Filter out bots and take first 8 contributors
+          const data: GitHubContributor[] = await response.json();
+
+          // find founder's entry (if present)
+          const founderEntry = data.find(
+            (c) => c.login?.toLowerCase() === FOUNDER_GITHUB.toLowerCase()
+          );
+          setFounderContribs(founderEntry?.contributions ?? null);
+          setFounderAvatar(founderEntry?.avatar_url ?? null);
+
+          // filter out bots and the founder's own account from the public list
           const filtered = data
-            .filter((c: GitHubContributor) => !c.login.includes('[bot]'))
+            .filter(
+              (c) =>
+                !c.login.includes("[bot]") &&
+                c.login.toLowerCase() !== FOUNDER_GITHUB.toLowerCase()
+            )
             .slice(0, 8);
+
           setContributors(filtered);
         }
       } catch (error) {
-        console.error('Failed to fetch contributors:', error);
+        console.error("Failed to fetch contributors:", error);
       } finally {
         setLoading(false);
       }
@@ -178,6 +190,7 @@ export default function AboutClient() {
           </motion.div>
         </motion.div>
       </motion.section>
+
       {/* How it works */}
       <motion.section
         className="container mx-auto px-4 py-14"
@@ -203,21 +216,27 @@ export default function AboutClient() {
                     <span className="text-primary font-bold text-lg">1</span>
                   </div>
                   <h3 className="font-semibold mb-2">Create your page</h3>
-                  <p className="text-sm text-muted-foreground">Add links and CTAs you want to share with your audience.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Add links and CTAs you want to share with your audience.
+                  </p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span className="text-primary font-bold text-lg">2</span>
                   </div>
                   <h3 className="font-semibold mb-2">Share one URL</h3>
-                  <p className="text-sm text-muted-foreground">Post it on social profiles, bios, and campaigns.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Post it on social profiles, bios, and campaigns.
+                  </p>
                 </div>
                 <div className="text-center">
                   <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-4">
                     <span className="text-primary font-bold text-lg">3</span>
                   </div>
                   <h3 className="font-semibold mb-2">Track & optimize</h3>
-                  <p className="text-sm text-muted-foreground">Monitor clicks, reorder links, and optimize your strategy.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Monitor clicks, reorder links, and optimize your strategy.
+                  </p>
                 </div>
               </div>
             </CardContent>
@@ -235,9 +254,6 @@ export default function AboutClient() {
       >
         <div className="text-center mb-10">
           <h2 className="text-3xl md:text-5xl font-bold">What&apos;s Coming Next</h2>
-          <p className="mt-3 text-muted-foreground max-w-2xl mx-auto">
-            Exciting features in development to make your link management even better.
-          </p>
         </div>
         <div className="grid md:grid-cols-3 gap-6">
           {roadmap.map((group, gi) => (
@@ -289,17 +305,33 @@ export default function AboutClient() {
             <Card className="relative overflow-hidden">
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary" />
               <CardHeader className="flex-row items-start gap-4">
-                <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold shrink-0">
-                  JS
-                </div>
-                <div className="flex-1">
-                  <CardTitle className="text-lg">Jasmeet Singh</CardTitle>
-                  <CardDescription>Founder</CardDescription>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Badge variant="secondary">C#</Badge>
-                    <Badge variant="secondary">DevOps</Badge>
-                    <Badge variant="secondary">AI</Badge>
+                {founderAvatar ? (
+                  <div
+                    className="h-16 w-16 rounded-full overflow-hidden shrink-0 bg-muted flex items-center justify-center"
+                    style={{
+                      backgroundImage: `url(${founderAvatar})`,
+                      backgroundSize: "cover",
+                      backgroundPosition: "center",
+                    }}
+                    aria-hidden
+                  />
+                ) : (
+                  <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-2xl font-bold shrink-0">
+                    {FOUNDER_NAME.split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .slice(0, 2)
+                      .toUpperCase()}
                   </div>
+                )}
+                <div className="flex-1">
+                  <CardTitle className="text-lg">{FOUNDER_NAME}</CardTitle>
+                  <CardDescription>Founder</CardDescription>
+                  {typeof founderContribs === "number" && (
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      <span className="font-semibold">{founderContribs}</span> GitHub contributions
+                    </p>
+                  )}
                 </div>
               </CardHeader>
               <CardContent>
@@ -307,17 +339,21 @@ export default function AboutClient() {
                 <div className="flex gap-2">
                   <Button asChild size="sm" variant="ghost">
                     <Link href="mailto:mail@jsm33t.com">
-                      <ExternalLink className="h-4 w-4" />
+                      <Mail className="h-4 w-4" />
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="ghost">
-                    <Link href="https://github.com/jsm33t" target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4" />
+                    <Link
+                      href={`https://github.com/${FOUNDER_GITHUB}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <Github className="h-4 w-4" />
                     </Link>
                   </Button>
                   <Button asChild size="sm" variant="ghost">
                     <Link href="https://jsm33t.com" target="_blank" rel="noopener noreferrer">
-                      <ExternalLink className="h-4 w-4" />
+                      <Globe className="h-4 w-4" />
                     </Link>
                   </Button>
                 </div>
@@ -325,47 +361,57 @@ export default function AboutClient() {
             </Card>
           </div>
 
-        {/* Contributors */}
-        <div>
-          <h3 className="text-xl font-semibold mb-6">Contributors</h3>
-          {loading ? (
-            <div className="text-center py-8 text-muted-foreground">Loading contributors...</div>
-          ) : contributors.length > 0 ? (
-            <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {contributors.map((contributor) => (
-                <Card key={contributor.login} className="relative overflow-hidden hover:shadow-md transition-shadow">
-                  <div className="absolute left-0 top-0 bottom-0 w-1 bg-muted" />
-                  <div className="flex items-center justify-between gap-3 py-3 px-4">
-                    <div className="flex items-center gap-3 flex-1 min-w-0">
-                      <div 
-                        className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
-                        style={{ 
-                          backgroundImage: `url(${contributor.avatar_url})`,
-                          backgroundSize: 'cover',
-                          backgroundPosition: 'center'
-                        }}
-                      />
-                      <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold truncate">{contributor.login}</div>
-                        <div className="text-xs text-muted-foreground truncate">{contributor.contributions} contributions</div>
+          {/* Contributors */}
+          <div>
+            <h3 className="text-xl font-semibold mb-6">Contributors</h3>
+            {loading ? (
+              <div className="text-center py-8 text-muted-foreground">Loading contributors...</div>
+            ) : contributors.length > 0 ? (
+              <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {contributors.map((contributor) => (
+                  <Card
+                    key={contributor.login}
+                    className="relative overflow-hidden hover:shadow-md transition-shadow"
+                  >
+                    <div className="absolute left-0 top-0 bottom-0 w-1 bg-muted" />
+                    <div className="flex items-center justify-between gap-3 py-3 px-4">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <div
+                          className="h-10 w-10 rounded-full bg-muted flex items-center justify-center text-sm font-bold shrink-0 overflow-hidden"
+                          style={{
+                            backgroundImage: `url(${contributor.avatar_url})`,
+                            backgroundSize: "cover",
+                            backgroundPosition: "center",
+                          }}
+                        />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-semibold truncate">
+                            {contributor.login}
+                          </div>
+                          <div className="text-xs text-muted-foreground truncate">
+                            {contributor.contributions} contributions
+                          </div>
+                        </div>
                       </div>
+                      <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0">
+                        <Link
+                          href={contributor.html_url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </Link>
+                      </Button>
                     </div>
-                    <Button asChild size="sm" variant="ghost" className="h-8 w-8 p-0 shrink-0">
-                      <Link href={contributor.html_url} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="h-4 w-4" />
-                      </Link>
-                    </Button>
-                  </div>
-                </Card>
-              ))}
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">No contributors found.</div>
-          )}
-        </div>
+                  </Card>
+                ))}
+              </div>
+            ) : (
+              <div className="text-center py-8 text-muted-foreground">No contributors found.</div>
+            )}
+          </div>
         </div>
       </motion.section>
-
     </div>
   );
 }
