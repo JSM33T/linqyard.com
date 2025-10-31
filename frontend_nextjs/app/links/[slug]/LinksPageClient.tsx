@@ -346,7 +346,7 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
               {/* Edit action for owner */}
               {isOwner && (
                 <div>
-                  <Link href="/account/links">
+                  <Link href="https://linqyard.com/account/links">
                     <Button variant="default" size="sm" className="rounded-full">
                       Edit
                     </Button>
@@ -417,7 +417,7 @@ export default function LinksPageClient({ username, initialUserData }: LinksPage
                 <span className="font-semibold text-lg group-hover:text-primary transition-colors">Linqyard</span>
               </Link>
               <p className="text-xs text-muted-foreground max-w-md">
-                powred by Linqyard,  <a href="/account/signup" target="_blank" className="text-xs text-primary hover:underline">
+                powred by Linqyard,  <a href="https://linqyard.com/account/signup" target="_blank" className="text-xs text-primary hover:underline">
                 Create your own
               </a>
               </p>
