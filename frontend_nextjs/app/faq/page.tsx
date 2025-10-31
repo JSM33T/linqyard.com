@@ -20,15 +20,19 @@ export default function FaqPage() {
     },
     {
       q: "Is LinqYard free?",
-      a: "Yes! LinqYard offers a Free plan that includes up to 12 links, 2 groups, and basic analytics such as total and top link clicks. You can upgrade to Plus anytime for advanced analytics and design options.",
+      a: "Yes! LinqYard offers a Free plan that includes up to 12 links, 2 groups, and basic analytics such as total and top link clicks. You can upgrade to Plus or Pro anytime for more analytics and advanced design options.",
     },
     {
       q: "What’s included in the Plus plan?",
-      a: "Plus users get unlimited links and groups, advanced analytics (device metrics, location insights, and click-time patterns), along with custom backgrounds, gradients, and theme colors.",
+      a: "Plus users get unlimited links and groups, advanced analytics (device metrics, location insights, and click-time patterns), and enhanced design options like custom backgrounds, gradients, and color accents.",
+    },
+    {
+      q: "What’s included in the Pro plan?",
+      a: "Pro is our professional tier: it includes full analytics with richer dashboards, exportable reports, and team-ready insights. Pro also unlocks premium design controls — full custom themes are coming soon (upcoming feature).",
     },
     {
       q: "Can I customize my page?",
-      a: "Yes. You can personalize your LinqYard page with different themes and layouts. Free users will have access to two basic themes (coming soon), while Plus users can add custom backgrounds and colors for a branded look.",
+      a: "Yes. You can personalize your LinqYard page with different layouts and styling. Free users have access to a couple of basic styles, while Plus users can apply custom backgrounds and color accents for a branded look.",
     },
     {
       q: "How secure is my data?",
@@ -40,11 +44,11 @@ export default function FaqPage() {
     },
     {
       q: "What analytics are available?",
-      a: "Free users can view total click counts and top-performing links. Plus users unlock advanced analytics, including device type, location, and engagement by day and time, all visualized inside the dashboard.",
+      a: "Free users can view total click counts and top-performing links. Plus users get advanced analytics (device type, location, and engagement by day/time). Pro users receive full analytics — deeper dashboards, exportable reports, and more granular insights for professional use.",
     },
     {
       q: "Is a Pro plan available?",
-      a: "Not yet — LinqYard currently offers Free and Plus plans. A future Pro tier may include additional dashboards and professional features based on community feedback.",
+      a: "Yes — Pro is available as our premium tier and includes full analytics and premium design options.",
     },
     {
       q: "Where can I get help or report an issue?",

@@ -28,6 +28,7 @@ import {
 const sections = [
   { id: "onboarding", title: "Onboarding", icon: <UserCheck className="h-4 w-4" /> },
   { id: "account-security", title: "Account & Security", icon: <Shield className="h-4 w-4" /> },
+  { id: "account-recovery", title: "Account Recovery", icon: <Shield className="h-4 w-4" /> },
   { id: "build-your-page", title: "Build Your Page", icon: <Link2 className="h-4 w-4" /> },
   { id: "customization", title: "Customization by Plan", icon: <Palette className="h-4 w-4" /> },
   { id: "analytics", title: "Analytics by Plan", icon: <BarChart3 className="h-4 w-4" /> },
@@ -144,7 +145,7 @@ export default function DocsPageClient() {
                 <CardContent className="space-y-4 text-sm">
                   <ol className="list-decimal pl-5 space-y-2">
                     <li>
-                      <span className="font-medium">Sign up</span> with email & password. Verify your email to secure your account. Google login is supported; GitHub login is coming soon.
+                      <span className="font-medium">Sign up</span> with email & password, or use Google or GitHub to sign in. Verify your email to secure your account.
                     </li>
                     <li>
                       <span className="font-medium">Choose your handle</span> (becomes your subdomain). You’ll get a unique URL like
@@ -164,7 +165,7 @@ export default function DocsPageClient() {
                   <div>
                     <p className="mb-2 text-sm font-medium">Example URLs</p>
                     <pre className="rounded-md border bg-muted/30 p-3 text-xs overflow-x-auto">
-                      <code>https://username.linqyard.com\nhttps://linqyard.com/u/&lt;your-handle&gt;</code>
+                      <code>https://username.linqyard.comhttps://linqyard.com/u/&lt;your-handle&gt;</code>
                     </pre>
                   </div>
                 </CardContent>
@@ -183,9 +184,37 @@ export default function DocsPageClient() {
                 <CardContent className="space-y-3 text-sm">
                   <ul className="list-disc pl-5 space-y-1">
                     <li>Email verification is required to publish your page.</li>
-                    <li>Use a strong password; password reset is available in Settings.</li>
+                    <li>Use a strong password and update it if you suspect a compromise.</li>
                     <li>Two-Factor Authentication (2FA) is coming soon for additional protection.</li>
-                    <li>Social logins: Google available; GitHub coming soon.</li>
+                    <li>Social logins: Google and GitHub are available; you can also sign in with email/password. Your links and analytics remain the same regardless of which sign-in method you use.</li>
+                  </ul>
+                </CardContent>
+              </Card>
+            </motion.section>
+
+            {/* Account Recovery */}
+            <motion.section id="account-recovery" className="scroll-mt-28" initial="hidden" whileInView="visible" viewport={{ once: true }} variants={sectionVariants}>
+              <Card className="shadow-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-primary" /> Account Recovery
+                  </CardTitle>
+                  <CardDescription>Reset passwords and recover access to your account.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3 text-sm">
+                  <ul className="list-disc pl-5 space-y-1">
+                    <li>
+                      <span className="font-medium">Forgot password</span>: Use the "Forgot password" link on the sign-in page to request a password reset email. Follow the instructions in the email to set a new password.
+                    </li>
+                    <li>
+                      Reset links are one-time use and expire after a short period for security. If a link expires, request a new reset from the sign-in page.
+                    </li>
+                    <li>
+                      If you signed up using Google or GitHub, account recovery is primarily handled by those providers—use their recovery flows or contact their support if needed.
+                    </li>
+                    <li>
+                      Still stuck? Contact support at <a className="underline" href="mailto:mail@jsm33t.com">mail@jsm33t.com</a> and include as much detail as you can (email, handle, and what happened).
+                    </li>
                   </ul>
                 </CardContent>
               </Card>
@@ -250,6 +279,7 @@ export default function DocsPageClient() {
                     <li><span className="font-medium">Free</span>: Basic analytics — total clicks, per-link click counts, and top-performing links.</li>
                     <li><span className="font-medium">Plus</span>: Advanced analytics — device metrics, location insights, and engagement by time of day and day of week.</li>
                   </ul>
+                  <p className="mt-2 text-sm">Analytics and your links remain consistent regardless of how you sign in (email, Google, or GitHub).</p>
                 </CardContent>
               </Card>
             </motion.section>
