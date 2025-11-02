@@ -17,10 +17,10 @@ import {
   Heart,
   Eye
 } from "lucide-react";
-import { useUser } from "@/contexts/UserContext";
+import { useUser, userHelpers } from "@/contexts/UserContext";
 import { useGet } from '@/hooks/useApi';
 import { apiService } from '@/hooks/apiService';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
 
@@ -118,6 +118,11 @@ export default function InsightsPage() {
 
   // parsed counts array for passing into the overview component
   const parsedLinkCounts = (linkCountsResp && (linkCountsResp as any).data) ? (linkCountsResp as any).data : (Array.isArray(linkCountsResp) ? linkCountsResp : []);
+
+  const hasTelemetryAccess = useMemo(() => {
+    if (!user) return false;
+    return userHelpers.isPlusTier(user) || userHelpers.isProTier(user);
+  }, [user]);
 
 
   return (
@@ -241,7 +246,7 @@ export default function InsightsPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <ProfileViewTelemetry />
+                <ProfileViewTelemetry hasAccess={hasTelemetryAccess} />
               </CardContent>
             </Card>
           </motion.div>
@@ -606,26 +611,31 @@ function PieDonut({ data, size = 120, thickness = 24 }: { data: any; size?: numb
   );
 }
 
-function ProfileViewTelemetry() {
+function ProfileViewTelemetry({ hasAccess }: { hasAccess: boolean }) {
   const [stats, setStats] = useState<any>(null);
   const [views, setViews] = useState<any[]>([]);
   const [sourceBreakdown, setSourceBreakdown] = useState<any[]>([]);
   const [geoDistribution, setGeoDistribution] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState<boolean>(hasAccess);
   const [activeTab, setActiveTab] = useState<'overview' | 'views' | 'sources' | 'geo'>('overview');
   const [dateRange, setDateRange] = useState({
     start: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     end: new Date().toISOString().split('T')[0]
   });
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
+    if (!hasAccess) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     try {
       const params = new URLSearchParams({
         startDate: new Date(dateRange.start).toISOString(),
-        endDate: new Date(dateRange.end + 'T23:59:59').toISOString()
+        endDate: new Date(`${dateRange.end}T23:59:59`).toISOString()
       });
-      
+
       const [statsRes, sourcesRes, geoRes] = await Promise.all([
         apiService.get(`/telemetry/profile-stats?${params}`),
         apiService.get(`/telemetry/source-breakdown?${params}`),
@@ -637,44 +647,83 @@ function ProfileViewTelemetry() {
       setGeoDistribution(geoRes.data?.data ?? geoRes.data ?? []);
     } catch (err) {
       console.error('Failed to fetch telemetry stats:', err);
+      setStats(null);
+      setSourceBreakdown([]);
+      setGeoDistribution([]);
     } finally {
       setLoading(false);
     }
-  };
+  }, [hasAccess, dateRange.start, dateRange.end]);
 
-  const fetchViews = async () => {
+  const fetchViews = useCallback(async () => {
+    if (!hasAccess) {
+      return;
+    }
+
     try {
       const params = new URLSearchParams({
         startDate: new Date(dateRange.start).toISOString(),
-        endDate: new Date(dateRange.end + 'T23:59:59').toISOString(),
+        endDate: new Date(`${dateRange.end}T23:59:59`).toISOString(),
         skip: '0',
         take: '50'
       });
-      
+
       const res = await apiService.get(`/telemetry/profile-views?${params}`);
       const data = res.data?.data ?? res.data;
       setViews(data?.views ?? []);
     } catch (err) {
       console.error('Failed to fetch views:', err);
+      setViews([]);
     }
-  };
+  }, [hasAccess, dateRange.start, dateRange.end]);
 
   useEffect(() => {
-    fetchStats();
-    if (activeTab === 'views') {
-      fetchViews();
+    if (!hasAccess) {
+      setStats(null);
+      setViews([]);
+      setSourceBreakdown([]);
+      setGeoDistribution([]);
+      setLoading(false);
+      return;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateRange]);
+
+    void fetchStats();
+  }, [hasAccess, fetchStats]);
 
   useEffect(() => {
-    if (activeTab === 'views' && views.length === 0) {
-      fetchViews();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+    if (!hasAccess || activeTab !== 'views') return;
+    void fetchViews();
+  }, [activeTab, hasAccess, fetchViews]);
 
-  if (loading) {
+  if (!hasAccess) {
+    return (
+      <div className="relative">
+        <div className="space-y-6 opacity-40 pointer-events-none select-none">
+          <div className="h-12 rounded-lg border border-dashed border-muted bg-muted/30" />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="h-28 rounded-lg border border-dashed border-muted bg-muted/30" />
+            <div className="h-28 rounded-lg border border-dashed border-muted bg-muted/30" />
+            <div className="h-28 rounded-lg border border-dashed border-muted bg-muted/30" />
+            <div className="h-28 rounded-lg border border-dashed border-muted bg-muted/30" />
+          </div>
+          <div className="h-10 rounded-lg border border-dashed border-muted bg-muted/30" />
+          <div className="h-80 rounded-lg border border-dashed border-muted bg-muted/30" />
+        </div>
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+          <Eye className="h-8 w-8 text-muted-foreground" />
+          <h3 className="text-lg font-semibold">Upgrade to unlock telemetry</h3>
+          <p className="text-sm text-muted-foreground max-w-sm">
+            Profile view telemetry is available on Plus and Pro plans.
+          </p>
+          <Link href="/account/upgrade">
+            <Button size="sm">See plans</Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasAccess && loading) {
     return (
       <div className="flex items-center justify-center py-8">
         <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -704,7 +753,17 @@ function ProfileViewTelemetry() {
             className="w-40"
           />
         </div>
-        <Button size="sm" onClick={fetchStats}>Refresh</Button>
+        <Button
+          size="sm"
+          onClick={() => {
+            void fetchStats();
+            if (hasAccess && activeTab === 'views') {
+              void fetchViews();
+            }
+          }}
+        >
+          Refresh
+        </Button>
       </div>
 
       {/* Stats Overview */}

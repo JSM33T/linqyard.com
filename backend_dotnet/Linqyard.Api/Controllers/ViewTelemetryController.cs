@@ -1,3 +1,4 @@
+using System;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using Linqyard.Api.Services;
@@ -22,6 +23,7 @@ public sealed class ViewTelemetryController(
     ILogger<ViewTelemetryController> logger,
     IViewTelemetryRepository viewTelemetryRepository,
     IUserRepository userRepository,
+    ITierService tierService,
     IClientIpResolver clientIpResolver,
     IIpGeolocationService ipGeolocationService)
     : BaseApiController
@@ -136,6 +138,11 @@ public sealed class ViewTelemetryController(
                 return Problem(StatusCodes.Status401Unauthorized, "Unauthorized", "Invalid user ID");
             }
 
+            if (!await UserHasTelemetryAccessAsync(userId, cancellationToken))
+            {
+                return ForbiddenProblem("Upgrade Required", "Profile view telemetry is available on Plus and Pro plans.");
+            }
+
             var request = new GetProfileViewsRequest(
                 userId,
                 startDate,
@@ -174,6 +181,11 @@ public sealed class ViewTelemetryController(
                 return Problem(StatusCodes.Status401Unauthorized, "Unauthorized", "Invalid user ID");
             }
 
+            if (!await UserHasTelemetryAccessAsync(userId, cancellationToken))
+            {
+                return ForbiddenProblem("Upgrade Required", "Profile view telemetry is available on Plus and Pro plans.");
+            }
+
             var result = await viewTelemetryRepository.GetProfileViewStatsAsync(userId, startDate, endDate, cancellationToken);
             return OkEnvelope(result);
         }
@@ -201,6 +213,11 @@ public sealed class ViewTelemetryController(
             if (!Guid.TryParse(UserId, out var userId))
             {
                 return Problem(StatusCodes.Status401Unauthorized, "Unauthorized", "Invalid user ID");
+            }
+
+            if (!await UserHasTelemetryAccessAsync(userId, cancellationToken))
+            {
+                return ForbiddenProblem("Upgrade Required", "Profile view telemetry is available on Plus and Pro plans.");
             }
 
             var result = await viewTelemetryRepository.GetSourceBreakdownAsync(userId, startDate, endDate, cancellationToken);
@@ -232,6 +249,11 @@ public sealed class ViewTelemetryController(
                 return Problem(StatusCodes.Status401Unauthorized, "Unauthorized", "Invalid user ID");
             }
 
+            if (!await UserHasTelemetryAccessAsync(userId, cancellationToken))
+            {
+                return ForbiddenProblem("Upgrade Required", "Profile view telemetry is available on Plus and Pro plans.");
+            }
+
             var result = await viewTelemetryRepository.GetGeographicDistributionAsync(userId, startDate, endDate, cancellationToken);
             return OkEnvelope(result);
         }
@@ -239,6 +261,35 @@ public sealed class ViewTelemetryController(
         {
             logger.LogError(ex, "Error getting geographic distribution");
             return Problem(StatusCodes.Status500InternalServerError, "Internal Server Error", "Could not retrieve distribution");
+        }
+    }
+
+    private async Task<bool> UserHasTelemetryAccessAsync(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var tier = await tierService.GetUserActiveTierAsync(userId, cancellationToken);
+            if (tier is null) return false;
+
+            if (tier.TierId is 2 or 3) return true;
+
+            var name = tier.Name?.Trim();
+            if (string.IsNullOrEmpty(name)) return false;
+
+            if (name.Equals("plus", StringComparison.OrdinalIgnoreCase) ||
+                name.Equals("pro", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("plus", StringComparison.OrdinalIgnoreCase) ||
+                name.Contains("pro", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to resolve tier information for user {UserId}", userId);
+            return false;
         }
     }
 
