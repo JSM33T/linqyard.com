@@ -754,8 +754,8 @@ function ProfileViewTelemetry() {
       )}
 
       {/* Tabs */}
-      <div className="border-b">
-        <div className="flex gap-4">
+      <div className="border-b overflow-x-auto pb-1">
+        <div className="flex gap-4 min-w-max">
           {[
             { key: 'overview', label: 'Overview' },
             { key: 'views', label: 'Recent Views' },
@@ -765,7 +765,7 @@ function ProfileViewTelemetry() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key as any)}
-              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${
+              className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
                 activeTab === tab.key
                   ? 'border-primary text-primary'
                   : 'border-transparent text-muted-foreground hover:text-foreground'
