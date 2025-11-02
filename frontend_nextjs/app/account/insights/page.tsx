@@ -90,6 +90,11 @@ export default function InsightsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const hasTelemetryAccess = useMemo(() => {
+    if (!user) return false;
+    return userHelpers.isPlusTier(user) || userHelpers.isProTier(user);
+  }, [user]);
+
   if (!isAuthenticated || !user) {
     return <AccessDenied />;
   }
@@ -118,11 +123,6 @@ export default function InsightsPage() {
 
   // parsed counts array for passing into the overview component
   const parsedLinkCounts = (linkCountsResp && (linkCountsResp as any).data) ? (linkCountsResp as any).data : (Array.isArray(linkCountsResp) ? linkCountsResp : []);
-
-  const hasTelemetryAccess = useMemo(() => {
-    if (!user) return false;
-    return userHelpers.isPlusTier(user) || userHelpers.isProTier(user);
-  }, [user]);
 
 
   return (
