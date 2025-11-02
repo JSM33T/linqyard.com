@@ -44,7 +44,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-import { ArrowLeft, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown, Share2, Copy, Check, Loader2, AlertCircle, X } from "lucide-react";
+import { ArrowLeft, Plus, GripVertical, ExternalLink, Edit3, Trash2, FolderPlus, ChevronsUpDown, Share2, Copy, Check, Loader2, AlertCircle, X, MoreVertical } from "lucide-react";
 import { toast } from "sonner";
 import QRCode from "qrcode";
 
@@ -127,30 +127,35 @@ function SortableLinkRow({ item, onEdit, onDelete }: { item: LinkItem; onEdit: (
           <p className="text-xs text-muted-foreground mt-1 truncate">{item.description}</p>
         )}
       </div>
-      <div className="flex items-center gap-1">
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 opacity-0 group-hover/link:opacity-100 transition-opacity"
-          onClick={(e) => {
-            e.stopPropagation();
-            onEdit(item);
-          }}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
+            size="icon"
+            variant="ghost"
+            className="h-7 w-7 opacity-100 md:opacity-0 md:group-hover/link:opacity-100 transition-opacity"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <MoreVertical className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="end"
+          className="w-36"
+          onCloseAutoFocus={(event) => event.preventDefault()}
         >
-          <Edit3 className="h-4 w-4" />
-        </Button>
-        <Button
-          size="icon"
-          variant="ghost"
-          className="h-7 w-7 opacity-0 group-hover/link:opacity-100 transition-opacity text-destructive hover:text-destructive"
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete(item);
-          }}
-        >
-          <Trash2 className="h-4 w-4" />
-        </Button>
-      </div>
+          <DropdownMenuItem onSelect={() => onEdit(item)}>
+            <Edit3 className="mr-2 h-4 w-4" />
+            Edit
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive focus:text-destructive"
+            onSelect={() => onDelete(item)}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
