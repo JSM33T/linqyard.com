@@ -356,7 +356,7 @@ export default function HomeClient() {
 
       <AltSection
         eyebrow="Lightweight Insights"
-        title="Understand what people click and alll "
+        title="Understand what people click "
         text="Optional, privacy‑respecting counters help you see what's working—no creepy tracking."
         bullets={[
           "Per‑link click counts",
