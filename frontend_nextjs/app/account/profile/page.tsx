@@ -640,6 +640,14 @@ export default function ProfilePage() {
     roles: user.role ? [user.role] : ["user"]
   };
 
+  const getDisplayValue = (value?: string | null, fallback = "Not set") => {
+    if (!value) {
+      return fallback;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : fallback;
+  };
+
   const coverImage = coverPreview || coverObjectUrl;
 
   // Only show loading when we don't have any data yet
@@ -727,47 +735,9 @@ export default function ProfilePage() {
           <motion.div variants={itemVariants}>
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <User className="h-5 w-5 mr-2" />
-                    Personal Information
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {isEditing ? (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={handleEditToggle}
-                          disabled={isUpdating}
-                        >
-                          <X className="h-4 w-4 mr-2" />
-                          Cancel
-                        </Button>
-                        <Button
-                          size="sm"
-                          onClick={handleSaveProfile}
-                          disabled={isUpdating}
-                        >
-                          {isUpdating ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
-                          ) : (
-                            <Save className="h-4 w-4 mr-2" />
-                          )}
-                          {isUpdating ? "Saving..." : "Save"}
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={handleEditToggle}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit
-                      </Button>
-                    )}
-                  </div>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  <span>Personal Information</span>
                 </CardTitle>
                 <CardDescription>
                   {isEditing ? "Update your personal information" : "Your basic account information"}
@@ -817,6 +787,44 @@ export default function ProfilePage() {
                       </div>
                     )}
                   </Button>
+                </div>
+
+                {/* Edit Controls */}
+                <div className="flex items-center justify-end gap-2">
+                  {isEditing ? (
+                    <>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={handleEditToggle}
+                        disabled={isUpdating}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSaveProfile}
+                        disabled={isUpdating}
+                      >
+                        {isUpdating ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current mr-2"></div>
+                        ) : (
+                          <Save className="h-4 w-4 mr-2" />
+                        )}
+                        {isUpdating ? "Saving..." : "Save"}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={handleEditToggle}
+                    >
+                      <Edit className="h-4 w-4 mr-2" />
+                      Edit
+                    </Button>
+                  )}
                 </div>
 
                 {/* Avatar Section */}
@@ -869,58 +877,82 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">First Name</label>
-                    <Input 
-                      name="firstName"
-                      value={isEditing ? formData.firstName : displayProfile.firstName} 
-                      onChange={handleInputChange}
-                      readOnly={!isEditing}
-                      className={isEditing ? "" : "bg-muted/50"}
-                    />
+                    {isEditing ? (
+                      <Input
+                        name="firstName"
+                        value={formData.firstName}
+                        onChange={handleInputChange}
+                      />
+                    ) : (
+                      <p className="text-sm text-foreground">{getDisplayValue(displayProfile.firstName, "Not set")}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Last Name</label>
-                    <Input 
-                      name="lastName"
-                      value={isEditing ? formData.lastName : displayProfile.lastName} 
-                      onChange={handleInputChange}
-                      readOnly={!isEditing}
-                      className={isEditing ? "" : "bg-muted/50"}
-                    />
+                    {isEditing ? (
+                      <Input
+                        name="lastName"
+                        value={formData.lastName}
+                        onChange={handleInputChange}
+                      />
+                    ) : (
+                      <p className="text-sm text-foreground">{getDisplayValue(displayProfile.lastName, "Not set")}</p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Display Name</label>
-                    <Input 
-                      name="displayName"
-                      value={isEditing ? formData.displayName : (displayProfile.displayName || "")} 
-                      onChange={handleInputChange}
-                      readOnly={!isEditing}
-                      className={isEditing ? "" : "bg-muted/50"}
-                      placeholder="How you'd like to be called"
-                    />
+                    {isEditing ? (
+                      <Input
+                        name="displayName"
+                        value={formData.displayName}
+                        onChange={handleInputChange}
+                        placeholder="How you'd like to be called"
+                      />
+                    ) : (
+                      <p className="text-sm text-foreground">
+                        {getDisplayValue(displayProfile.displayName, "Not set")}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Username</label>
-                    <Input 
-                      name="username"
-                      value={isEditing ? formData.username : displayProfile.username} 
-                      onChange={handleInputChange}
-                      readOnly={!isEditing}
-                      className={isEditing ? "" : "bg-muted/50"}
-                      placeholder="Choose a unique username"
-                    />
-                    {isEditing && (
-                      <p className="text-xs text-muted-foreground">3-30 characters, letters, numbers, dots, hyphens, and underscores only</p>
+                    {isEditing ? (
+                      <>
+                        <Input
+                          name="username"
+                          value={formData.username}
+                          onChange={handleInputChange}
+                          placeholder="Choose a unique username"
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          3-30 characters, letters, numbers, dots, hyphens, and underscores only
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-foreground">
+                        {displayProfile.username ? `@${displayProfile.username}` : "Not set"}
+                      </p>
                     )}
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-medium">Email</label>
-                    <div className="flex items-center space-x-2">
-                      <Input value={displayProfile.email} readOnly className="flex-1 bg-muted/50" />
-                      <Badge variant="outline" className="text-xs">
-                        <Mail className="h-3 w-3 mr-1" />
-                        {displayProfile.emailVerified ? "Verified" : "Unverified"}
-                      </Badge>
-                    </div>
+                    {isEditing ? (
+                      <div className="flex items-center space-x-2">
+                        <Input value={displayProfile.email} readOnly className="flex-1" />
+                        <Badge variant="outline" className="text-xs">
+                          <Mail className="h-3 w-3 mr-1" />
+                          {displayProfile.emailVerified ? "Verified" : "Unverified"}
+                        </Badge>
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-between rounded-md border border-border/60 bg-muted/20 px-3 py-2 text-sm text-foreground">
+                        <span>{getDisplayValue(displayProfile.email, "Not set")}</span>
+                        <Badge variant="outline" className="text-xs">
+                          <Mail className="h-3 w-3 mr-1" />
+                          {displayProfile.emailVerified ? "Verified" : "Unverified"}
+                        </Badge>
+                      </div>
+                    )}
                     <p className="text-xs text-muted-foreground">Email cannot be changed here</p>
                   </div>
                 </div>
@@ -929,45 +961,60 @@ export default function ProfilePage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Timezone</label>
-                    <div className="relative">
-                      <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        name="timezone"
-                        value={isEditing ? formData.timezone : (displayProfile.timezone || "")} 
-                        onChange={handleInputChange}
-                        readOnly={!isEditing}
-                        className={`pl-10 ${isEditing ? "" : "bg-muted/50"}`}
-                        placeholder="e.g., America/New_York"
-                      />
-                    </div>
+                    {isEditing ? (
+                      <div className="relative">
+                        <Clock className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          name="timezone"
+                          value={formData.timezone}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          placeholder="e.g., America/New_York"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-foreground">
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                        <span>{getDisplayValue(displayProfile.timezone, "Not set")}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Locale</label>
-                    <div className="relative">
-                      <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input 
-                        name="locale"
-                        value={isEditing ? formData.locale : (displayProfile.locale || "")} 
-                        onChange={handleInputChange}
-                        readOnly={!isEditing}
-                        className={`pl-10 ${isEditing ? "" : "bg-muted/50"}`}
-                        placeholder="e.g., en-US"
-                      />
-                    </div>
+                    {isEditing ? (
+                      <div className="relative">
+                        <Globe className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          name="locale"
+                          value={formData.locale}
+                          onChange={handleInputChange}
+                          className="pl-10"
+                          placeholder="e.g., en-US"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-foreground">
+                        <Globe className="h-4 w-4 text-muted-foreground" />
+                        <span>{getDisplayValue(displayProfile.locale, "Not set")}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-sm font-medium">Bio</label>
-                    <textarea
-                      name="bio"
-                      value={isEditing ? formData.bio : (displayProfile.bio || "")}
-                      onChange={handleInputChange}
-                      readOnly={!isEditing}
-                      rows={3}
-                      className={`w-full px-3 py-2 text-sm bg-background border border-input rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent ${
-                        isEditing ? "" : "bg-muted/50 cursor-default"
-                      }`}
-                      placeholder="Tell us about yourself..."
-                    />
+                    {isEditing ? (
+                      <textarea
+                        name="bio"
+                        value={formData.bio}
+                        onChange={handleInputChange}
+                        rows={3}
+                        className="w-full px-3 py-2 text-sm bg-background border border-input rounded-md resize-none focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent"
+                        placeholder="Tell us about yourself..."
+                      />
+                    ) : (
+                      <p className="text-sm text-foreground whitespace-pre-wrap">
+                        {getDisplayValue(displayProfile.bio, "Tell us about yourself...")}
+                      </p>
+                    )}
                   </div>
                 </div>
 
