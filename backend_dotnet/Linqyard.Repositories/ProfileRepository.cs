@@ -22,6 +22,8 @@ public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> 
       Guid userId,
       CancellationToken cancellationToken = default)
     {
+        var now = DateTimeOffset.UtcNow;
+
         var dto = await _db.Users
             .AsNoTracking()
             .Where(u => u.Id == userId)
@@ -42,6 +44,17 @@ public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> 
                 u.VerifiedBadge,
                 u.CreatedAt,
                 u.UpdatedAt,
+                ActiveTier = u.UserTiers
+                    .Where(ut => ut.IsActive &&
+                                 ut.ActiveFrom <= now &&
+                                 (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                    .OrderByDescending(ut => ut.ActiveFrom)
+                    .Select(ut => new UserTierInfo(
+                        ut.TierId,
+                        ut.Tier.Name,
+                        ut.ActiveFrom,
+                        ut.ActiveUntil))
+                    .FirstOrDefault(),
                 Roles = u.UserRoles
                     .Select(ur => ur.Role.Name)
                     .ToArray()
@@ -66,7 +79,10 @@ public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> 
             dto.VerifiedBadge,
             dto.CreatedAt,
             dto.UpdatedAt,
-            dto.Roles
+            dto.Roles,
+            dto.ActiveTier?.TierId,
+            dto.ActiveTier?.Name,
+            dto.ActiveTier
         );
     }
 
@@ -160,6 +176,22 @@ public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> 
                   (ur, r) => r.Name)
             .ToArrayAsync(cancellationToken);
 
+        var now = DateTimeOffset.UtcNow;
+
+        var activeTier = await _db.UserTiers
+            .AsNoTracking()
+            .Where(ut => ut.UserId == userId &&
+                         ut.IsActive &&
+                         ut.ActiveFrom <= now &&
+                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+            .OrderByDescending(ut => ut.ActiveFrom)
+            .Select(ut => new UserTierInfo(
+                ut.TierId,
+                ut.Tier.Name,
+                ut.ActiveFrom,
+                ut.ActiveUntil))
+            .FirstOrDefaultAsync(cancellationToken);
+
         await tx.CommitAsync(cancellationToken);
 
         var profile = new ProfileDetailsResponse(
@@ -178,7 +210,10 @@ public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> 
             current.VerifiedBadge,
             current.CreatedAt,
             user.UpdatedAt,
-            roles
+            roles,
+            activeTier?.TierId,
+            activeTier?.Name,
+            activeTier
         );
 
         return new ProfileUpdateResponse(

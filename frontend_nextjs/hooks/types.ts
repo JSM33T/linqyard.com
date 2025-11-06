@@ -345,6 +345,9 @@ export interface ProfileData {
   createdAt: string;
   updatedAt: string;
   roles: string[];
+  tierId?: number | null;
+  tierName?: string | null;
+  activeTier?: UserTierInfo | null;
 }
 
 export interface GetProfileResponse {

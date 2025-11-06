@@ -16,7 +16,10 @@ public sealed record ProfileDetailsResponse(
     bool VerifiedBadge,
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<string> Roles
+    IReadOnlyList<string> Roles,
+    int? TierId = null,
+    string? TierName = null,
+    UserTierInfo? ActiveTier = null
 );
 
 public sealed record SessionInfo(
