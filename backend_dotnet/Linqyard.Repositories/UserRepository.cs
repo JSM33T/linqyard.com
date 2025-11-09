@@ -177,10 +177,25 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
     {
         var now = DateTimeOffset.UtcNow;
 
-        var user = await _db.Users
-            .AsNoTracking()
-            .Where(u => u.Id == userId && u.DeletedAt == null)
-            .Select(u => new
+        var user = await (
+            from u in _db.Users.AsNoTracking()
+            where u.Id == userId && u.DeletedAt == null
+            let activeTier = u.UserTiers
+                .Where(ut => ut.IsActive &&
+                             ut.ActiveFrom <= now &&
+                             (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                .OrderByDescending(ut => ut.ActiveFrom)
+                .Select(ut => new UserTierInfo(
+                    ut.TierId,
+                    ut.Tier.Name,
+                    ut.ActiveFrom,
+                    ut.ActiveUntil))
+                .FirstOrDefault()
+            let roles = u.UserRoles
+                .OrderBy(ur => ur.Role.Name)
+                .Select(ur => ur.Role.Name)
+                .ToArray()
+            select new
             {
                 Profile = new ProfileDetailsResponse(
                     u.Id,
@@ -198,22 +213,12 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
                     u.VerifiedBadge,
                     u.CreatedAt,
                     u.UpdatedAt,
-                    u.UserRoles
-                        .OrderBy(ur => ur.Role.Name)
-                        .Select(ur => ur.Role.Name)
-                        .ToArray()
+                    roles,
+                    activeTier != null ? activeTier.TierId : (int?)null,
+                    activeTier != null ? activeTier.Name : null,
+                    activeTier
                 ),
-                ActiveTier = u.UserTiers
-                    .Where(ut => ut.IsActive &&
-                                 ut.ActiveFrom <= now &&
-                                 (ut.ActiveUntil == null || ut.ActiveUntil >= now))
-                    .OrderByDescending(ut => ut.ActiveFrom)
-                    .Select(ut => new UserTierInfo(
-                        ut.TierId,
-                        ut.Tier.Name,
-                        ut.ActiveFrom,
-                        ut.ActiveUntil))
-                    .FirstOrDefault(),
+                ActiveTier = activeTier,
                 u.IsActive
             })
             .FirstOrDefaultAsync(cancellationToken);
