@@ -2,6 +2,7 @@
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Linqyard.Contracts.Exceptions;
 using Linqyard.Contracts.Interfaces;
 using Linqyard.Contracts.Responses;
 using Linqyard.Data;
@@ -401,6 +402,104 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
 
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+
+            return await GetAdminUserDetailsAsync(userId, cancellationToken);
+        });
+    }
+
+    public async Task<AdminUserDetailsResponse?> AssignAdminUserTierAsync(
+        Guid userId,
+        AdminUpgradeUserTierRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request is null)
+        {
+            throw new ArgumentNullException(nameof(request));
+        }
+
+        if (request.TierId <= 0)
+        {
+            throw new InvalidOperationException("TierId must be greater than zero.");
+        }
+
+        var tier = await _db.Tiers
+            .AsNoTracking()
+            .FirstOrDefaultAsync(t => t.Id == request.TierId, cancellationToken);
+
+        if (tier is null)
+        {
+            throw new TierNotFoundException($"Tier with id {request.TierId} was not found.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var effectiveFrom = (request.ActiveFrom ?? now).ToUniversalTime();
+        var effectiveUntil = request.ActiveUntil?.ToUniversalTime();
+
+        if (effectiveUntil.HasValue && effectiveUntil.Value <= effectiveFrom)
+        {
+            throw new InvalidOperationException("ActiveUntil must be later than ActiveFrom.");
+        }
+
+        var trimmedNotes = request.Notes?.Trim();
+        if (!string.IsNullOrEmpty(trimmedNotes) && trimmedNotes.Length > 512)
+        {
+            throw new InvalidOperationException("Notes cannot exceed 512 characters.");
+        }
+
+        var notes = string.IsNullOrEmpty(trimmedNotes)
+            ? "Manual admin tier upgrade"
+            : trimmedNotes;
+
+        var strategy = _db.Database.CreateExecutionStrategy();
+        return await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            var user = await _db.Users
+                .Include(u => u.UserTiers)
+                .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null, cancellationToken);
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return (AdminUserDetailsResponse?)null;
+            }
+
+            var mutatedAt = DateTimeOffset.UtcNow;
+
+            foreach (var assignment in user.UserTiers.Where(ut => ut.IsActive))
+            {
+                assignment.IsActive = false;
+                var cutoff = effectiveFrom < assignment.ActiveFrom ? assignment.ActiveFrom : effectiveFrom;
+                assignment.ActiveUntil = cutoff;
+                assignment.UpdatedAt = mutatedAt;
+            }
+
+            var newAssignment = new UserTier
+            {
+                Id = Guid.NewGuid(),
+                UserId = user.Id,
+                TierId = tier.Id,
+                ActiveFrom = effectiveFrom,
+                ActiveUntil = effectiveUntil,
+                IsActive = true,
+                Notes = notes,
+                CreatedAt = mutatedAt,
+                UpdatedAt = mutatedAt
+            };
+
+            _db.UserTiers.Add(newAssignment);
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Admin manually assigned tier {TierName} ({TierId}) to user {UserId}. ActiveFrom={ActiveFrom:u}, ActiveUntil={ActiveUntil:u}",
+                tier.Name,
+                tier.Id,
+                userId,
+                effectiveFrom,
+                effectiveUntil);
 
             return await GetAdminUserDetailsAsync(userId, cancellationToken);
         });

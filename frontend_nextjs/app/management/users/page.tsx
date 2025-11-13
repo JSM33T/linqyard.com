@@ -1,16 +1,18 @@
 ﻿"use client";
 
-import type { ChangeEvent } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@/contexts/UserContext";
 import AccessDenied from "@/components/AccessDenied";
-import { apiUtils, useGet, usePut } from "@/hooks";
+import { apiUtils, useGet, usePost, usePut } from "@/hooks";
 import type {
   AdminUserDetails,
   AdminUserDetailsResponse,
   AdminUserListResponse,
   AdminUpdateUserRequest,
+  AdminUpgradeUserTierRequest,
   PagedMeta,
+  TierAdminDetails,
 } from "@/hooks/types";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,6 +23,11 @@ import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import { Loader2, RefreshCcw, Search, ShieldCheck, Users as UsersIcon, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+type ApiEnvelope<T> = {
+  data: T;
+  meta?: any;
+};
 
 const ROLE_OPTIONS = ["admin", "mod", "user"];
 const PAGE_SIZE = 20;
@@ -38,6 +45,13 @@ type AdminUserFormState = {
   verifiedBadge: boolean;
   isActive: boolean;
   roles: string[];
+};
+
+type TierAssignmentFormState = {
+  tierId: number | null;
+  activeFrom: string;
+  activeUntil: string;
+  notes: string;
 };
 
 const normalizeForCompare = (state: AdminUserFormState) => ({
@@ -99,6 +113,13 @@ const optionalString = (value: string) => {
   return trimmed.length ? trimmed : null;
 };
 
+const toIsoIfValid = (value: string) => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+};
+
 const ensureRoleLabel = (role: string) => role.charAt(0).toUpperCase() + role.slice(1);
 
 export default function AdminUsersPage() {
@@ -111,6 +132,13 @@ export default function AdminUsersPage() {
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [formState, setFormState] = useState<AdminUserFormState | null>(null);
   const initialFormRef = useRef<AdminUserFormState | null>(null);
+  const [tierForm, setTierForm] = useState<TierAssignmentFormState>({
+    tierId: null,
+    activeFrom: "",
+    activeUntil: "",
+    notes: "",
+  });
+  const viewedProfileIdRef = useRef<string | null>(null);
 
   const listEndpoint = useMemo(
     () =>
@@ -171,6 +199,19 @@ export default function AdminUsersPage() {
   } = useGet<AdminUserDetailsResponse>(detailsEndpoint, detailsConfig);
   const details = detailsEnvelope?.data;
 
+  const tiersConfig = useMemo(
+    () => ({
+      enabled: isAdmin && isInitialized,
+    }),
+    [isAdmin, isInitialized]
+  );
+
+  const { data: tiersEnvelope, loading: tiersLoading } = useGet<ApiEnvelope<TierAdminDetails[]>>(
+    "/admin/tiers",
+    tiersConfig
+  );
+  const tierOptions = useMemo(() => tiersEnvelope?.data ?? [], [tiersEnvelope?.data]);
+
   const updateUserConfig = useMemo(
     () => ({
       requireAuth: true as const,
@@ -180,6 +221,11 @@ export default function AdminUsersPage() {
 
   const { mutate: updateUser, loading: isUpdating } = usePut<AdminUserDetailsResponse>(
     detailsEndpoint,
+    updateUserConfig
+  );
+  const assignTierEndpoint = selectedUserId ? `${detailsEndpoint}/tier` : "";
+  const { mutate: assignTier, loading: isAssigning } = usePost<AdminUserDetailsResponse>(
+    assignTierEndpoint,
     updateUserConfig
   );
 
@@ -193,6 +239,33 @@ export default function AdminUsersPage() {
       initialFormRef.current = null;
     }
   }, [details, detailsLoading, shouldFetchDetails]);
+
+  useEffect(() => {
+    if (details?.profile?.id) {
+      setTierForm({
+        tierId: details.activeTier?.tierId ?? null,
+        activeFrom: "",
+        activeUntil: "",
+        notes: "",
+      });
+    } else if (!detailsLoading && !shouldFetchDetails) {
+      setTierForm({
+        tierId: null,
+        activeFrom: "",
+        activeUntil: "",
+        notes: "",
+      });
+    }
+  }, [details?.profile?.id, details?.activeTier?.tierId, detailsLoading, shouldFetchDetails]);
+
+  useEffect(() => {
+    if (tierForm.tierId !== null) return;
+    if (!tierOptions.length) return;
+    setTierForm((prev) => ({
+      ...prev,
+      tierId: tierOptions[0].tierId,
+    }));
+  }, [tierOptions, tierForm.tierId]);
 
   const isDirty = useMemo(() => {
     if (!formState || !initialFormRef.current) return false;
@@ -340,6 +413,75 @@ export default function AdminUsersPage() {
         toast.error(error.data.title);
       } else {
         toast.error(error?.message ?? "Failed to update user.");
+      }
+    }
+  };
+
+  const updateTierFormField = <K extends keyof TierAssignmentFormState>(
+    field: K,
+    value: TierAssignmentFormState[K]
+  ) => {
+    setTierForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleTierReset = useCallback(() => {
+    setTierForm({
+      tierId: details?.activeTier?.tierId ?? (tierOptions[0]?.tierId ?? null),
+      activeFrom: "",
+      activeUntil: "",
+      notes: "",
+    });
+  }, [details?.activeTier?.tierId, tierOptions]);
+
+  const handleTierAssign = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedUserId) return;
+    if (!tierForm.tierId) {
+      toast.error("Select a tier to assign.");
+      return;
+    }
+
+    if (tierForm.activeFrom && tierForm.activeUntil) {
+      const from = new Date(tierForm.activeFrom);
+      const until = new Date(tierForm.activeUntil);
+      if (!Number.isNaN(from.getTime()) && !Number.isNaN(until.getTime()) && until <= from) {
+        toast.error("Active until must be later than active from.");
+        return;
+      }
+    }
+
+    const payload: AdminUpgradeUserTierRequest = {
+      tierId: tierForm.tierId,
+      activeFrom: toIsoIfValid(tierForm.activeFrom),
+      activeUntil: toIsoIfValid(tierForm.activeUntil),
+      notes: optionalString(tierForm.notes),
+    };
+
+    try {
+      const response = await assignTier(payload);
+      if (response.status >= 200 && response.status < 300 && response.data) {
+        const updatedDetails = response.data.data;
+        const nextState = toFormState(updatedDetails);
+        setFormState(nextState);
+        initialFormRef.current = nextState;
+        setTierForm({
+          tierId: updatedDetails.activeTier?.tierId ?? tierForm.tierId,
+          activeFrom: "",
+          activeUntil: "",
+          notes: "",
+        });
+        toast.success("Tier assignment updated.");
+        refetchUsers();
+        refetchDetails();
+      }
+    } catch (error: any) {
+      if (error?.data?.title) {
+        toast.error(error.data.title);
+      } else {
+        toast.error(error?.message ?? "Failed to assign tier.");
       }
     }
   };
@@ -535,17 +677,18 @@ export default function AdminUsersPage() {
                   Unable to load user details. Try selecting another user or refreshing.
                 </div>
               ) : formState && details ? (
-                <form
-                  className="space-y-6"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    handleSave();
-                  }}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={formState.isActive ? "default" : "secondary"}>
-                      {formState.isActive ? "Active account" : "Suspended"}
-                    </Badge>
+                <>
+                  <form
+                    className="space-y-6"
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      handleSave();
+                    }}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant={formState.isActive ? "default" : "secondary"}>
+                        {formState.isActive ? "Active account" : "Suspended"}
+                      </Badge>
                     {formState.emailVerified ? (
                       <Badge variant="outline" className="flex items-center gap-1">
                         <ShieldCheck className="h-3 w-3" />
@@ -768,22 +911,114 @@ export default function AdminUsersPage() {
                         )}
                       </div>
                     </div>
-                  </div>
+                    </div>
 
-                  <div className="flex items-center justify-end gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={handleReset}
-                      disabled={!isDirty || isUpdating}
-                    >
-                      Reset
-                    </Button>
-                    <Button type="submit" disabled={!isDirty || isUpdating}>
-                      {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
-                    </Button>
+                    <div className="flex items-center justify-end gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleReset}
+                        disabled={!isDirty || isUpdating}
+                      >
+                        Reset
+                      </Button>
+                      <Button type="submit" disabled={!isDirty || isUpdating}>
+                        {isUpdating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save changes"}
+                      </Button>
+                    </div>
+                  </form>
+
+                  <div className="space-y-3 rounded-md border px-4 py-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-semibold">Manual tier assignment</p>
+                        <p className="text-xs text-muted-foreground">
+                          Override a user&apos;s tier without payment. Leave dates empty to activate immediately.
+                        </p>
+                      </div>
+                      {isAssigning && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                    </div>
+                    {tiersLoading ? (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading available tiers...
+                      </div>
+                    ) : tierOptions.length ? (
+                      <form className="space-y-3" onSubmit={handleTierAssign}>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium uppercase text-muted-foreground">Tier</label>
+                          <select
+                            className="w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            value={tierForm.tierId ?? ""}
+                            onChange={(event) => {
+                              const { value } = event.target;
+                              updateTierFormField("tierId", value ? Number(value) : null);
+                            }}
+                            disabled={isAssigning || !selectedUserId}
+                          >
+                            {!tierForm.tierId && <option value="">Select a tier</option>}
+                            {tierOptions.map((tier) => (
+                              <option key={tier.tierId} value={tier.tierId}>
+                                {tier.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium uppercase text-muted-foreground">
+                              Active from
+                            </label>
+                            <Input
+                              type="datetime-local"
+                              value={tierForm.activeFrom}
+                              onChange={(event) => updateTierFormField("activeFrom", event.target.value)}
+                              disabled={isAssigning}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs font-medium uppercase text-muted-foreground">
+                              Active until
+                            </label>
+                            <Input
+                              type="datetime-local"
+                              value={tierForm.activeUntil}
+                              onChange={(event) => updateTierFormField("activeUntil", event.target.value)}
+                              disabled={isAssigning}
+                            />
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-xs font-medium uppercase text-muted-foreground">
+                            Notes (optional)
+                          </label>
+                          <textarea
+                            className="min-h-[90px] w-full rounded-md border bg-background px-3 py-2 text-sm"
+                            value={tierForm.notes}
+                            onChange={(event) => updateTierFormField("notes", event.target.value)}
+                            maxLength={512}
+                            disabled={isAssigning}
+                          />
+                          <p className="text-[11px] text-muted-foreground">
+                            Mention the reason for the manual upgrade. Notes are stored with the assignment.
+                          </p>
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button type="button" variant="outline" onClick={handleTierReset} disabled={isAssigning}>
+                            Clear
+                          </Button>
+                          <Button type="submit" disabled={!tierForm.tierId || isAssigning || !selectedUserId}>
+                            {isAssigning ? <Loader2 className="h-4 w-4 animate-spin" /> : "Assign tier"}
+                          </Button>
+                        </div>
+                      </form>
+                    ) : (
+                      <div className="rounded-md border border-dashed px-3 py-4 text-xs text-muted-foreground">
+                        No tiers available. Create tiers first from the management area.
+                      </div>
+                    )}
                   </div>
-                </form>
+                </>
               ) : (
                 <div className="rounded-md border border-dashed px-6 py-12 text-center text-sm text-muted-foreground">
                   Select a user to load their details.

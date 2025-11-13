@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Linqyard.Contracts.Requests;
@@ -17,4 +18,11 @@ public sealed record AdminUpdateUserRequest(
     bool? VerifiedBadge = null,
     bool? IsActive = null,
     IReadOnlyList<string>? Roles = null
+);
+
+public sealed record AdminUpgradeUserTierRequest(
+    int TierId,
+    DateTimeOffset? ActiveFrom = null,
+    DateTimeOffset? ActiveUntil = null,
+    string? Notes = null
 );

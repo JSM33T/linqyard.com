@@ -74,5 +74,17 @@ namespace Linqyard.Contracts.Interfaces
             Guid userId,
             AdminUpdateUserRequest request,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Assigns a tier to the specified user on behalf of an admin.
+        /// </summary>
+        /// <param name="userId">Unique identifier of the user.</param>
+        /// <param name="request">Assignment payload describing the tier and scheduling.</param>
+        /// <param name="cancellationToken">Token used to cancel the operation.</param>
+        /// <returns>The updated admin user response or <c>null</c> if the user does not exist.</returns>
+        Task<AdminUserDetailsResponse?> AssignAdminUserTierAsync(
+            Guid userId,
+            AdminUpgradeUserTierRequest request,
+            CancellationToken cancellationToken = default);
     }
 }

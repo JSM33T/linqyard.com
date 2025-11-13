@@ -500,6 +500,13 @@ export interface AdminUpdateUserRequest {
   roles?: string[] | null;
 }
 
+export interface AdminUpgradeUserTierRequest {
+  tierId: number;
+  activeFrom?: string | null;
+  activeUntil?: string | null;
+  notes?: string | null;
+}
+
 // Refresh Token Types
 export interface RefreshTokenRequest {
   refreshToken: string;
