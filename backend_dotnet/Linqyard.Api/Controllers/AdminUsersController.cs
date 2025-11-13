@@ -5,12 +5,16 @@ using Linqyard.Contracts.Requests;
 using Linqyard.Contracts.Responses;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Linqyard.Infra;
 
 namespace Linqyard.Api.Controllers;
 
 [Route($"admin/users")]
 [Authorize(Roles = "admin")]
-public sealed partial class AdminUsersController(IUserRepository userRepository, ILogger<AdminUsersController> logger) : BaseApiController
+public sealed partial class AdminUsersController(
+    IUserRepository userRepository,
+    ILogger<AdminUsersController> logger,
+    IEmailService emailService) : BaseApiController
 {
     /// <summary>
     /// Lists users with optional search and pagination.
@@ -110,6 +114,7 @@ public sealed partial class AdminUsersController(IUserRepository userRepository,
             }
 
             logger.LogInformation("Admin manually assigned tier {TierId} to user {UserId}", request.TierId, userId);
+            await SendTierUpgradeNotificationAsync(updated.Profile, updated.ActiveTier);
             return OkEnvelope(updated);
         }
         catch (TierNotFoundException ex)
@@ -196,6 +201,35 @@ public sealed partial class AdminUsersController(IUserRepository userRepository,
         }
 
         return null;
+    }
+
+    private async Task SendTierUpgradeNotificationAsync(ProfileDetailsResponse profile, UserTierInfo? activeTier)
+    {
+        if (profile is null || string.IsNullOrWhiteSpace(profile.Email))
+        {
+            return;
+        }
+
+        var tierName = string.IsNullOrWhiteSpace(activeTier?.Name) ? "a new tier" : activeTier!.Name;
+        var greetingName = profile.DisplayName ?? profile.FirstName ?? profile.Username ?? "there";
+        var subject = $"Your Linqyard tier is now {tierName}";
+        var body =
+            $"""
+            <p>Hi {greetingName},</p>
+            <p>Your Linqyard account has been upgraded to <strong>{tierName}</strong>.</p>
+            <p>To ensure the new benefits apply instantly, please log out and sign back into your account. This refreshes your active session with the upgraded tier.</p>
+            <p>If you weren’t expecting this change, please reach out to support.</p>
+            <p>— The Linqyard Team</p>
+            """;
+
+        try
+        {
+            await emailService.SendEmailAsync(profile.Email, subject, body);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to send tier upgrade email to {Email}", profile.Email);
+        }
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"^[a-zA-Z0-9_.-]+$")]

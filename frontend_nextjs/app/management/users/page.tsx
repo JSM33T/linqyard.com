@@ -555,13 +555,21 @@ export default function AdminUsersPage() {
                     <div className="space-y-2">
                       {users.map((item) => {
                         const isSelected = item.id === selectedUserId;
+                        const handleSelect = () => setSelectedUserId(item.id);
                         return (
-                          <button
-                            type="button"
+                          <div
+                            role="button"
+                            tabIndex={0}
                             key={item.id}
-                            onClick={() => setSelectedUserId(item.id)}
+                            onClick={handleSelect}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                handleSelect();
+                              }
+                            }}
                             className={cn(
-                              "w-full rounded-lg border px-4 py-3 text-left transition-colors",
+                              "w-full rounded-lg border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                               isSelected
                                 ? "border-primary bg-primary/10"
                                 : "border-border hover:bg-muted/60"
@@ -607,7 +615,7 @@ export default function AdminUsersPage() {
                                 </Badge>
                               )}
                             </div>
-                          </button>
+                          </div>
                         );
                       })}
                     </div>
