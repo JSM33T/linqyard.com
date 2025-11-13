@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import type { ChangeEvent, FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useUser } from "@/contexts/UserContext";
 import AccessDenied from "@/components/AccessDenied";
 import { apiUtils, useGet, usePost, usePut } from "@/hooks";
@@ -427,14 +427,14 @@ export default function AdminUsersPage() {
     }));
   };
 
-  const handleTierReset = useCallback(() => {
+  const handleTierReset = () => {
     setTierForm({
       tierId: details?.activeTier?.tierId ?? (tierOptions[0]?.tierId ?? null),
       activeFrom: "",
       activeUntil: "",
       notes: "",
     });
-  }, [details?.activeTier?.tierId, tierOptions]);
+  };
 
   const handleTierAssign = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
