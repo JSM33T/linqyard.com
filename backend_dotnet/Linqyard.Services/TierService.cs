@@ -5,14 +5,9 @@ using Linqyard.Contracts.Responses;
 
 namespace Linqyard.Services;
 
-public sealed class TierService : ITierService
+public sealed class TierService(ITierRepository tierRepository) : ITierService
 {
-    private readonly ITierRepository _tierRepository;
-
-    public TierService(ITierRepository tierRepository)
-    {
-        _tierRepository = tierRepository ?? throw new ArgumentNullException(nameof(tierRepository));
-    }
+    private readonly ITierRepository _tierRepository = tierRepository ?? throw new ArgumentNullException(nameof(tierRepository));
 
     public Task<IReadOnlyList<TierDetailsResponse>> GetAvailableTiersAsync(
         CancellationToken cancellationToken = default) =>

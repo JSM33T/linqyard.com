@@ -9,18 +9,12 @@ using NpgsqlTypes;
 
 namespace Linkyard.Repositories;
 
-public class ViewTelemetryRepository : IViewTelemetryRepository
+public class ViewTelemetryRepository(ILogger<ViewTelemetryRepository> logger, IConfiguration configuration) : IViewTelemetryRepository
 {
     private const string DefaultConnectionName = "DefaultConnection";
 
-    private readonly ILogger<ViewTelemetryRepository> _logger;
-    private readonly IConfiguration _configuration;
-
-    public ViewTelemetryRepository(ILogger<ViewTelemetryRepository> logger, IConfiguration configuration)
-    {
-        _logger = logger;
-        _configuration = configuration;
-    }
+    private readonly ILogger<ViewTelemetryRepository> _logger = logger;
+    private readonly IConfiguration _configuration = configuration;
 
     public async Task RecordProfileViewAsync(RecordProfileViewRequest request, CancellationToken cancellationToken = default)
     {

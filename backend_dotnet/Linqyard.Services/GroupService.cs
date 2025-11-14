@@ -4,14 +4,9 @@ using Linqyard.Contracts.Responses;
 
 namespace Linqyard.Services;
 
-public sealed class GroupService : IGroupService
+public sealed class GroupService(IGroupRepository groupRepository) : IGroupService
 {
-    private readonly IGroupRepository _groupRepository;
-
-    public GroupService(IGroupRepository groupRepository)
-    {
-        _groupRepository = groupRepository ?? throw new ArgumentNullException(nameof(groupRepository));
-    }
+    private readonly IGroupRepository _groupRepository = groupRepository ?? throw new ArgumentNullException(nameof(groupRepository));
 
     public Task<IReadOnlyList<LinkGroupResponse>> GetGroupsAsync(
         Guid userId,

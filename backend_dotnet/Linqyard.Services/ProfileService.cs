@@ -7,16 +7,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Linqyard.Services;
 
-public sealed class ProfileService : IProfileService
+public sealed class ProfileService(IProfileRepository profileRepository, ILogger<ProfileService> logger) : IProfileService
 {
-    private readonly IProfileRepository _profileRepository;
-    private readonly ILogger<ProfileService> _logger;
-
-    public ProfileService(IProfileRepository profileRepository, ILogger<ProfileService> logger)
-    {
-        _profileRepository = profileRepository;
-        _logger = logger;
-    }
+    private readonly IProfileRepository _profileRepository = profileRepository;
+    private readonly ILogger<ProfileService> _logger = logger;
 
     public Task<ProfileDetailsResponse?> GetProfileDetailsAsync(Guid userId, CancellationToken cancellationToken = default) =>
         _profileRepository.GetProfileDetailsAsync(userId, cancellationToken);

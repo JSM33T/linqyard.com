@@ -5,14 +5,9 @@ using Linqyard.Contracts.Responses;
 
 namespace Linqyard.Services;
 
-public sealed class LinkService : ILinkService
+public sealed class LinkService(ILinkRepository linkRepository) : ILinkService
 {
-    private readonly ILinkRepository _linkRepository;
-
-    public LinkService(ILinkRepository linkRepository)
-    {
-        _linkRepository = linkRepository ?? throw new ArgumentNullException(nameof(linkRepository));
-    }
+    private readonly ILinkRepository _linkRepository = linkRepository ?? throw new ArgumentNullException(nameof(linkRepository));
 
     public Task<LinksGroupedResponse> GetLinksAsync(
         Guid userId,

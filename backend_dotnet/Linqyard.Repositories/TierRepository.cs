@@ -19,7 +19,11 @@ using Microsoft.Extensions.Options;
 
 namespace Linqyard.Repositories;
 
-public sealed class TierRepository : ITierRepository
+public sealed class TierRepository(
+    LinqyardDbContext db,
+    ILogger<TierRepository> logger,
+    IOptions<RazorpaySettings> razorpayOptions,
+    IHttpClientFactory httpClientFactory) : ITierRepository
 {
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
@@ -35,22 +39,10 @@ public sealed class TierRepository : ITierRepository
         public static UpgradeCreditContext None { get; } = new(0, null, null);
     }
 
-    private readonly LinqyardDbContext _db;
-    private readonly ILogger<TierRepository> _logger;
-    private readonly RazorpaySettings _razorpay;
-    private readonly IHttpClientFactory _httpClientFactory;
-
-    public TierRepository(
-        LinqyardDbContext db,
-        ILogger<TierRepository> logger,
-        IOptions<RazorpaySettings> razorpayOptions,
-        IHttpClientFactory httpClientFactory)
-    {
-        _db = db;
-        _logger = logger;
-        _razorpay = razorpayOptions.Value;
-        _httpClientFactory = httpClientFactory;
-    }
+    private readonly LinqyardDbContext _db = db;
+    private readonly ILogger<TierRepository> _logger = logger;
+    private readonly RazorpaySettings _razorpay = razorpayOptions.Value;
+    private readonly IHttpClientFactory _httpClientFactory = httpClientFactory;
 
     public async Task<IReadOnlyList<TierDetailsResponse>> GetAvailableTiersAsync(
         CancellationToken cancellationToken = default)

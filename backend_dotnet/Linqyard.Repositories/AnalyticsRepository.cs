@@ -13,18 +13,12 @@ using NpgsqlTypes;
 
 namespace Linkyard.Repositories;
 
-public class AnalyticsRepository : IAnalyticsRepository
+public class AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfiguration configuration) : IAnalyticsRepository
 {
     private const string DefaultConnectionName = "DefaultConnection";
 
-    private readonly ILogger<AnalyticsRepository> _logger;
-    private readonly IConfiguration _configuration;
-
-    public AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfiguration configuration)
-    {
-        _logger = logger;
-        _configuration = configuration;
-    }
+    private readonly ILogger<AnalyticsRepository> _logger = logger;
+    private readonly IConfiguration _configuration = configuration;
 
     public async Task RecordLinkClickAsync(RecordLinkClickRequest request, CancellationToken cancellationToken = default)
     {

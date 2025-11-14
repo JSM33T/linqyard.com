@@ -15,7 +15,7 @@ using System.Text.RegularExpressions;
 
 namespace Linqyard.Repositories;
 
-public sealed class LinkRepository : ILinkRepository
+public sealed class LinkRepository(LinqyardDbContext db, ILogger<LinkRepository> logger) : ILinkRepository
 {
     private const int MaxTags = 8;
     private const int MaxTagLength = 32;
@@ -23,14 +23,8 @@ public sealed class LinkRepository : ILinkRepository
     private static readonly Regex InvalidTagCharactersRegex = new("[^a-zA-Z0-9\\s-]", RegexOptions.Compiled);
     private static readonly Regex WhitespaceRegex = new("\\s+", RegexOptions.Compiled);
 
-    private readonly LinqyardDbContext _db;
-    private readonly ILogger<LinkRepository> _logger;
-
-    public LinkRepository(LinqyardDbContext db, ILogger<LinkRepository> logger)
-    {
-        _db = db;
-        _logger = logger;
-    }
+    private readonly LinqyardDbContext _db = db;
+    private readonly ILogger<LinkRepository> _logger = logger;
 
     // --------------------------
     // Queries

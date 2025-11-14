@@ -10,16 +10,10 @@ using Microsoft.Extensions.Logging;
 
 namespace Linqyard.Repositories;
 
-public sealed class GroupRepository : IGroupRepository
+public sealed class GroupRepository(LinqyardDbContext dbContext, ILogger<GroupRepository> logger) : IGroupRepository
 {
-    private readonly LinqyardDbContext _dbContext;
-    private readonly ILogger<GroupRepository> _logger;
-
-    public GroupRepository(LinqyardDbContext dbContext, ILogger<GroupRepository> logger)
-    {
-        _dbContext = dbContext;
-        _logger = logger;
-    }
+    private readonly LinqyardDbContext _dbContext = dbContext;
+    private readonly ILogger<GroupRepository> _logger = logger;
 
     public async Task<IReadOnlyList<LinkGroupResponse>> GetGroupsAsync(
         Guid userId,

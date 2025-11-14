@@ -7,16 +7,10 @@ using Microsoft.Extensions.Options;
 
 namespace Linqyard.Infra
 {
-    public class EmailService : IEmailService
+    public class EmailService(IOptions<SmtpSettings> smtpSettings, ILogger<EmailService> logger) : IEmailService
     {
-        private readonly SmtpSettings _smtpSettings;
-        private readonly ILogger<EmailService> _logger;
-
-        public EmailService(IOptions<SmtpSettings> smtpSettings, ILogger<EmailService> logger)
-        {
-            _smtpSettings = smtpSettings.Value;
-            _logger = logger;
-        }
+        private readonly SmtpSettings _smtpSettings = smtpSettings.Value;
+        private readonly ILogger<EmailService> _logger = logger;
 
         public async Task SendEmailAsync(string to, string subject, string body, bool isHtml = true)
         {
