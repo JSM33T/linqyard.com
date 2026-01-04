@@ -1,0 +1,261 @@
+---
+title: "Inside Linqyard: Building Dynamic Subdomain Routing with Next.js and Wildcard DNS"
+description: "A technical walkthrough of how Linqyard routes username.linqyard.com using wildcard DNS, Next.js middleware rewrites, and SEO-safe rendering."
+readMinutes: 6
+author:
+  name: "Jasmeet Singh"
+  url: "https://jsm33t.com"
+tags:
+  - Product
+  - Engineering
+  - Architecture
+  - DevOps
+datePublished: "2025-09-28T09:00:00.000Z"
+isActive: false
+---
+
+# Inside Linqyard: Building Dynamic Subdomain Routing with Next.js and Wildcard DNS
+
+Linqyard is a link aggregation platform—similar to Linktree—but designed with **clean URLs, strong SEO, and scalable multi-tenancy** at its core.
+
+Instead of user profiles living at:
+
+`linqyard.com/links/username`
+
+Linqyard supports:
+
+`username.linqyard.com`
+
+This post walks through **how dynamic subdomain routing is implemented in production**, using:
+
+- Wildcard DNS (GoDaddy)
+- Next.js Middleware
+- Internal route rewrites
+- SEO-safe rendering
+
+---
+
+## Why Subdomains for a Link Aggregation Platform?
+
+Subdomains give each user a **clear identity boundary**:
+
+- Better branding (`alice.linqyard.com`)
+- Cleaner URLs for sharing
+- Easier future support for custom domains
+- Logical tenant isolation
+
+For a product where links are shared constantly on social platforms, URL clarity matters.
+
+---
+
+## Architecture Overview
+
+At a high level, Linqyard’s routing flow looks like this:
+
+```
+alice.linqyard.com
+↓
+Wildcard DNS (*.linqyard.com)
+↓
+Next.js Middleware (detect subdomain)
+↓
+Internal rewrite → /links/alice
+↓
+Dynamic page renders user profile + metadata
+```
+
+No redirects. No duplicated pages. One clean URL.
+
+---
+
+## Step 1: Wildcard DNS in GoDaddy
+
+The foundation is a wildcard DNS record:
+
+- **Host**: `*`
+- **Type**: `CNAME` or `A` (depends on hosting)
+- **Value**: points to the Linqyard deployment
+
+This ensures that *any* subdomain resolves:
+
+- `alice.linqyard.com`
+- `bob.linqyard.com`
+- `anything.linqyard.com`
+
+DNS does not decide *what* content is shown—it only ensures the request reaches the app.
+
+---
+
+## Step 2: Detecting the Subdomain in Middleware
+
+Next.js Middleware runs **before routing**, making it the ideal place to:
+
+- Inspect the `Host` header
+- Extract the subdomain
+- Decide whether it represents a user or infrastructure
+
+Linqyard defines a root domain and a set of reserved subdomains:
+
+```ts
+const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'linqyard.com'
+
+const RESERVED = new Set([
+	'www',
+	'api',
+	'util',
+	'cdn',
+	'files',
+])
+```
+
+These reserved subdomains are intentionally excluded from user routing.
+
+---
+
+## Step 3: Rewriting Subdomains to Internal Routes
+
+The core idea is simple:
+
+`username.linqyard.com/` should internally render `/links/username`.
+
+This is done using a rewrite, not a redirect.
+
+```ts
+// middleware.ts
+import type { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
+
+const ROOT = process.env.NEXT_PUBLIC_ROOT_DOMAIN || 'linqyard.com'
+const RESERVED = new Set(['www','api','util','cdn','files'])
+
+export function middleware(req: NextRequest) {
+	const host = req.headers.get('host') || ''
+	const url = req.nextUrl.clone()
+
+	if (host.endsWith(`.${ROOT}`)) {
+		const sub = host.slice(0, -(`.${ROOT}`.length))
+
+		if (sub && !RESERVED.has(sub)) {
+			if (url.pathname === '/' || url.pathname === '') {
+				url.pathname = `/links/${sub}`
+				return NextResponse.rewrite(url)
+			}
+		}
+	}
+
+	return NextResponse.next()
+}
+```
+
+Why rewrite instead of redirect?
+
+- The browser URL stays `alice.linqyard.com`
+- No extra HTTP round-trip
+- Faster initial load
+- SEO-safe (search engines index the subdomain URL)
+
+---
+
+## Skipping Next.js Internals and Static Assets
+
+Middleware should not run on static assets or Next internals. Use a matcher to exclude them:
+
+```ts
+export const config = {
+	matcher: [
+		'/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|assets/).*)',
+	],
+}
+```
+
+This avoids unnecessary processing and prevents asset breakage.
+
+---
+
+## Optional: Path-Based Subpages per User
+
+The architecture supports an optional extension:
+
+`alice.linqyard.com/about`
+
+Which can internally map to:
+
+`/links/alice/about`
+
+This is intentionally disabled by default to keep routing predictable.
+
+---
+
+## SEO and Metadata Routing
+
+Middleware only decides where traffic goes. SEO is handled at the page level.
+
+The `/links/[username]` page should:
+
+- Fetch user data
+- Generate dynamic `<title>` and `<meta>` tags
+- Set canonical URLs to the subdomain
+- Produce correct OpenGraph previews
+
+This ensures that when someone shares `alice.linqyard.com` the preview shows Alice’s name, bio, and branding.
+
+---
+
+## Security Considerations
+
+Key guardrails in Linqyard’s setup:
+
+- Reserved subdomains blocked early
+- Username validation before rendering
+- No cookies scoped to `.linqyard.com`
+- Tenant context derived from routing, not user input
+
+These prevent cross-user data leaks and subdomain abuse.
+
+---
+
+## Performance Characteristics
+
+This approach is fast by design:
+
+- No database calls in middleware
+- Simple string operations only
+- Single render pass per request
+- CDN-friendly behavior
+
+User data is loaded after routing, not during request interception.
+
+---
+
+## Preparing for Custom Domains
+
+This architecture naturally extends to custom domains by matching the `Host` header against a `custom_domain` field and resolving the tenant the same way as subdomains.
+
+Example:
+
+`alice.com` → served as the same tenant as `alice.linqyard.com` without changing routing logic.
+
+---
+
+## Final Thoughts
+
+Dynamic subdomains are easy to get working—but hard to get right.
+
+Linqyard’s approach focuses on:
+
+- Minimal middleware logic
+- Explicit routing rules
+- SEO-first rendering
+- Clean separation between DNS, routing, and rendering
+
+The result is a system that scales cleanly as users, traffic, and features grow.
+
+---
+
+If you want next, I can:
+
+- Split this into **multiple MD files for a blog series**
+- Add **Mermaid diagrams** for architecture
+- Create a **README-style version** for the repo
+- Generate **SEO meta + OG image copy** for this post
+
