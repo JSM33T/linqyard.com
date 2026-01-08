@@ -5,17 +5,18 @@ using Linqyard.Contracts.Responses;
 using Linqyard.Data;
 using Linqyard.Entities;
 using Linqyard.Entities.Enums;
+
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
+using Microsoft.Extensions.Options;
 using System.Text.RegularExpressions;
 
 namespace Linqyard.Repositories;
 
-public sealed class LinkRepository(LinqyardDbContext db, ILogger<LinkRepository> logger) : ILinkRepository
+public sealed class LinkRepository(
+    LinqyardDbContext db, 
+    ILogger<LinkRepository> logger,
+    IOptions<AutoGroupingSettings> autoGroupingOptions) : ILinkRepository
 {
     private const int MaxTags = 8;
     private const int MaxTagLength = 32;
@@ -25,6 +26,7 @@ public sealed class LinkRepository(LinqyardDbContext db, ILogger<LinkRepository>
 
     private readonly LinqyardDbContext _db = db;
     private readonly ILogger<LinkRepository> _logger = logger;
+    private readonly AutoGroupingSettings _autoGroupingSettings = autoGroupingOptions.Value;
 
     // --------------------------
     // Queries
@@ -130,6 +132,13 @@ public sealed class LinkRepository(LinqyardDbContext db, ILogger<LinkRepository>
 
         // Group validation (Guid.Empty => ungroup)
         Guid? groupId = NormalizeGroupId(request.GroupId);
+        
+        // Auto-group creation if no group is specified
+        if (!groupId.HasValue)
+        {
+            groupId = await GetOrCreateAutoGroupAsync(userId, request.Url, activeTierId, ct);
+        }
+        
         if (groupId.HasValue)
         {
             var groupOk = await _db.LinkGroups
@@ -309,6 +318,93 @@ public sealed class LinkRepository(LinqyardDbContext db, ILogger<LinkRepository>
     // --------------------------
     // Helpers
     // --------------------------
+
+    private async Task<Guid?> GetOrCreateAutoGroupAsync(Guid userId, string url, int activeTierId, CancellationToken ct)
+    {
+        // Check if auto-grouping is enabled
+        if (!_autoGroupingSettings.Enabled)
+            return null;
+
+        try
+        {
+            var uri = new Uri(url);
+            var domain = uri.Host.ToLowerInvariant();
+            
+            // Remove www. prefix
+            if (domain.StartsWith("www."))
+                domain = domain.Substring(4);
+            
+            var groupName = GetGroupNameForDomain(domain);
+            if (string.IsNullOrEmpty(groupName))
+                return null;
+            
+            // Check if group already exists for this user
+            var existingGroup = await _db.LinkGroups
+                .FirstOrDefaultAsync(g => g.UserId == userId && g.Name == groupName, ct);
+            
+            if (existingGroup != null)
+                return existingGroup.Id;
+            
+            // Check if user can create a new group (free tier limit: 2 groups)
+            if (activeTierId == (int)TierType.Free)
+            {
+                var groupCount = await _db.LinkGroups.CountAsync(g => g.UserId == userId, ct);
+                if (groupCount >= 2)
+                {
+                    // User has reached the limit, don't auto-create
+                    _logger.LogInformation("User {UserId} has reached group limit, skipping auto-group creation", userId);
+                    return null;
+                }
+            }
+            
+            // Get the group description from configuration
+            var groupDescription = _autoGroupingSettings.Groups.TryGetValue(groupName, out var groupDef)
+                ? groupDef.Description
+                : $"Auto-created for {groupName.ToLower()} links";
+            
+            // Create new group
+            var now = DateTimeOffset.UtcNow;
+            var newGroup = new LinkGroup
+            {
+                Id = Guid.NewGuid(),
+                Name = groupName,
+                Description = groupDescription,
+                Sequence = 0,
+                IsActive = true,
+                UserId = userId,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            
+            _db.LinkGroups.Add(newGroup);
+            await _db.SaveChangesAsync(ct);
+            
+            _logger.LogInformation("Auto-created group '{GroupName}' for user {UserId}", groupName, userId);
+            return newGroup.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to auto-create group for URL: {Url}", url);
+            return null;
+        }
+    }
+    
+    private string? GetGroupNameForDomain(string domain)
+    {
+        // Iterate through configured groups and check domain matches
+        foreach (var (groupName, groupDef) in _autoGroupingSettings.Groups)
+        {
+            foreach (var configuredDomain in groupDef.Domains)
+            {
+                if (domain.Contains(configuredDomain.ToLowerInvariant()))
+                {
+                    return groupName;
+                }
+            }
+        }
+        
+        return null;
+    }
 
     private async Task<int?> GetActiveTierIdAsync(Guid userId, CancellationToken ct)
     {

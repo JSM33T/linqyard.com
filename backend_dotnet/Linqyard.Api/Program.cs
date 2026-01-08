@@ -74,6 +74,10 @@ builder.Services.AddScoped<Linqyard.Infra.IAzureBlobStorageService, Linqyard.Inf
 // Tier & payment configuration
 builder.Services.Configure<RazorpaySettings>(builder.Configuration.GetSection("Payments:Razorpay"));
 
+// Auto-grouping configuration
+builder.Services.Configure<Linqyard.Entities.AutoGroupingSettings>(
+    builder.Configuration.GetSection("AutoGrouping"));
+
 // Repository Services
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAnalyticsRepository, AnalyticsRepository>();
