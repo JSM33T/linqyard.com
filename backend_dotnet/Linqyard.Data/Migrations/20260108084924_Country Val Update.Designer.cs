@@ -5,6 +5,7 @@ using System.Net;
 using Linqyard.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -13,9 +14,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Linqyard.Data.Migrations
 {
     [DbContext(typeof(LinqyardDbContext))]
-    partial class LinqyardDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260108084924_Country Val Update")]
+    partial class CountryValUpdate
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -39,12 +42,10 @@ namespace Linqyard.Data.Migrations
                         .HasColumnType("timestamptz");
 
                     b.Property<string>("City")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Country")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
+                        .HasColumnType("text");
 
                     b.Property<string>("Fingerprint")
                         .HasColumnType("text");

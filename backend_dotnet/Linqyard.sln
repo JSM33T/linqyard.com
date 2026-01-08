@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Linqyard.Data", "Linqyard.D
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Linqyard.Services", "Linqyard.Services\Linqyard.Services.csproj", "{6D4D5E6E-B201-48AD-A927-BA9A69AA3E72}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Linqyard.Worker", "Linqyard.Worker\Linqyard.Worker.csproj", "{D8078553-A193-40B9-B1AF-3AE56F835266}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -51,6 +53,10 @@ Global
 		{6D4D5E6E-B201-48AD-A927-BA9A69AA3E72}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{6D4D5E6E-B201-48AD-A927-BA9A69AA3E72}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{6D4D5E6E-B201-48AD-A927-BA9A69AA3E72}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D8078553-A193-40B9-B1AF-3AE56F835266}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D8078553-A193-40B9-B1AF-3AE56F835266}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D8078553-A193-40B9-B1AF-3AE56F835266}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D8078553-A193-40B9-B1AF-3AE56F835266}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

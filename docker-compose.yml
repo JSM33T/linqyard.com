@@ -11,6 +11,18 @@ services:
       - /home/jassi/deployments/Linqyard/logs/dotnet:/app/logs/dotnet
       - /home/jassi/deployments/Linqyard/cache:/app/cache
 
+  worker:
+    build:
+      context: ./backend_dotnet
+      dockerfile: ./Linqyard.Worker/Dockerfile
+    env_file:
+      - .env
+    restart: unless-stopped
+    depends_on:
+      - dotnet
+    volumes:
+      - /home/jassi/deployments/Linqyard/logs/worker:/app/logs
+
   nextjs:
     build:
       context: ./frontend_nextjs

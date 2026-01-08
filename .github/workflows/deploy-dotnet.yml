@@ -60,7 +60,7 @@ jobs:
             git clean -fd -e logs/
             git pull --ff-only
 
-            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans dotnet
+            DOCKER_BUILDKIT=1 docker compose -p linqyard up -d --build --remove-orphans dotnet worker
             docker compose -p linqyard ps
           '" || echo '[dotnet] Build or deploy failed'
 
@@ -80,7 +80,7 @@ jobs:
             # Shared lock to avoid colliding with an active deploy; wait up to 2 minutes
             if flock -s -w 120 9; then
               cd \"${REMOTE_DIR}\"
-              docker compose -p linqyard logs dotnet --since=5m || true
+              docker compose -p linqyard logs dotnet worker --since=5m || true
             else
               echo \"[dotnet] Skipping logs: could not acquire shared lock within 2 minutes\" >&2
             fi

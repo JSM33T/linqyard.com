@@ -67,9 +67,9 @@ public class ViewTelemetry
     public string? City { get; set; }
 
     /// <summary>
-    /// Country code (ISO 3166-1 alpha-2)
+    /// Country name
     /// </summary>
-    [MaxLength(2)]
+    [MaxLength(100)]
     public string? Country { get; set; }
 
     /// <summary>
