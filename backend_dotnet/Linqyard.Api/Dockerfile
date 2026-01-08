@@ -1,10 +1,10 @@
 # syntax=docker/dockerfile:1.6
 
 # Make SDK version available to any FROM below
-ARG DOTNET_SDK_VERSION=9.0.308   # set once; or 9.0.308 if you keep global.json pinned
+ARG DOTNET_SDK_VERSION=10.0.101   # set once; or 10.0.101 if you keep global.json pinned
 
 # Base runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 ARG APP_UID=64198
 WORKDIR /app
 EXPOSE 8080
