@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "@/components/ui/accordion";
-import { Sun, Moon } from "lucide-react";
+import { Sun, Moon, Copy, Check } from "lucide-react";
 import { toast } from "sonner";
 
 // no user guard in public profile view
@@ -32,6 +32,8 @@ const cardVariants = {
 
 /* ---------- Simple (non-sortable) row ---------- */
 function LinkRow({ item }: { item: LinkItem }) {
+  const [copied, setCopied] = useState(false);
+
   const handleClick = (e: React.MouseEvent) => {
     // Fire-and-forget analytics: do not prevent default or open window manually.
     // Ensure fingerprint is initialized and get it
@@ -44,6 +46,21 @@ function LinkRow({ item }: { item: LinkItem }) {
       apiService.post(`/link/${item.id}/click`, payload).catch((err) => console.warn('Analytics post failed', err));
     } catch (err) {
       console.warn("Initial analytics send failed", err);
+    }
+  };
+
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    try {
+      await navigator.clipboard.writeText(item.url);
+      setCopied(true);
+      toast.success("Link copied to clipboard!");
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      toast.error("Failed to copy link");
     }
   };
 
@@ -63,6 +80,18 @@ function LinkRow({ item }: { item: LinkItem }) {
           <p className="text-xs text-muted-foreground mt-1 truncate">{item.description}</p>
         )}
       </div>
+      
+      <button
+        onClick={handleCopy}
+        className="flex-shrink-0 p-2 rounded-md hover:bg-background/80 transition-colors opacity-0 group-hover/link:opacity-100"
+        aria-label="Copy link"
+      >
+        {copied ? (
+          <Check className="h-4 w-4 text-green-500" />
+        ) : (
+          <Copy className="h-4 w-4 text-muted-foreground" />
+        )}
+      </button>
     </a>
   );
 }
