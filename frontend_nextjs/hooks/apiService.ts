@@ -50,7 +50,7 @@ class ApiService {
   // Build headers with auth token
   private buildHeaders(customHeaders?: Record<string, string>): Record<string, string> {
     const headers = { ...this.config.headers, ...customHeaders };
-    
+
     const token = this.getToken();
     if (token) {
       headers.Authorization = `Bearer ${token}`;
@@ -63,7 +63,7 @@ class ApiService {
   private createAbortController(timeout?: number): AbortController {
     const controller = new AbortController();
     const timeoutMs = timeout || this.config.timeout || 50000;
-    
+
     setTimeout(() => controller.abort(), timeoutMs);
     return controller;
   }
@@ -116,12 +116,12 @@ class ApiService {
   // Perform the actual token refresh API call
   private async performTokenRefresh(): Promise<string | null> {
     const url = this.buildUrl('/auth/refresh');
-    
+
     console.log(' Attempting token refresh to:', url);
-    
+
     // Get refresh token from localStorage (fallback for backward compatibility)
     const refreshToken = this.getRefreshToken();
-    
+
     try {
       const response = await fetch(url, {
         method: 'POST',
@@ -136,7 +136,7 @@ class ApiService {
 
       console.log(' Refresh response status:', response.status);
       console.log(' Refresh response headers:', Object.fromEntries(response.headers.entries()));
-      
+
       // Check if new cookies were set
       const setCookieHeader = response.headers.get('set-cookie');
       console.log(' Set-Cookie header:', setCookieHeader);
@@ -147,28 +147,73 @@ class ApiService {
         throw new Error('Token refresh failed');
       }
 
-      const data: RefreshTokenResponse = await response.json();
+      const data = await response.json();
       console.log('Refresh successful');
-      
+
       // Store both new access token and refresh token in localStorage
       if (typeof window !== 'undefined') {
-        localStorage.setItem('userToken', data.data.accessToken);
-        localStorage.setItem('refreshToken', data.data.refreshToken);
-        
-        // Update user expiry time in localStorage if user exists
-        const existingUser = localStorage.getItem('linqyard_user');
-        if (existingUser) {
+        const accessToken = data?.data?.accessToken ?? data?.accessToken ?? null;
+        const refreshToken = data?.data?.refreshToken ?? data?.refreshToken ?? null;
+        const expiresAt = data?.data?.expiresAt ?? data?.expiresAt ?? null;
+
+        if (accessToken) localStorage.setItem('userToken', accessToken);
+        if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
+
+        // If the backend returned full user info (AuthResponse shape), persist it
+        const returnedUser = data?.data?.user ?? data?.user ?? null;
+
+        if (returnedUser) {
           try {
-            const userData = JSON.parse(existingUser);
-            userData.expiry = data.data.expiresAt;
-            userData.login = true; // Ensure login status is maintained
-            localStorage.setItem('linqyard_user', JSON.stringify(userData));
-            console.log('Updated user expiry time and login status');
+            const userToStore: any = {
+              id: returnedUser.id,
+              firstName: returnedUser.firstName || '',
+              lastName: returnedUser.lastName || '',
+              username: returnedUser.username || '',
+              email: returnedUser.email || '',
+              avatarUrl: returnedUser.avatarUrl ?? null,
+              coverUrl: returnedUser.coverUrl ?? null,
+              login: true,
+              // expiry stored as Date string
+              expiry: expiresAt ?? undefined,
+              // Normalize tier fields from either top-level or activeTier
+              tierId: returnedUser.tierId ?? returnedUser.tier?.tierId ?? returnedUser.activeTier?.tierId ?? undefined,
+              tierName: returnedUser.tierName ?? returnedUser.tier?.name ?? returnedUser.activeTier?.name ?? undefined,
+              activeTier: returnedUser.activeTier ?? null,
+              role: (returnedUser.roles && returnedUser.roles.length > 0) ? returnedUser.roles[0] : (returnedUser.role ?? 'user'),
+              preferences: returnedUser.preferences ?? undefined,
+            };
+
+            localStorage.setItem('linqyard_user', JSON.stringify(userToStore));
+            console.log('Updated linqyard_user in localStorage from refresh response');
+            
+            // Notify UserContext that user data was updated
+            window.dispatchEvent(new CustomEvent('userSessionRestored', { 
+              detail: userToStore 
+            }));
           } catch (error) {
-            console.error('Error updating user expiry:', error);
+            console.error('Error storing returned user from refresh:', error);
           }
         } else {
-          console.log('Token refresh successful but no user data found in localStorage');
+          // Fallback: update existing user's expiry only (preserve other fields)
+          const existingUser = localStorage.getItem('linqyard_user');
+          if (existingUser) {
+            try {
+              const userData = JSON.parse(existingUser);
+              if (expiresAt) userData.expiry = expiresAt;
+              userData.login = true; // Ensure login status is maintained
+              localStorage.setItem('linqyard_user', JSON.stringify(userData));
+              console.log('Updated user expiry time and login status');
+              
+              // Notify UserContext that user data was updated
+              window.dispatchEvent(new CustomEvent('userSessionRestored', { 
+                detail: userData 
+              }));
+            } catch (error) {
+              console.error('Error updating user expiry:', error);
+            }
+          } else {
+            console.log('Token refresh successful but no user data found in localStorage');
+          }
         }
       }
 
@@ -194,12 +239,12 @@ class ApiService {
       // Check if we have a token but no user data
       const hasToken = this.hasToken();
       const existingUser = localStorage.getItem('linqyard_user');
-      
+
       if (hasToken && !existingUser) {
         console.log('Token found but no user data - fetching profile to restore session');
-        
+
         const profileResponse = await this.get('/profile');
-        
+
         if (profileResponse && profileResponse.data && profileResponse.data.data) {
           const userData = profileResponse.data.data;
           const restoredUser = {
@@ -214,13 +259,13 @@ class ApiService {
             role: userData.roles?.[0] || 'user',
             preferences: userData.preferences
           };
-          
+
           localStorage.setItem('linqyard_user', JSON.stringify(restoredUser));
           console.log('User session automatically restored to localStorage');
-          
+
           // Trigger a custom event to notify the UserContext
-          window.dispatchEvent(new CustomEvent('userSessionRestored', { 
-            detail: restoredUser 
+          window.dispatchEvent(new CustomEvent('userSessionRestored', {
+            detail: restoredUser
           }));
         }
       }
@@ -269,7 +314,7 @@ class ApiService {
         if (response.status === 401 && !isRetry && endpoint !== '/auth/refresh') {
           try {
             const newAccessToken = await this.refreshAccessToken();
-            
+
             if (newAccessToken) {
               // Retry the original request with new token
               console.log(' Token refresh successful, retrying original request');
@@ -296,7 +341,7 @@ class ApiService {
         const raw = await response.text();
         responseData = raw ? (JSON.parse(raw) as T) : null;
       }
-      
+
       return {
         data: responseData,
         status: response.status,
@@ -398,10 +443,10 @@ class ApiService {
   async attemptSessionRestore(): Promise<any | null> {
     try {
       console.log('🔄 Attempting session restore...');
-      
+
       // First, try to refresh the token
       const newAccessToken = await this.refreshAccessToken();
-      
+
       if (!newAccessToken) {
         console.log('❌ Session restore failed - no access token obtained');
         return null;
@@ -410,7 +455,7 @@ class ApiService {
       // If token refresh succeeded, fetch user profile
       console.log('Token refreshed, fetching user profile...');
       const profileResponse = await this.get('/profile');
-      
+
       if (profileResponse && profileResponse.data && profileResponse.data.data) {
         console.log('User profile fetched successfully');
         return profileResponse.data.data;

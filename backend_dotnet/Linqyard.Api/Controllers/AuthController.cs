@@ -555,7 +555,7 @@ public sealed class AuthController(
     /// Refresh access token using refresh token from request body
     /// </summary>
     [HttpPost("refresh")]
-    [ProducesResponseType(typeof(ApiResponse<RefreshTokenResponse>), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ApiResponse<AuthResponse>), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status401Unauthorized)]
     public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
@@ -645,15 +645,22 @@ public sealed class AuthController(
                 Response.Cookies.Append("refreshToken", newRefreshTokenValue, refreshTokenCookieOptions);
             }
 
-            // Return refresh token in response for frontend compatibility
-            var response = new RefreshTokenResponse(
+            // Build user info and return same AuthResponse shape as login so frontend
+            // receives updated `ActiveTier` and other user details.
+            var userInfo = await BuildUserInfoAsync(
+                refreshToken.User,
+                authMethod: refreshToken.Session?.AuthMethod,
+                cancellationToken: cancellationToken);
+
+            var authResponse = new AuthResponse(
                 AccessToken: accessToken,
-                RefreshToken: newRefreshTokenValue, // Return for frontend usage
-                ExpiresAt: expiresAt
+                RefreshToken: newRefreshTokenValue,
+                ExpiresAt: expiresAt,
+                User: userInfo
             );
 
             logger.LogInformation("Token refreshed successfully for user {UserId}", refreshToken.UserId);
-            return OkEnvelope(response);
+            return OkEnvelope(authResponse);
         }
         catch (Exception ex)
         {
