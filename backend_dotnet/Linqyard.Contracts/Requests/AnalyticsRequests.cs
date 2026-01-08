@@ -11,6 +11,8 @@ public record RecordLinkClickRequest(
     double? Latitude,
     double? Longitude,
     double? Accuracy,
+    string? City,
+    string? Country,
     string? UserAgent,
     IPAddress? IpAddress,
     DateTimeOffset At);

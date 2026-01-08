@@ -12,3 +12,9 @@ public record AnalyticsEventResponse(
     double? Longitude,
     double? Accuracy,
     string? UserAgent);
+
+public record GeographicDistributionItem(
+    string Country,
+    string City,
+    long Count,
+    double Percentage = 0);

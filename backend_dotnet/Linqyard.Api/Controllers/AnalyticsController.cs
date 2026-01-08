@@ -41,6 +41,8 @@ public sealed class AnalyticsController(
             double? latitude = null;
             double? longitude = null;
             double? accuracy = null;
+            string? city = null;
+            string? country = null;
 
             if (ipAddress is not null)
             {
@@ -50,6 +52,8 @@ public sealed class AnalyticsController(
                     latitude = geo.Latitude;
                     longitude = geo.Longitude;
                     accuracy = geo.AccuracyMeters;
+                    city = geo.City ?? geo.Region;
+                    country = geo.Country;
                 }
             }
 
@@ -61,6 +65,8 @@ public sealed class AnalyticsController(
                 Latitude: latitude,
                 Longitude: longitude,
                 Accuracy: accuracy,
+                City: city,
+                Country: country,
                 UserAgent: userAgent,
                 IpAddress: ipAddress,
                 At: DateTimeOffset.UtcNow);
@@ -237,5 +243,21 @@ public sealed class AnalyticsController(
         };
 
         return OkEnvelope(result);
+    }
+
+    /// <summary>
+    /// Get geographic distribution (city and country) for authenticated user's link clicks
+    /// </summary>
+    [HttpGet("my/geographic-distribution")]
+    [Authorize]
+    [ProducesResponseType(typeof(ApiResponse<object>), StatusCodes.Status200OK)]
+    public async Task<IActionResult> GetGeographicDistribution(
+        [FromQuery] Guid? linkId = null,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsAuthenticated || !Guid.TryParse(UserId, out var uid)) return UnauthorizedProblem();
+
+        var distribution = await analyticsRepository.GetGeographicDistributionAsync(uid, linkId, cancellationToken);
+        return OkEnvelope(distribution);
     }
 }

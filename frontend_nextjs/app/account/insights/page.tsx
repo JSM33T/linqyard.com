@@ -309,6 +309,9 @@ export default function InsightsPage() {
                 <div className="mt-6">
                   <MonthlyStats />
                 </div>
+                <div className="mt-6">
+                  <LinkClickGeography linksResp={linksResp} />
+                </div>
               </CardContent>
             </Card>
           </motion.div>
@@ -607,6 +610,122 @@ function PieDonut({ data, size = 120, thickness = 24 }: { data: any; size?: numb
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+function LinkClickGeography({ linksResp }: { linksResp: any }) {
+  const [geoDistribution, setGeoDistribution] = useState<any[]>([]);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [selectedLinkId, setSelectedLinkId] = useState<string>('all');
+  const [links, setLinks] = useState<any[]>([]);
+
+  // Extract links from response
+  useEffect(() => {
+    if (!linksResp) return;
+    try {
+      const resp = (linksResp && (linksResp as any).data) ? (linksResp as any).data : linksResp ?? {};
+      const groups = (resp && resp.groups) ? resp.groups : (resp?.groups ?? []);
+      const ungrouped = (resp && resp.ungrouped) ? resp.ungrouped : (resp?.ungrouped ?? { links: [] });
+      const linksArr = ([] as any[]).concat(...(groups.map((g: any) => g.links ?? [])), ungrouped.links ?? []);
+      setLinks(linksArr);
+    } catch (err) {
+      console.warn('Failed to parse links', err);
+    }
+  }, [linksResp]);
+
+  const fetchGeoDistribution = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = selectedLinkId === 'all' 
+        ? '/analytics/my/geographic-distribution'
+        : `/analytics/my/geographic-distribution?linkId=${selectedLinkId}`;
+      
+      const res = await apiService.get(url);
+      const data = res.data?.data ?? res.data ?? [];
+      setGeoDistribution(data);
+    } catch (err) {
+      console.error('Failed to fetch geographic distribution:', err);
+      setGeoDistribution([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedLinkId]);
+
+  useEffect(() => {
+    fetchGeoDistribution();
+  }, [fetchGeoDistribution]);
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-lg font-medium">Geographic Distribution</h3>
+        <div className="flex items-center gap-2">
+          <select
+            value={selectedLinkId}
+            onChange={(e) => setSelectedLinkId(e.target.value)}
+            className="px-3 py-2 text-sm border rounded-md bg-background"
+          >
+            <option value="all">All Links</option>
+            {links.map((link) => (
+              <option key={link.id} value={link.id}>
+                {link.name}
+              </option>
+            ))}
+          </select>
+          <Button size="sm" variant="outline" onClick={fetchGeoDistribution} disabled={loading}>
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Refresh'}
+          </Button>
+        </div>
+      </div>
+
+      {loading && geoDistribution.length === 0 ? (
+        <div className="flex items-center justify-center py-8">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : geoDistribution.length === 0 ? (
+        <div className="text-center py-8 text-sm text-muted-foreground">
+          No geographic data available yet. Start getting clicks to see where they come from!
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b text-sm text-muted-foreground text-left">
+                <th className="pb-3 font-medium">Country</th>
+                <th className="pb-3 font-medium">City</th>
+                <th className="pb-3 font-medium">Clicks</th>
+                <th className="pb-3 font-medium">Percentage</th>
+              </tr>
+            </thead>
+            <tbody>
+              {geoDistribution.map((geo, idx) => (
+                <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
+                  <td className="py-3 text-sm font-medium">{geo.country}</td>
+                  <td className="py-3 text-sm">{geo.city || '—'}</td>
+                  <td className="py-3 text-sm font-bold">{geo.count}</td>
+                  <td className="py-3">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 max-w-[200px] h-2 bg-muted rounded-full overflow-hidden">
+                        <div 
+                          className="h-full bg-primary transition-all"
+                          style={{ width: `${geo.percentage}%` }}
+                        />
+                      </div>
+                      <span className="text-sm text-muted-foreground w-12 text-right">
+                        {geo.percentage.toFixed(1)}%
+                      </span>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="mt-4 text-sm text-muted-foreground text-center">
+            Total locations: {geoDistribution.length}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

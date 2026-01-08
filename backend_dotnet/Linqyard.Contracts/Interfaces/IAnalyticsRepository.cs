@@ -56,5 +56,17 @@ namespace Linqyard.Contracts.Interfaces
         /// <param name="cancellationToken">A token to cancel the operation.</param>
         /// <returns>A read-only list of user agent strings associated with the user's clicks.</returns>
         Task<IReadOnlyList<string?>> GetUserAgentsForUserAsync(Guid userId, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Retrieves geographic distribution (city and country) of link clicks for a user.
+        /// </summary>
+        /// <param name="userId">The unique identifier of the user.</param>
+        /// <param name="linkId">Optional specific link ID to filter by.</param>
+        /// <param name="cancellationToken">A token to cancel the operation.</param>
+        /// <returns>A read-only list of geographic distribution items with counts and percentages.</returns>
+        Task<IReadOnlyList<GeographicDistributionItem>> GetGeographicDistributionAsync(
+            Guid userId, 
+            Guid? linkId = null, 
+            CancellationToken cancellationToken = default);
     }
 }

@@ -30,10 +30,10 @@ public class AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfigura
         const string commandText = @"
             INSERT INTO public.""Analytics"" (
                 ""Id"", ""LinkId"", ""UserId"", ""Fingerprint"", ""Latitude"", ""Longitude"",
-                ""Accuracy"", ""UserAgent"", ""IpAddress"", ""At""
+                ""Accuracy"", ""City"", ""Country"", ""UserAgent"", ""IpAddress"", ""At""
             ) VALUES (
                 @id, @linkId, @userId, @fingerprint, @latitude, @longitude,
-                @accuracy, @userAgent, @ipAddress, @at
+                @accuracy, @city, @country, @userAgent, @ipAddress, @at
             );";
 
         await using var command = new NpgsqlCommand(commandText, connection);
@@ -44,6 +44,8 @@ public class AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfigura
         command.Parameters.Add("latitude", NpgsqlDbType.Double).Value = (object?)request.Latitude ?? DBNull.Value;
         command.Parameters.Add("longitude", NpgsqlDbType.Double).Value = (object?)request.Longitude ?? DBNull.Value;
         command.Parameters.Add("accuracy", NpgsqlDbType.Double).Value = (object?)request.Accuracy ?? DBNull.Value;
+        command.Parameters.Add("city", NpgsqlDbType.Text).Value = (object?)request.City ?? DBNull.Value;
+        command.Parameters.Add("country", NpgsqlDbType.Text).Value = (object?)request.Country ?? DBNull.Value;
         command.Parameters.Add("userAgent", NpgsqlDbType.Text).Value = (object?)request.UserAgent ?? DBNull.Value;
         command.Parameters.Add("ipAddress", NpgsqlDbType.Inet).Value = (object?)request.IpAddress ?? DBNull.Value;
         command.Parameters.Add("at", NpgsqlDbType.TimestampTz).Value = request.At;
@@ -178,6 +180,67 @@ public class AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfigura
         }
 
         return userAgents;
+    }
+
+    public async Task<IReadOnlyList<GeographicDistributionItem>> GetGeographicDistributionAsync(
+        Guid userId, 
+        Guid? linkId = null, 
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = new NpgsqlConnection(GetConnectionString());
+        await connection.OpenAsync(cancellationToken);
+
+        string query;
+        if (linkId.HasValue)
+        {
+            // Distribution for specific link
+            query = @"
+                SELECT 
+                    COALESCE(a.""Country"", 'Unknown') AS ""Country"",
+                    COALESCE(a.""City"", 'Unknown') AS ""City"",
+                    COUNT(*)::bigint AS ""Count""
+                FROM public.""Analytics"" AS a
+                INNER JOIN public.""Links"" AS l ON l.""Id"" = a.""LinkId""
+                WHERE l.""UserId"" = @userId AND a.""LinkId"" = @linkId
+                GROUP BY a.""Country"", a.""City""
+                ORDER BY ""Count"" DESC;";
+        }
+        else
+        {
+            // Distribution for all user's links
+            query = @"
+                SELECT 
+                    COALESCE(a.""Country"", 'Unknown') AS ""Country"",
+                    COALESCE(a.""City"", 'Unknown') AS ""City"",
+                    COUNT(*)::bigint AS ""Count""
+                FROM public.""Analytics"" AS a
+                INNER JOIN public.""Links"" AS l ON l.""Id"" = a.""LinkId""
+                WHERE l.""UserId"" = @userId
+                GROUP BY a.""Country"", a.""City""
+                ORDER BY ""Count"" DESC;";
+        }
+
+        var results = new List<GeographicDistributionItem>();
+
+        await using var command = new NpgsqlCommand(query, connection);
+        command.Parameters.Add("userId", NpgsqlDbType.Uuid).Value = userId;
+        if (linkId.HasValue)
+            command.Parameters.Add("linkId", NpgsqlDbType.Uuid).Value = linkId.Value;
+
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            var country = reader.GetString(0);
+            var city = reader.GetString(1);
+            var count = reader.GetInt64(2);
+            results.Add(new GeographicDistributionItem(country, city, count));
+        }
+
+        // Calculate percentages
+        var total = results.Sum(r => r.Count);
+        return results.Select(r => r with { 
+            Percentage = total > 0 ? (double)r.Count / total * 100 : 0 
+        }).ToList();
     }
 
     private string GetConnectionString()
