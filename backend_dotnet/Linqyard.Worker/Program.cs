@@ -1,6 +1,10 @@
 using Linqyard.Worker;
 using Linqyard.Worker.Configuration;
 using Linqyard.Worker.Services;
+using Microsoft.EntityFrameworkCore;
+using Linqyard.Data;
+using Linqyard.Repositories;
+using Linqyard.Contracts.Interfaces;
 using Polly;
 using Polly.Extensions.Http;
 
@@ -25,6 +29,17 @@ builder.Services.AddHttpClient(nameof(IpGeolocationService))
 
 builder.Services.AddSingleton<IIpGeolocationService, IpGeolocationService>();
 builder.Services.AddScoped<GeolocationEnrichmentService>();
+
+// Database + repositories required by AccountCleanupService
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (!string.IsNullOrWhiteSpace(connectionString))
+{
+    builder.Services.AddDbContext<LinqyardDbContext>(options =>
+        options.UseNpgsql(connectionString));
+
+    builder.Services.AddScoped<IUserRepository, UserRepository>();
+    builder.Services.AddScoped<AccountCleanupService>();
+}
 
 // Register hosted service
 builder.Services.AddHostedService<Worker>();

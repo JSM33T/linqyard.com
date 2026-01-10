@@ -504,4 +504,109 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
             return await GetAdminUserDetailsAsync(userId, cancellationToken);
         });
     }
+
+    public async Task<IReadOnlyList<Guid>> GetUnverifiedUserIdsCreatedBeforeAsync(DateTimeOffset cutoff, CancellationToken cancellationToken = default)
+    {
+        var ids = await _db.Users
+            .AsNoTracking()
+            .Where(u => u.DeletedAt == null && !u.EmailVerified && u.CreatedAt <= cutoff)
+            .Select(u => u.Id)
+            .ToListAsync(cancellationToken);
+
+        return ids;
+    }
+
+    public async Task SoftDeleteUserAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var strategy = _db.Database.CreateExecutionStrategy();
+        await strategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+
+            var user = await _db.Users
+                .Include(u => u.Sessions).ThenInclude(s => s.RefreshTokens)
+                .Include(u => u.RefreshTokens)
+                .Include(u => u.ExternalLogins)
+                .Include(u => u.TwoFactorMethods).ThenInclude(m => m.TwoFactorCodes)
+                .Include(u => u.Links)
+                .Include(u => u.LinkGroups)
+                .FirstOrDefaultAsync(u => u.Id == userId && u.DeletedAt == null, cancellationToken);
+
+            if (user is null)
+            {
+                await transaction.RollbackAsync(cancellationToken);
+                return;
+            }
+
+            var now = DateTimeOffset.UtcNow;
+
+            // Revoke sessions and refresh tokens
+            foreach (var session in user.Sessions)
+            {
+                session.RevokedAt = now;
+                foreach (var rt in session.RefreshTokens ?? Enumerable.Empty<RefreshToken>())
+                {
+                    rt.RevokedAt = now;
+                }
+            }
+
+            foreach (var rt in user.RefreshTokens)
+            {
+                rt.RevokedAt = now;
+            }
+
+            // Remove external logins
+            if (user.ExternalLogins.Any())
+            {
+                _db.ExternalLogins.RemoveRange(user.ExternalLogins);
+            }
+
+            // Deactivate two-factor methods and remove codes
+            foreach (var m in user.TwoFactorMethods)
+            {
+                m.IsActive = false;
+                m.Secret = null;
+                m.PhoneNumber = null;
+
+                if (m.TwoFactorCodes.Any())
+                {
+                    _db.TwoFactorCodes.RemoveRange(m.TwoFactorCodes);
+                }
+            }
+
+            // Soft-delete links and groups
+            foreach (var link in user.Links)
+            {
+                link.DeletedAt = now;
+                link.IsActive = false;
+            }
+
+            foreach (var group in user.LinkGroups)
+            {
+                group.DeletedAt = now;
+                group.IsActive = false;
+            }
+
+            // Anonymize and mark user deleted
+            user.DeletedAt = now;
+            user.IsActive = false;
+            user.EmailVerified = false;
+            user.Email = $"deleted-{user.Id}@deleted.invalid";
+            user.PasswordHash = string.Empty;
+            user.Username = $"deleted_{user.Id}";
+            user.DisplayName = null;
+            user.FirstName = null;
+            user.LastName = null;
+            user.AvatarUrl = null;
+            user.CoverUrl = null;
+            user.Bio = null;
+            user.Timezone = null;
+            user.Locale = null;
+            user.VerifiedBadge = false;
+            user.UpdatedAt = now;
+
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        });
+    }
 }

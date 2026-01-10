@@ -34,8 +34,10 @@ public class Worker : BackgroundService
                 _logger.LogInformation("Starting geolocation enrichment cycle at {Time}", DateTimeOffset.Now);
 
                 using var scope = _serviceProvider.CreateScope();
-                var enrichmentService = scope.ServiceProvider.GetRequiredService<GeolocationEnrichmentService>();
+                var cleanupService = scope.ServiceProvider.GetRequiredService<AccountCleanupService>();
+                await cleanupService.CleanupUnverifiedUsersAsync(stoppingToken);
 
+                var enrichmentService = scope.ServiceProvider.GetRequiredService<GeolocationEnrichmentService>();
                 await enrichmentService.EnrichGeolocationDataAsync(stoppingToken);
 
                 _logger.LogInformation("Geolocation enrichment cycle completed at {Time}. Next run in {Interval}",

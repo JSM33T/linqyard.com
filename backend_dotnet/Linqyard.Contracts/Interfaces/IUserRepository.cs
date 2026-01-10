@@ -86,5 +86,18 @@ namespace Linqyard.Contracts.Interfaces
             Guid userId,
             AdminUpgradeUserTierRequest request,
             CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Returns IDs of users who have not verified their email and were created before the provided cutoff.
+        /// </summary>
+        Task<IReadOnlyList<Guid>> GetUnverifiedUserIdsCreatedBeforeAsync(
+            DateTimeOffset cutoff,
+            CancellationToken cancellationToken = default);
+
+        /// <summary>
+        /// Soft-delete the specified user and clean up sensitive data and active credentials.
+        /// This method should anonymize personal data, revoke sessions/refresh tokens and mark related entities deleted.
+        /// </summary>
+        Task SoftDeleteUserAsync(Guid userId, CancellationToken cancellationToken = default);
     }
 }

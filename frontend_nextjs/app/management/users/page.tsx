@@ -552,7 +552,7 @@ export default function AdminUsersPage() {
                       <Loader2 className="h-6 w-6 animate-spin text-primary" />
                     </div>
                   ) : users.length ? (
-                    <div className="space-y-2">
+                    <div className="space-y-2 max-h-[60vh] overflow-auto pr-2">
                       {users.map((item) => {
                         const isSelected = item.id === selectedUserId;
                         const handleSelect = () => setSelectedUserId(item.id);
