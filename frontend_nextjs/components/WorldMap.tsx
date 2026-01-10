@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import type { LatLngExpression } from 'leaflet';
+import type { FeatureCollection } from 'geojson';
 import 'leaflet/dist/leaflet.css';
 
 // Dynamically import map components to avoid SSR issues
@@ -16,6 +17,11 @@ const TileLayer = dynamic(
   { ssr: false }
 );
 
+const GeoJSON = dynamic(
+  () => import('react-leaflet').then((mod) => mod.GeoJSON),
+  { ssr: false }
+);
+
 const CircleMarker = dynamic(
   () => import('react-leaflet').then((mod) => mod.CircleMarker),
   { ssr: false }
@@ -26,6 +32,22 @@ const Popup = dynamic(
   { ssr: false }
 );
 
+// Centralized theme configuration for easy customization
+export const mapTheme = {
+  // Marker colors (orange theme)
+  markerFill: '#fb923c',     // orange-400
+  markerStroke: '#c2410c',   // orange-700
+  markerFillOpacity: 0.6,
+  markerWeight: 2,
+  // Country border colors
+  borderColor: '#f97316',    // orange-500
+  borderWeight: 1.2,
+  borderFillOpacity: 0,      // transparent fill - borders only
+  // Legend colors (match marker colors)
+  legendBg: 'bg-orange-400',
+  legendBorder: 'border-orange-700',
+};
+
 interface WorldMapProps {
   data: Array<{
     country: string;
@@ -35,9 +57,16 @@ interface WorldMapProps {
     longitude?: number | null;
   }>;
   height?: number;
+  theme?: Partial<typeof mapTheme>;
 }
 
-export function WorldMap({ data, height = 400 }: WorldMapProps) {
+export function WorldMap({ data, height = 400, theme }: WorldMapProps) {
+  // Merge custom theme with defaults
+  const activeTheme = useMemo(() => ({ ...mapTheme, ...theme }), [theme]);
+  
+  // State for GeoJSON data (loaded client-side to avoid SSR issues)
+  const [geoJsonData, setGeoJsonData] = useState<FeatureCollection | null>(null);
+
   const points = useMemo(() => 
     data.filter(item => item.latitude != null && item.longitude != null)
       .map(item => ({
@@ -68,6 +97,14 @@ export function WorldMap({ data, height = 400 }: WorldMapProps) {
     }
   }, []);
 
+  // Load GeoJSON data client-side only
+  useEffect(() => {
+    fetch('/geo/world-countries.geo.json')
+      .then(res => res.json())
+      .then(data => setGeoJsonData(data))
+      .catch(err => console.warn('Failed to load country borders:', err));
+  }, []);
+
   if (points.length === 0) {
     return (
       <div className="flex items-center justify-center rounded-lg border border-border bg-muted/20" style={{ height: `${height}px` }}>
@@ -85,11 +122,25 @@ export function WorldMap({ data, height = 400 }: WorldMapProps) {
           style={{ height: '100%', width: '100%' }}
           scrollWheelZoom={true}
         >
+          {/* Layer 1: Neutral base tiles (CARTO light) */}
           <TileLayer
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
           />
           
+          {/* Layer 2: Country borders (GeoJSON) - renders above tiles, below markers */}
+          {geoJsonData && (
+            <GeoJSON
+              data={geoJsonData}
+              style={{
+                color: activeTheme.borderColor,
+                weight: activeTheme.borderWeight,
+                fillOpacity: activeTheme.borderFillOpacity,
+              }}
+            />
+          )}
+          
+          {/* Layer 3: Data markers - renders above borders */}
           {points.map((point, idx) => {
             // Scale radius based on count (min 5px, max 25px)
             const minRadius = 5;
@@ -102,10 +153,10 @@ export function WorldMap({ data, height = 400 }: WorldMapProps) {
                 center={point.position}
                 radius={radius}
                 pathOptions={{
-                  fillColor: '#3b82f6',
-                  fillOpacity: 0.6,
-                  color: '#1e40af',
-                  weight: 2,
+                  fillColor: activeTheme.markerFill,
+                  fillOpacity: activeTheme.markerFillOpacity,
+                  color: activeTheme.markerStroke,
+                  weight: activeTheme.markerWeight,
                 }}
               >
                 <Popup>
@@ -127,11 +178,11 @@ export function WorldMap({ data, height = 400 }: WorldMapProps) {
 
       <div className="mt-3 flex items-center justify-center gap-4 text-xs text-muted-foreground">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-blue-500 border border-blue-700" />
+          <div className={`w-2 h-2 rounded-full ${activeTheme.legendBg} ${activeTheme.legendBorder} border`} />
           <span>Smaller = Fewer clicks</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded-full bg-blue-500 border border-blue-700" />
+          <div className={`w-4 h-4 rounded-full ${activeTheme.legendBg} ${activeTheme.legendBorder} border`} />
           <span>Larger = More clicks</span>
         </div>
         <div className="text-muted-foreground">
