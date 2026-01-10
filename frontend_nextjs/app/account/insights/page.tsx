@@ -23,6 +23,7 @@ import { apiService } from '@/hooks/apiService';
 import { useEffect, useMemo, useState, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Loader2 } from 'lucide-react';
+import { WorldMap } from '@/components/WorldMap';
 
 const containerVariants = {
   hidden: { opacity: 0, y: 20 },
@@ -688,43 +689,51 @@ function LinkClickGeography({ linksResp }: { linksResp: any }) {
           No geographic data available yet. Start getting clicks to see where they come from!
         </div>
       ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b text-sm text-muted-foreground text-left">
-                <th className="pb-3 font-medium">Country</th>
-                <th className="pb-3 font-medium">City</th>
-                <th className="pb-3 font-medium">Clicks</th>
-                <th className="pb-3 font-medium">Percentage</th>
-              </tr>
-            </thead>
-            <tbody>
-              {geoDistribution.map((geo, idx) => (
-                <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
-                  <td className="py-3 text-sm font-medium">{geo.country}</td>
-                  <td className="py-3 text-sm">{geo.city || '—'}</td>
-                  <td className="py-3 text-sm font-bold">{geo.count}</td>
-                  <td className="py-3">
-                    <div className="flex items-center gap-2">
-                      <div className="flex-1 max-w-[200px] h-2 bg-muted rounded-full overflow-hidden">
-                        <div 
-                          className="h-full bg-primary transition-all"
-                          style={{ width: `${geo.percentage}%` }}
-                        />
-                      </div>
-                      <span className="text-sm text-muted-foreground w-12 text-right">
-                        {geo.percentage.toFixed(1)}%
-                      </span>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div className="mt-4 text-sm text-muted-foreground text-center">
-            Total locations: {geoDistribution.length}
+        <>
+          {/* World Map Visualization */}
+          <div className="mb-6">
+            <WorldMap data={geoDistribution} height={500} />
           </div>
-        </div>
+
+          {/* Table View */}
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b text-sm text-muted-foreground text-left">
+                  <th className="pb-3 font-medium">Country</th>
+                  <th className="pb-3 font-medium">City</th>
+                  <th className="pb-3 font-medium">Clicks</th>
+                  <th className="pb-3 font-medium">Percentage</th>
+                </tr>
+              </thead>
+              <tbody>
+                {geoDistribution.map((geo, idx) => (
+                  <tr key={idx} className="border-b hover:bg-muted/50 transition-colors">
+                    <td className="py-3 text-sm font-medium">{geo.country}</td>
+                    <td className="py-3 text-sm">{geo.city || '—'}</td>
+                    <td className="py-3 text-sm font-bold">{geo.count}</td>
+                    <td className="py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 max-w-[200px] h-2 bg-muted rounded-full overflow-hidden">
+                          <div 
+                            className="h-full bg-primary transition-all"
+                            style={{ width: `${geo.percentage}%` }}
+                          />
+                        </div>
+                        <span className="text-sm text-muted-foreground w-12 text-right">
+                          {geo.percentage.toFixed(1)}%
+                        </span>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div className="mt-4 text-sm text-muted-foreground text-center">
+              Total locations: {geoDistribution.length}
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
@@ -1099,40 +1108,48 @@ function ProfileViewTelemetry({ hasAccess }: { hasAccess: boolean }) {
             {geoDistribution.length === 0 ? (
               <p className="text-sm text-muted-foreground py-4">No geographic data available</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b text-sm text-muted-foreground text-left">
-                      <th className="pb-3 font-medium">Country</th>
-                      <th className="pb-3 font-medium">City</th>
-                      <th className="pb-3 font-medium">Views</th>
-                      <th className="pb-3 font-medium">Percentage</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {geoDistribution.map((geo, idx) => (
-                      <tr key={idx} className="border-b hover:bg-muted/50">
-                        <td className="py-3 text-sm font-medium">{geo.country}</td>
-                        <td className="py-3 text-sm">{geo.city || '—'}</td>
-                        <td className="py-3 text-sm">{geo.count}</td>
-                        <td className="py-3">
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 max-w-[200px] h-2 bg-muted rounded-full overflow-hidden">
-                              <div 
-                                className="h-full bg-primary"
-                                style={{ width: `${geo.percentage}%` }}
-                              />
-                            </div>
-                            <span className="text-sm text-muted-foreground w-12 text-right">
-                              {geo.percentage.toFixed(1)}%
-                            </span>
-                          </div>
-                        </td>
+              <>
+                {/* World Map Visualization */}
+                <div className="mb-6">
+                  <WorldMap data={geoDistribution} height={500} />
+                </div>
+
+                {/* Table View */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b text-sm text-muted-foreground text-left">
+                        <th className="pb-3 font-medium">Country</th>
+                        <th className="pb-3 font-medium">City</th>
+                        <th className="pb-3 font-medium">Views</th>
+                        <th className="pb-3 font-medium">Percentage</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {geoDistribution.map((geo, idx) => (
+                        <tr key={idx} className="border-b hover:bg-muted/50">
+                          <td className="py-3 text-sm font-medium">{geo.country}</td>
+                          <td className="py-3 text-sm">{geo.city || '—'}</td>
+                          <td className="py-3 text-sm">{geo.count}</td>
+                          <td className="py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="flex-1 max-w-[200px] h-2 bg-muted rounded-full overflow-hidden">
+                                <div 
+                                  className="h-full bg-primary"
+                                  style={{ width: `${geo.percentage}%` }}
+                                />
+                              </div>
+                              <span className="text-sm text-muted-foreground w-12 text-right">
+                                {geo.percentage.toFixed(1)}%
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )}

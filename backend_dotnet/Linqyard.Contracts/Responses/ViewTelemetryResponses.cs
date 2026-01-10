@@ -78,5 +78,7 @@ public record GeographicDistributionResponse(
     string Country,
     string? City,
     long Count,
-    double Percentage
+    double Percentage,
+    double? Latitude = null,
+    double? Longitude = null
 );

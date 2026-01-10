@@ -414,7 +414,9 @@ public class ViewTelemetryRepository(ILogger<ViewTelemetryRepository> logger, IC
                 COALESCE(""Country"", 'unknown') AS ""Country"",
                 ""City"",
                 COUNT(*)::bigint AS ""Count"",
-                (COUNT(*)::float / total.""Total"" * 100) AS ""Percentage""
+                (COUNT(*)::float / total.""Total"" * 100) AS ""Percentage"",
+                AVG(""Latitude"") AS ""Latitude"",
+                AVG(""Longitude"") AS ""Longitude""
             FROM public.""ViewTelemetries"", total
             WHERE {whereClause}
             GROUP BY ""Country"", ""City"", total.""Total""
@@ -435,7 +437,9 @@ public class ViewTelemetryRepository(ILogger<ViewTelemetryRepository> logger, IC
             var city = reader.IsDBNull(1) ? null : reader.GetString(1);
             var count = reader.GetInt64(2);
             var percentage = reader.GetDouble(3);
-            results.Add(new GeographicDistributionResponse(country, city, count, percentage));
+            var latitude = reader.IsDBNull(4) ? (double?)null : reader.GetDouble(4);
+            var longitude = reader.IsDBNull(5) ? (double?)null : reader.GetDouble(5);
+            results.Add(new GeographicDistributionResponse(country, city, count, percentage, latitude, longitude));
         }
 
         return results;

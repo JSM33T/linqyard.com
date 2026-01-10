@@ -198,7 +198,9 @@ public class AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfigura
                 SELECT 
                     COALESCE(a.""Country"", 'Unknown') AS ""Country"",
                     COALESCE(a.""City"", 'Unknown') AS ""City"",
-                    COUNT(*)::bigint AS ""Count""
+                    COUNT(*)::bigint AS ""Count"",
+                    AVG(a.""Latitude"") AS ""Latitude"",
+                    AVG(a.""Longitude"") AS ""Longitude""
                 FROM public.""Analytics"" AS a
                 INNER JOIN public.""Links"" AS l ON l.""Id"" = a.""LinkId""
                 WHERE l.""UserId"" = @userId AND a.""LinkId"" = @linkId
@@ -212,7 +214,9 @@ public class AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfigura
                 SELECT 
                     COALESCE(a.""Country"", 'Unknown') AS ""Country"",
                     COALESCE(a.""City"", 'Unknown') AS ""City"",
-                    COUNT(*)::bigint AS ""Count""
+                    COUNT(*)::bigint AS ""Count"",
+                    AVG(a.""Latitude"") AS ""Latitude"",
+                    AVG(a.""Longitude"") AS ""Longitude""
                 FROM public.""Analytics"" AS a
                 INNER JOIN public.""Links"" AS l ON l.""Id"" = a.""LinkId""
                 WHERE l.""UserId"" = @userId
@@ -233,7 +237,9 @@ public class AnalyticsRepository(ILogger<AnalyticsRepository> logger, IConfigura
             var country = reader.GetString(0);
             var city = reader.GetString(1);
             var count = reader.GetInt64(2);
-            results.Add(new GeographicDistributionItem(country, city, count));
+            var latitude = reader.IsDBNull(3) ? (double?)null : reader.GetDouble(3);
+            var longitude = reader.IsDBNull(4) ? (double?)null : reader.GetDouble(4);
+            results.Add(new GeographicDistributionItem(country, city, count, 0, latitude, longitude));
         }
 
         // Calculate percentages
