@@ -414,8 +414,7 @@ public sealed class LinkRepository(
             .AsNoTracking()
             .Where(ut => ut.UserId == userId &&
                          ut.IsActive &&
-                         ut.ActiveFrom <= now &&
-                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                         ut.ActiveFrom <= now)
             .OrderByDescending(ut => ut.ActiveFrom)
             .Select(ut => (int?)ut.TierId)
             .FirstOrDefaultAsync(ct);

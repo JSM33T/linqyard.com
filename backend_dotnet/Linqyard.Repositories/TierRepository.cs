@@ -94,8 +94,7 @@ public sealed class TierRepository(
             .AsNoTracking()
             .Where(ut => ut.UserId == userId &&
                          ut.IsActive &&
-                         ut.ActiveFrom <= now &&
-                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                         ut.ActiveFrom <= now)
             .OrderByDescending(ut => ut.ActiveFrom)
             .Select(ut => new UserTierInfo(
                 ut.TierId,

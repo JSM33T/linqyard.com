@@ -37,6 +37,9 @@ public class Worker : BackgroundService
                 var cleanupService = scope.ServiceProvider.GetRequiredService<AccountCleanupService>();
                 await cleanupService.CleanupUnverifiedUsersAsync(stoppingToken);
 
+                var tierDowngradeService = scope.ServiceProvider.GetRequiredService<TierDowngradeService>();
+                await tierDowngradeService.ProcessExpiredTiersAsync(stoppingToken);
+
                 var enrichmentService = scope.ServiceProvider.GetRequiredService<GeolocationEnrichmentService>();
                 await enrichmentService.EnrichGeolocationDataAsync(stoppingToken);
 

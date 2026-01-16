@@ -58,8 +58,7 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
                 u.Bio,
                 ActiveTier = u.UserTiers
                     .Where(ut => ut.IsActive &&
-                                 ut.ActiveFrom <= now &&
-                                 (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                                 ut.ActiveFrom <= now)
                     .OrderByDescending(ut => ut.ActiveFrom)
                     .Select(ut => new UserTierInfo(
                         ut.TierId,
@@ -183,8 +182,7 @@ public sealed class UserRepository(LinqyardDbContext db, ILogger<UserRepository>
             where u.Id == userId && u.DeletedAt == null
             let activeTier = u.UserTiers
                 .Where(ut => ut.IsActive &&
-                             ut.ActiveFrom <= now &&
-                             (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                             ut.ActiveFrom <= now)
                 .OrderByDescending(ut => ut.ActiveFrom)
                 .Select(ut => new UserTierInfo(
                     ut.TierId,

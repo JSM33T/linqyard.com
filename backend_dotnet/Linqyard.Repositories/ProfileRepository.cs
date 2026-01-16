@@ -46,8 +46,7 @@ public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> 
                 u.UpdatedAt,
                 ActiveTier = u.UserTiers
                     .Where(ut => ut.IsActive &&
-                                 ut.ActiveFrom <= now &&
-                                 (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                                 ut.ActiveFrom <= now)
                     .OrderByDescending(ut => ut.ActiveFrom)
                     .Select(ut => new UserTierInfo(
                         ut.TierId,
@@ -182,8 +181,7 @@ public class ProfileRepository(LinqyardDbContext db, ILogger<ProfileRepository> 
             .AsNoTracking()
             .Where(ut => ut.UserId == userId &&
                          ut.IsActive &&
-                         ut.ActiveFrom <= now &&
-                         (ut.ActiveUntil == null || ut.ActiveUntil >= now))
+                         ut.ActiveFrom <= now)
             .OrderByDescending(ut => ut.ActiveFrom)
             .Select(ut => new UserTierInfo(
                 ut.TierId,
