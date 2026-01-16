@@ -1,4 +1,4 @@
-using Linqyard.Worker;
+using Linqyard.Worker.Workers;
 using Linqyard.Worker.Configuration;
 using Linqyard.Worker.Services;
 using Microsoft.EntityFrameworkCore;
@@ -42,8 +42,10 @@ if (!string.IsNullOrWhiteSpace(connectionString))
     builder.Services.AddScoped<TierDowngradeService>();
 }
 
-// Register hosted service
-builder.Services.AddHostedService<Worker>();
+// Register hosted services
+builder.Services.AddHostedService<AccountCleanupWorker>();
+builder.Services.AddHostedService<TierDowngradeWorker>();
+builder.Services.AddHostedService<GeolocationEnrichmentWorker>();
 
 var host = builder.Build();
 host.Run();

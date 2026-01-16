@@ -1,25 +1,24 @@
 using Linqyard.Worker.Services;
 
-namespace Linqyard.Worker;
+namespace Linqyard.Worker.Workers;
 
-public class Worker : BackgroundService
+public class GeolocationEnrichmentWorker : BackgroundService
 {
-    private readonly ILogger<Worker> _logger;
+    private readonly ILogger<GeolocationEnrichmentWorker> _logger;
     private readonly IServiceProvider _serviceProvider;
     private readonly TimeSpan _runInterval;
 
-    public Worker(
-        ILogger<Worker> logger,
+    public GeolocationEnrichmentWorker(
+        ILogger<GeolocationEnrichmentWorker> logger,
         IServiceProvider serviceProvider,
         IConfiguration configuration)
     {
         _logger = logger;
         _serviceProvider = serviceProvider;
 
-        // Get the run interval from configuration, default to 6 hours
         var intervalConfig = configuration.GetSection("GeolocationEnrichment:RunInterval").Value;
         _runInterval = string.IsNullOrEmpty(intervalConfig)
-            ? TimeSpan.FromHours(6)
+            ? TimeSpan.FromHours(1)
             : TimeSpan.Parse(intervalConfig);
     }
 
@@ -34,12 +33,6 @@ public class Worker : BackgroundService
                 _logger.LogInformation("Starting geolocation enrichment cycle at {Time}", DateTimeOffset.Now);
 
                 using var scope = _serviceProvider.CreateScope();
-                var cleanupService = scope.ServiceProvider.GetRequiredService<AccountCleanupService>();
-                await cleanupService.CleanupUnverifiedUsersAsync(stoppingToken);
-
-                var tierDowngradeService = scope.ServiceProvider.GetRequiredService<TierDowngradeService>();
-                await tierDowngradeService.ProcessExpiredTiersAsync(stoppingToken);
-
                 var enrichmentService = scope.ServiceProvider.GetRequiredService<GeolocationEnrichmentService>();
                 await enrichmentService.EnrichGeolocationDataAsync(stoppingToken);
 
@@ -57,4 +50,3 @@ public class Worker : BackgroundService
         _logger.LogInformation("Geolocation Enrichment Worker stopped");
     }
 }
-
