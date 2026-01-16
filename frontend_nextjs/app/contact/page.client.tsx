@@ -106,7 +106,7 @@ export default function ContactClient() {
       .filter(Boolean)
       .join("\n");
 
-    return `mailto:support@linqyard.com?subject=${encodeURIComponent(
+    return `mailto:mail@jsm33t.com?subject=${encodeURIComponent(
       subject,
     )}&body=${encodeURIComponent(lines)}`;
   }, [formState]);

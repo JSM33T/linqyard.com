@@ -52,7 +52,7 @@ export default function FaqPage() {
     },
     {
       q: "Where can I get help or report an issue?",
-      a: "You can reach us anytime at support@linqyard.com, or check the help section in your dashboard for quick guides and FAQs.",
+      a: "You can reach us anytime at mail@jsm33t.com, or check the help section in your dashboard for quick guides and FAQs.",
     },
   ];
 

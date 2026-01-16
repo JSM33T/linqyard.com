@@ -89,7 +89,7 @@ export default function TermsClient() {
 
                 <li>
                   <span className="font-semibold">Contact:</span>{' '}
-                  <span>For questions about these Terms, contact: <a href="mailto:support@linqyard.com" className="underline">support@linqyard.com</a>.</span>
+                  <span>For questions about these Terms, contact: <a href="mailto:mail@jsm33t.com" className="underline">mail@jsm33t.com</a>.</span>
                 </li>
               </ul>
             </CardContent>
@@ -97,7 +97,7 @@ export default function TermsClient() {
 
           <div className="mt-6 text-sm text-muted-foreground">
             <Separator />
-            <p className="mt-3">Questions? <a href="mailto:support@linqyard.com" className="underline">support@linqyard.com</a></p>
+            <p className="mt-3">Questions? <a href="mailto:mail@jsm33t.com" className="underline">mail@jsm33t.com</a></p>
           </div>
         </motion.div>
       </motion.section>
